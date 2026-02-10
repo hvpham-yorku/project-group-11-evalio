@@ -1,0 +1,27 @@
+#!/bin/bash
+# Python backend dependencies
+venv/
+.venv/
+env/
+*.py[cod]
+__pycache__/
+*.so
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
