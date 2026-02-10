@@ -30,8 +30,20 @@ Group: 11
 ### ITR1-1: Manual Course Setup
 Assigned to: Himanshi  
 Tasks:  
--  
--  
+# Development Log
+## Iteration 1 – Course Setup (Backend & Database)
+
+### Backend
+- Implemented FastAPI endpoints for course setup
+- Added POST /courses and GET /courses endpoints
+- Added validation to ensure total assessment weight does not exceed 100%
+- Tested endpoints using Swagger UI
+
+### Database (Stub)
+- Designed Course and Assessment schemas using Pydantic
+- Implemented a stub data layer using in-memory storage (Python list)
+- No persistent database used as per Iteration 1 requirements
+  
 Planned Time:  
 Actual Time:  
 
