@@ -137,3 +137,31 @@ export const analysisApi = {
     return handleResponse(res)
   },
 }
+
+export interface ParsedSyllabus {
+  course_name: string
+  extracted_text_preview: string
+  assessments: { name: string; weight: number }[]
+  total_weight: number
+}
+
+export const uploadApi = {
+  parseSyllabus: async (file: File): Promise<ParsedSyllabus> => {
+    const formData = new FormData()
+    formData.append("file", file)
+    const res = await fetch(`${API_BASE}/upload-syllabus`, {
+      method: "POST",
+      body: formData,
+    })
+    return handleResponse(res)
+  },
+
+  batchCreateAssessments: async (courseId: number, assessments: { name: string; weight: number; current_score?: number | null }[]): Promise<void> => {
+    const res = await fetch(`${API_BASE}/courses/${courseId}/assessments/batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(assessments),
+    })
+    return handleResponse(res)
+  },
+}

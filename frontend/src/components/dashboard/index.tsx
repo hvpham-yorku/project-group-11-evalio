@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Sidebar } from "./sidebar"
 import { CourseSetup } from "./course-extraction"
@@ -12,6 +13,7 @@ import { BookOpen, BarChart3, Zap, Plus, Loader2, GraduationCap, Calculator } fr
 import * as Dialog from "@radix-ui/react-dialog"
 
 export function Dashboard() {
+  const searchParams = useSearchParams()
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null)
   const [activeView, setActiveView] = useState<"setup" | "feasibility" | "simulator" | "gpa">("setup")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -22,6 +24,14 @@ export function Dashboard() {
   const { data: selectedCourse, isLoading: courseLoading } = useCourse(selectedCourseId)
   const createCourse = useCreateCourse()
   const deleteCourse = useDeleteCourse()
+
+  // Read tab from URL query param
+  useEffect(() => {
+    const tab = searchParams.get("tab")
+    if (tab && ["setup", "feasibility", "simulator", "gpa"].includes(tab)) {
+      setActiveView(tab as typeof activeView)
+    }
+  }, [searchParams])
 
   // Auto-select first course
   useEffect(() => {

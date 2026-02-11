@@ -200,29 +200,30 @@ export function Landing() {
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
-              { icon: Target, title: "Target Analysis", desc: "Set your target grade and see exactly what you need to achieve it" },
-              { icon: BarChart3, title: "Feasibility Check", desc: "Know if your goal is realistic based on your current progress" },
-              { icon: Zap, title: "What-If Simulator", desc: "Test unlimited scenarios with interactive sliders in real-time" },
-              { icon: Calculator, title: "GPA Converter", desc: "Convert grades between percentage, 4.0, 9.0, and letter scales" },
-              { icon: Shield, title: "Grading Rules", desc: "Support for best-of, drop-lowest, mandatory-pass, and bonus rules" },
-              { icon: TrendingUp, title: "Risk Ranges", desc: "See minimum, safe, and stretch score ranges for planning" },
+              { icon: Target, title: "Target Analysis", desc: "Set your target grade and see exactly what you need to achieve it", href: "/dashboard?tab=setup" },
+              { icon: BarChart3, title: "Feasibility Check", desc: "Know if your goal is realistic based on your current progress", href: "/dashboard?tab=feasibility" },
+              { icon: Zap, title: "What-If Simulator", desc: "Test unlimited scenarios with interactive sliders in real-time", href: "/dashboard?tab=simulator" },
+              { icon: Calculator, title: "GPA Converter", desc: "Convert grades between percentage, 4.0, 9.0, and letter scales", href: "/dashboard?tab=gpa" },
+              { icon: Shield, title: "Grading Rules", desc: "Support for best-of, drop-lowest, mandatory-pass, and bonus rules", href: "/dashboard?tab=setup" },
+              { icon: TrendingUp, title: "Risk Ranges", desc: "See minimum, safe, and stretch score ranges for planning", href: "/dashboard?tab=feasibility" },
             ].map((feature, i) => {
               const Icon = feature.icon
               return (
-                <motion.div
-                  key={feature.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.08 }}
-                  className="group glass rounded-2xl p-6 glass-hover"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center mb-4 group-hover:bg-primary/10 transition-colors">
-                    <Icon className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                  </div>
-                  <h3 className="text-base font-bold text-foreground mb-2">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.desc}</p>
-                </motion.div>
+                <Link key={feature.title} href={feature.href}>
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: i * 0.08 }}
+                    className="group glass rounded-2xl p-6 glass-hover cursor-pointer h-full"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center mb-4 group-hover:bg-primary/10 transition-colors">
+                      <Icon className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                    </div>
+                    <h3 className="text-base font-bold text-foreground mb-2 group-hover:text-primary transition-colors">{feature.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{feature.desc}</p>
+                  </motion.div>
+                </Link>
               )
             })}
           </div>

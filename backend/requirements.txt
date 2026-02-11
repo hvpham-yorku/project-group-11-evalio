@@ -4,3 +4,5 @@ pydantic==2.8.2
 sqlalchemy==2.0.32
 psycopg[binary]==3.2.2
 python-multipart==0.0.6
+PyPDF2==3.0.1
+python-docx==1.2.0

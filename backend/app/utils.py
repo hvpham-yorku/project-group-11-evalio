@@ -1,4 +1,6 @@
 from typing import Dict, List
+import re
+import io
 from app.models import Assessment
 
 def calculate_current_average(assessments: List[Assessment]) -> float:
@@ -66,3 +68,91 @@ def get_assessment_status(final_grade: float, target_grade: float) -> str:
         return "on_track"
     else:
         return "below"
+
+def extract_text_from_file(filename: str, content: bytes) -> str:
+    """Extract text from uploaded file (PDF, DOCX, TXT)"""
+    ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+    
+    if ext == "pdf":
+        try:
+            from PyPDF2 import PdfReader
+            reader = PdfReader(io.BytesIO(content))
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() or ""
+            return text.strip()
+        except Exception as e:
+            raise ValueError(f"Failed to parse PDF: {str(e)}")
+    
+    elif ext in ("doc", "docx"):
+        try:
+            from docx import Document
+            doc = Document(io.BytesIO(content))
+            text = "\n".join([p.text for p in doc.paragraphs])
+            return text.strip()
+        except Exception as e:
+            raise ValueError(f"Failed to parse Word document: {str(e)}")
+    
+    elif ext == "txt":
+        return content.decode("utf-8", errors="ignore").strip()
+    
+    else:
+        raise ValueError(f"Unsupported file type: .{ext}. Use PDF, Word, or TXT.")
+
+def parse_syllabus_text(text: str) -> List[Dict]:
+    """Parse syllabus text to extract assessment components and weights"""
+    assessments = []
+    
+    # Common patterns for grading breakdowns
+    # Pattern: "Assignment Name ... 20%" or "Assignment Name (20%)" or "Assignment Name: 20%"
+    patterns = [
+        # "Midterm Exam 25%" or "Midterm Exam: 25%" or "Midterm Exam - 25%"  
+        r'([A-Za-z][A-Za-z\s/&\-\(\)]+?)[\s:.\-–—]+(\d{1,3})(?:\.\d+)?\s*%',
+        # "25% Midterm Exam"
+        r'(\d{1,3})(?:\.\d+)?\s*%\s*[\-–—:.]?\s*([A-Za-z][A-Za-z\s/&\-\(\)]+)',
+    ]
+    
+    found = []
+    
+    for pattern in patterns:
+        matches = re.findall(pattern, text, re.MULTILINE | re.IGNORECASE)
+        for match in matches:
+            if pattern == patterns[0]:
+                name, weight = match
+            else:
+                weight, name = match
+            
+            name = name.strip().strip(":-–—. ")
+            weight_val = float(weight)
+            
+            # Filter out noise
+            if weight_val < 1 or weight_val > 100:
+                continue
+            if len(name) < 2 or len(name) > 60:
+                continue
+            # Skip common false positives
+            skip_words = ["total", "grade", "final grade", "overall", "passing", "minimum", "maximum", "page", "course"]
+            if name.lower().strip() in skip_words:
+                continue
+            
+            # Avoid duplicates
+            if not any(f["name"].lower() == name.lower() for f in found):
+                found.append({
+                    "name": name,
+                    "weight": round(weight_val / 100, 4)
+                })
+    
+    # Sort by weight descending
+    found.sort(key=lambda x: x["weight"], reverse=True)
+    
+    # If nothing found, return some defaults as guidance
+    if not found:
+        found = [
+            {"name": "Midterm Exam", "weight": 0.25},
+            {"name": "Final Exam", "weight": 0.35},
+            {"name": "Assignments", "weight": 0.20},
+            {"name": "Participation", "weight": 0.10},
+            {"name": "Project", "weight": 0.10},
+        ]
+    
+    return found

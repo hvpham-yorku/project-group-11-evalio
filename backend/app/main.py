@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app.config import engine, Base, get_db
@@ -11,7 +11,8 @@ from app.schemas import (
 )
 from app.utils import (
     calculate_current_average, calculate_required_score,
-    calculate_risk_ranges, calculate_final_grade, get_assessment_status
+    calculate_risk_ranges, calculate_final_grade, get_assessment_status,
+    parse_syllabus_text, extract_text_from_file
 )
 
 # Create tables
@@ -202,3 +203,108 @@ def simulate_scenario(course_id: int, data: SimulateRequest, db: Session = Depen
         breakdown=simulated_scores,
         status=status
     )
+
+# ============ FILE UPLOAD / SYLLABUS PARSING ============
+
+@app.post("/upload-syllabus")
+async def upload_syllabus(file: UploadFile = File(...)):
+    """Upload a syllabus file and extract grading structure"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    content = await file.read()
+    
+    try:
+        text = extract_text_from_file(file.filename, content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    assessments = parse_syllabus_text(text)
+    
+    # Extract course name from filename
+    course_name = file.filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title()
+    
+    return {
+        "course_name": course_name,
+        "extracted_text_preview": text[:500],
+        "assessments": assessments,
+        "total_weight": round(sum(a["weight"] for a in assessments), 2)
+    }
+
+@app.post("/courses/{course_id}/assessments/batch")
+def create_assessments_batch(
+    course_id: int,
+    assessments: list[AssessmentCreate],
+    db: Session = Depends(get_db)
+):
+    """Create multiple assessments at once"""
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    
+    total_weight = sum(a.weight for a in course.assessments) + sum(a.weight for a in assessments)
+    if total_weight > 1.01:  # small epsilon for float rounding
+        raise HTTPException(status_code=400, detail=f"Total weights ({total_weight:.0%}) exceed 100%")
+    
+    created = []
+    for assessment in assessments:
+        db_assessment = Assessment(
+            course_id=course_id,
+            name=assessment.name,
+            weight=assessment.weight,
+            current_score=assessment.current_score,
+            due_date=assessment.due_date
+        )
+        db.add(db_assessment)
+        created.append(db_assessment)
+    
+    db.commit()
+    for a in created:
+        db.refresh(a)
+    
+    return [{"id": a.id, "name": a.name, "weight": a.weight} for a in created]
+
+# ============ GPA CONVERSION ============
+
+@app.post("/gpa/convert")
+def convert_gpa(data: dict):
+    """Convert between GPA scales"""
+    value = data.get("value", 0)
+    from_scale = data.get("from_scale", "percentage")
+    
+    # Convert everything to percentage first
+    if from_scale == "percentage":
+        pct = value
+    elif from_scale == "4.0":
+        pct = (value / 4.0) * 100
+    elif from_scale == "9.0":
+        pct = (value / 9.0) * 100
+    elif from_scale == "10.0":
+        pct = (value / 10.0) * 100
+    else:
+        pct = value
+    
+    pct = max(0, min(100, pct))
+    
+    # Letter grade
+    if pct >= 90: letter = "A+"
+    elif pct >= 85: letter = "A"
+    elif pct >= 80: letter = "A-"
+    elif pct >= 77: letter = "B+"
+    elif pct >= 73: letter = "B"
+    elif pct >= 70: letter = "B-"
+    elif pct >= 67: letter = "C+"
+    elif pct >= 63: letter = "C"
+    elif pct >= 60: letter = "C-"
+    elif pct >= 57: letter = "D+"
+    elif pct >= 53: letter = "D"
+    elif pct >= 50: letter = "D-"
+    else: letter = "F"
+    
+    return {
+        "percentage": round(pct, 1),
+        "gpa_4": round(pct / 100 * 4, 2),
+        "gpa_9": round(pct / 100 * 9, 2),
+        "gpa_10": round(pct / 100 * 10, 2),
+        "letter": letter
+    }
