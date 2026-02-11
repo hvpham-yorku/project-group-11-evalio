@@ -1,18 +1,22 @@
-import "./globals.css"
-import type { Metadata } from "next"
-import { Providers } from "./providers"
+import "./globals.css";
+import type { Metadata } from "next";
+import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Evalio – Academic Planning & Grade Simulation",
-  description: "Plan your grades with real rules. Extract course structures, run what-if scenarios, and calculate minimum required scores.",
-}
+  title: "",
+  description: "",
+};
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en" className="dark scroll-smooth">
-      <body className="min-h-screen bg-slate-950 text-slate-50 antialiased">
+    <html lang="en">
+      <body>
         <Providers>{children}</Providers>
       </body>
     </html>
-  )
+  );
 }
