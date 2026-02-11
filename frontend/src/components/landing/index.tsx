@@ -71,18 +71,18 @@ export function Landing() {
           </motion.p>
 
           <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/dashboard">
+            <Link href="/upload">
               <button className="btn-primary group inline-flex items-center gap-2 text-lg px-8 py-4 relative overflow-hidden">
-                <span className="relative z-10">Start Planning</span>
+                <span className="relative z-10">Upload Syllabus</span>
                 <ArrowRight className="relative z-10 h-5 w-5 group-hover:translate-x-0.5 transition-transform" />
                 <div className="absolute inset-0 shimmer animate-shimmer" />
               </button>
             </Link>
-            <a href="#how-it-works">
+            <Link href="/dashboard">
               <button className="btn-secondary text-lg px-8 py-4">
-                See How It Works
+                Go to Dashboard
               </button>
-            </a>
+            </Link>
           </motion.div>
         </motion.div>
       </section>
