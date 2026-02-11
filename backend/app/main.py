@@ -14,6 +14,7 @@ from app.utils import (
     calculate_risk_ranges, calculate_final_grade, get_assessment_status,
     parse_syllabus_text, extract_text_from_file
 )
+from app.ai import parse_syllabus_with_ai
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -208,7 +209,7 @@ def simulate_scenario(course_id: int, data: SimulateRequest, db: Session = Depen
 
 @app.post("/upload-syllabus")
 async def upload_syllabus(file: UploadFile = File(...)):
-    """Upload a syllabus file and extract grading structure"""
+    """Upload a syllabus file and extract grading structure using AI (Gemini) with regex fallback"""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
     
@@ -219,7 +220,14 @@ async def upload_syllabus(file: UploadFile = File(...)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
-    assessments = parse_syllabus_text(text)
+    # Try AI-powered parsing first (Gemini), fall back to regex
+    parsing_method = "regex"
+    assessments = await parse_syllabus_with_ai(text)
+    
+    if assessments is not None:
+        parsing_method = "ai"
+    else:
+        assessments = parse_syllabus_text(text)
     
     # Extract course name from filename
     course_name = file.filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ").title()
@@ -228,7 +236,8 @@ async def upload_syllabus(file: UploadFile = File(...)):
         "course_name": course_name,
         "extracted_text_preview": text[:500],
         "assessments": assessments,
-        "total_weight": round(sum(a["weight"] for a in assessments), 2)
+        "total_weight": round(sum(a["weight"] for a in assessments), 2),
+        "parsing_method": parsing_method
     }
 
 @app.post("/courses/{course_id}/assessments/batch")

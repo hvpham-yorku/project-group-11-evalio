@@ -32,10 +32,10 @@ export function Landing() {
 
       {/* Hero */}
       <section className="relative pt-32 pb-24 px-6 overflow-hidden">
-        {/* Glow orbs */}
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[800px] h-[600px] opacity-30 pointer-events-none">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/30 rounded-full blur-[120px]" />
-          <div className="absolute top-20 right-1/4 w-80 h-80 bg-accent/20 rounded-full blur-[100px]" />
+        {/* Soft gradient orbs */}
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[800px] h-[600px] opacity-20 pointer-events-none">
+          <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[120px]" />
+          <div className="absolute top-20 right-1/4 w-80 h-80 bg-accent/15 rounded-full blur-[100px]" />
         </div>
 
         <motion.div
@@ -88,7 +88,7 @@ export function Landing() {
       </section>
 
       {/* Stats bar */}
-      <section className="py-8 px-6 border-y border-border/40">
+      <section className="py-8 px-6 border-y border-border/40 bg-white/50">
         <div className="max-w-4xl mx-auto flex flex-wrap items-center justify-center gap-12 sm:gap-20">
           {[
             { label: "Grade Scenarios", value: "Unlimited" },

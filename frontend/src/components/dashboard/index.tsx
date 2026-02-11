@@ -187,7 +187,7 @@ export function Dashboard() {
       {/* Create Course Dialog */}
       <Dialog.Root open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <Dialog.Overlay className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
           <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md glass-strong rounded-2xl p-8 shadow-2xl z-50">
             <Dialog.Title className="text-2xl font-bold text-foreground mb-1">
               Create New Course

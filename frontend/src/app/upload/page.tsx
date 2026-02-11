@@ -168,7 +168,7 @@ export default function UploadPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="border-b border-border/40 bg-background/60 backdrop-blur-xl">
+      <header className="border-b border-border/40 bg-white/70 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
             <div className="relative">
@@ -189,7 +189,7 @@ export default function UploadPage() {
       </header>
 
       {/* Progress Steps */}
-      <div className="border-b border-border/40 bg-card/30">
+      <div className="border-b border-border/40 bg-white/50">
         <div className="mx-auto max-w-7xl px-6 py-3">
           <div className="flex items-center justify-between">
             {steps.map((step, i) => (
@@ -197,17 +197,17 @@ export default function UploadPage() {
                 <button
                   onClick={() => { if (step.num < currentStep) setCurrentStep(step.num) }}
                   className={`flex items-center gap-2 text-sm font-medium transition-colors ${
-                    step.num < currentStep ? "text-emerald-400 cursor-pointer" : step.num === currentStep ? "text-primary" : "text-muted-foreground cursor-default"
+                    step.num < currentStep ? "text-emerald-600 cursor-pointer" : step.num === currentStep ? "text-primary" : "text-muted-foreground cursor-default"
                   }`}
                 >
                   <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                    step.num < currentStep ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : step.num === currentStep ? "bg-primary/20 text-primary border border-primary/30" : "bg-muted/50 text-muted-foreground border border-border/50"
+                    step.num < currentStep ? "bg-emerald-50 text-emerald-600 border border-emerald-200" : step.num === currentStep ? "bg-primary/10 text-primary border border-primary/30" : "bg-gray-100 text-muted-foreground border border-gray-200"
                   }`}>
                     {step.num < currentStep ? <CheckCircle2 className="h-4 w-4" /> : step.num}
                   </div>
                   <span className="hidden sm:inline">{step.label}</span>
                 </button>
-                {i < steps.length - 1 && <div className={`hidden sm:block w-12 lg:w-20 h-px mx-2 ${step.num < currentStep ? "bg-emerald-500/30" : "bg-border/40"}`} />}
+                {i < steps.length - 1 && <div className={`hidden sm:block w-12 lg:w-20 h-px mx-2 ${step.num < currentStep ? "bg-emerald-300" : "bg-gray-200"}`} />}
               </div>
             ))}
           </div>
@@ -239,13 +239,13 @@ export default function UploadPage() {
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
                 className={`relative border-2 border-dashed rounded-2xl p-16 text-center cursor-pointer transition-all duration-300 ${
-                  isDragging ? "border-primary bg-primary/5 scale-[1.01]" : file ? "border-emerald-500/40 bg-emerald-500/5" : "border-border/60 bg-card/30 hover:border-primary/40 hover:bg-primary/5"
+                  isDragging ? "border-primary bg-primary/5 scale-[1.01]" : file ? "border-emerald-500/50 bg-emerald-50" : "border-gray-300 bg-white hover:border-primary/40 hover:bg-primary/5"
                 }`}
               >
                 <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileSelect} className="hidden" />
                 {file ? (
                   <div className="flex flex-col items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center"><FileText className="h-7 w-7 text-emerald-400" /></div>
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center"><FileText className="h-7 w-7 text-emerald-600" /></div>
                     <div>
                       <p className="font-semibold text-foreground">{file.name}</p>
                       <p className="text-sm text-muted-foreground mt-1">{(file.size / 1024).toFixed(1)} KB</p>
@@ -310,7 +310,7 @@ export default function UploadPage() {
                         type="number"
                         value={Math.round(a.weight * 100)}
                         onChange={(e) => updateAssessmentWeight(i, e.target.value)}
-                        className="w-16 bg-secondary rounded-lg px-2 py-1 text-center text-sm text-foreground outline-none"
+                        className="w-16 bg-white border border-border rounded-lg px-2 py-1 text-center text-sm text-foreground outline-none"
                       />
                       <span className="text-sm text-muted-foreground">%</span>
                     </div>
@@ -321,7 +321,7 @@ export default function UploadPage() {
                 ))}
               </div>
 
-              <div className={`text-sm mb-4 ${Math.abs(totalWeight - 1) < 0.01 ? "text-emerald-400" : "text-amber-400"}`}>
+              <div className={`text-sm mb-4 ${Math.abs(totalWeight - 1) < 0.01 ? "text-emerald-600" : "text-amber-600"}`}>
                 Total weight: {Math.round(totalWeight * 100)}%
                 {Math.abs(totalWeight - 1) > 0.01 && " — should equal 100%"}
               </div>
@@ -329,7 +329,7 @@ export default function UploadPage() {
               {showAddForm ? (
                 <div className="glass rounded-xl p-4 flex items-center gap-3">
                   <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Assessment name" className="flex-1 bg-transparent outline-none text-foreground placeholder:text-muted-foreground" />
-                  <input type="number" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} placeholder="%" className="w-16 bg-secondary rounded-lg px-2 py-1 text-center text-sm outline-none" />
+                  <input type="number" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} placeholder="%" className="w-16 bg-white border border-border rounded-lg px-2 py-1 text-center text-sm outline-none" />
                   <button onClick={addAssessment} className="btn-primary text-xs px-3 py-1.5">Add</button>
                   <button onClick={() => setShowAddForm(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
                 </div>
@@ -371,7 +371,7 @@ export default function UploadPage() {
                         value={a.current_score ?? ""}
                         onChange={(e) => updateScore(i, e.target.value)}
                         placeholder="—"
-                        className="w-20 bg-secondary rounded-lg px-3 py-2 text-center text-foreground outline-none placeholder:text-muted-foreground/50"
+                        className="w-20 bg-white border border-border rounded-lg px-3 py-2 text-center text-foreground outline-none placeholder:text-muted-foreground/50"
                       />
                       <span className="text-sm text-muted-foreground">/ 100</span>
                     </div>
@@ -379,7 +379,7 @@ export default function UploadPage() {
                 ))}
               </div>
 
-              <div className="mt-4 p-4 rounded-xl bg-card/50 border border-border/30">
+              <div className="mt-4 p-4 rounded-xl bg-white border border-border/40">
                 <p className="text-sm text-muted-foreground">
                   <span className="text-foreground font-medium">{assessments.filter(a => a.current_score !== null).length}</span> of {assessments.length} assessments graded
                 </p>
@@ -471,12 +471,12 @@ export default function UploadPage() {
 
                 <div className="glass rounded-2xl p-6">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${analysisResult.isAchievable ? "bg-emerald-500/10" : "bg-destructive/10"}`}>
-                      {analysisResult.isAchievable ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <AlertCircle className="h-5 w-5 text-destructive" />}
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${analysisResult.isAchievable ? "bg-emerald-50" : "bg-destructive/10"}`}>
+                      {analysisResult.isAchievable ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : <AlertCircle className="h-5 w-5 text-destructive" />}
                     </div>
                     <p className="text-sm text-muted-foreground">Status</p>
                   </div>
-                  <p className={`text-2xl font-bold ${analysisResult.isAchievable ? "text-emerald-400" : "text-destructive"}`}>
+                  <p className={`text-2xl font-bold ${analysisResult.isAchievable ? "text-emerald-600" : "text-destructive"}`}>
                     {analysisResult.isAchievable ? "Achievable" : "Very Difficult"}
                   </p>
                   <p className="text-sm text-muted-foreground mt-1">
@@ -514,7 +514,7 @@ export default function UploadPage() {
                     <div key={i} className="flex items-center justify-between text-sm py-2 border-b border-border/20 last:border-0">
                       <div className="flex items-center gap-3">
                         <span className="text-foreground">{a.name}</span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">{Math.round(a.weight * 100)}%</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{Math.round(a.weight * 100)}%</span>
                       </div>
                       <span className={a.current_score !== null ? "text-foreground font-medium" : "text-muted-foreground"}>
                         {a.current_score !== null ? `${a.current_score}%` : "Upcoming"}
@@ -538,8 +538,8 @@ export default function UploadPage() {
           {/* ======= STEP 6: DASHBOARD REDIRECT ======= */}
           {currentStep === 6 && (
             <motion.div key="step6" {...anim} className="text-center py-16">
-              <div className="w-20 h-20 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 className="h-10 w-10 text-emerald-400" />
+              <div className="w-20 h-20 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-6">
+                <CheckCircle2 className="h-10 w-10 text-emerald-600" />
               </div>
               <h2 className="text-3xl font-bold mb-3">You&apos;re All Set!</h2>
               <p className="text-muted-foreground mb-8 max-w-md mx-auto">

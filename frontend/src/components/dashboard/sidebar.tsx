@@ -23,7 +23,7 @@ export function Sidebar({
   isLoading,
 }: SidebarProps) {
   return (
-    <aside className="hidden h-screen w-72 border-r border-border/40 bg-card/50 backdrop-blur-xl p-6 md:flex flex-col sticky top-0 overflow-auto">
+    <aside className="hidden h-screen w-72 border-r border-border/40 bg-white/80 backdrop-blur-xl p-6 md:flex flex-col sticky top-0 overflow-auto">
       {/* Logo */}
       <Link href="/" className="mb-8 flex items-center gap-3 group">
         <div className="relative">

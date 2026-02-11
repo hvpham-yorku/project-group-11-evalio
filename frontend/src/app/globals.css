@@ -4,27 +4,27 @@
 
 @layer base {
   :root {
-    --background: 228 33% 4%;
-    --foreground: 210 40% 98%;
-    --card: 225 25% 7%;
-    --card-foreground: 210 40% 98%;
-    --popover: 225 25% 8%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
+    --background: 40 20% 97%;
+    --foreground: 220 20% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 14%;
+    --primary: 217 91% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 18% 11%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 220 14% 14%;
-    --muted-foreground: 215 20% 55%;
-    --accent: 250 80% 65%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
+    --secondary: 220 14% 93%;
+    --secondary-foreground: 220 20% 14%;
+    --muted: 220 14% 92%;
+    --muted-foreground: 215 14% 46%;
+    --accent: 250 60% 55%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 55%;
     --destructive-foreground: 0 0% 98%;
-    --border: 220 13% 14%;
-    --input: 220 13% 14%;
-    --ring: 217 91% 60%;
+    --border: 220 13% 87%;
+    --input: 220 13% 87%;
+    --ring: 217 91% 50%;
     --radius: 0.75rem;
-    --success: 142 71% 45%;
+    --success: 142 71% 40%;
     --warning: 38 92% 50%;
   }
 
@@ -40,58 +40,59 @@
 }
 
 /* ═══════════════════════════════════════════
-   GLASS MORPHISM
+   GLASS MORPHISM (light)
    ═══════════════════════════════════════════ */
 .glass {
   background: linear-gradient(
     135deg,
-    hsl(225 25% 8% / 0.8) 0%,
-    hsl(225 25% 6% / 0.6) 100%
+    hsl(0 0% 100% / 0.85) 0%,
+    hsl(220 14% 97% / 0.7) 100%
   );
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid hsl(220 13% 18% / 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid hsl(220 13% 87% / 0.7);
+  box-shadow: 0 1px 3px hsl(220 14% 14% / 0.04);
 }
 
 .glass-strong {
   background: linear-gradient(
     135deg,
-    hsl(225 25% 10% / 0.9) 0%,
-    hsl(225 25% 7% / 0.85) 100%
+    hsl(0 0% 100% / 0.95) 0%,
+    hsl(220 14% 98% / 0.9) 100%
   );
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid hsl(220 13% 20% / 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid hsl(220 13% 85% / 0.8);
+  box-shadow: 0 4px 16px hsl(220 14% 14% / 0.06);
 }
 
 .glass-hover {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .glass-hover:hover {
-  border-color: hsl(217 91% 60% / 0.3);
-  box-shadow: 0 0 30px hsl(217 91% 60% / 0.05);
+  border-color: hsl(217 91% 50% / 0.3);
+  box-shadow: 0 4px 20px hsl(217 91% 50% / 0.08);
 }
 
 /* ═══════════════════════════════════════════
-   GLOW EFFECTS
+   SOFT SHADOWS (replaces glow effects)
    ═══════════════════════════════════════════ */
 .glow-blue {
   box-shadow:
-    0 0 40px hsl(217 91% 60% / 0.12),
-    0 0 80px hsl(217 91% 60% / 0.06),
-    0 0 120px hsl(217 91% 60% / 0.03);
+    0 4px 24px hsl(217 91% 50% / 0.1),
+    0 1px 6px hsl(217 91% 50% / 0.06);
 }
 
 .glow-violet {
   box-shadow:
-    0 0 40px hsl(250 80% 65% / 0.12),
-    0 0 80px hsl(250 80% 65% / 0.06);
+    0 4px 24px hsl(250 60% 55% / 0.1),
+    0 1px 6px hsl(250 60% 55% / 0.06);
 }
 
 .glow-success {
   box-shadow:
-    0 0 30px hsl(142 71% 45% / 0.15),
-    0 0 60px hsl(142 71% 45% / 0.08);
+    0 4px 20px hsl(142 71% 40% / 0.1),
+    0 1px 6px hsl(142 71% 40% / 0.06);
 }
 
 /* ═══════════════════════════════════════════
@@ -101,16 +102,16 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    hsl(217 91% 60% / 0.08) 20%,
-    hsl(250 80% 65% / 0.12) 50%,
-    hsl(217 91% 60% / 0.08) 80%,
+    hsl(217 91% 50% / 0.06) 20%,
+    hsl(250 60% 55% / 0.1) 50%,
+    hsl(217 91% 50% / 0.06) 80%,
     transparent 100%
   );
   background-size: 1000px 100%;
 }
 
 .gradient-text {
-  background: linear-gradient(135deg, hsl(217 91% 60%), hsl(250 80% 65%));
+  background: linear-gradient(135deg, hsl(217 91% 50%), hsl(250 60% 55%));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -124,7 +125,7 @@
   position: absolute;
   inset: -1px;
   border-radius: inherit;
-  background: linear-gradient(135deg, hsl(217 91% 60% / 0.4), hsl(250 80% 65% / 0.4));
+  background: linear-gradient(135deg, hsl(217 91% 50% / 0.3), hsl(250 60% 55% / 0.3));
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
@@ -137,22 +138,22 @@
    ═══════════════════════════════════════════ */
 .btn-primary {
   @apply relative overflow-hidden rounded-xl px-6 py-3 font-semibold text-white;
-  background: linear-gradient(135deg, hsl(217 91% 55%), hsl(250 80% 60%));
+  background: linear-gradient(135deg, hsl(217 91% 48%), hsl(250 60% 50%));
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .btn-primary:hover {
-  box-shadow: 0 8px 30px hsl(217 91% 60% / 0.3);
+  box-shadow: 0 6px 24px hsl(217 91% 50% / 0.25);
   transform: translateY(-1px);
 }
 
 .btn-secondary {
   @apply rounded-xl border border-border px-6 py-3 font-semibold text-foreground;
-  background: hsl(var(--secondary));
+  background: hsl(var(--card));
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .btn-secondary:hover {
-  border-color: hsl(217 91% 60% / 0.3);
-  background: hsl(220 18% 13%);
+  border-color: hsl(217 91% 50% / 0.3);
+  background: hsl(220 14% 96%);
 }
 
 .btn-ghost {
@@ -166,8 +167,8 @@
    INPUTS
    ═══════════════════════════════════════════ */
 .input-field {
-  @apply rounded-xl border border-border bg-secondary px-4 py-3 text-foreground;
-  @apply placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50;
+  @apply rounded-xl border border-border bg-white px-4 py-3 text-foreground;
+  @apply placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50;
   transition: all 0.2s ease;
 }
 
@@ -182,11 +183,11 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(220 13% 20%);
+  background: hsl(220 13% 80%);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(220 13% 28%);
+  background: hsl(220 13% 70%);
 }
 
 /* ═══════════════════════════════════════════
@@ -198,28 +199,15 @@ input[type="range"] {
 }
 input[type="range"]::-webkit-slider-thumb {
   @apply appearance-none w-4 h-4 rounded-full cursor-pointer;
-  background: linear-gradient(135deg, hsl(217 91% 60%), hsl(250 80% 65%));
-  box-shadow: 0 0 12px hsl(217 91% 60% / 0.4);
-  border: 2px solid hsl(var(--background));
+  background: linear-gradient(135deg, hsl(217 91% 50%), hsl(250 60% 50%));
+  box-shadow: 0 0 8px hsl(217 91% 50% / 0.3);
+  border: 2px solid white;
 }
 input[type="range"]::-moz-range-thumb {
   @apply w-4 h-4 rounded-full cursor-pointer border-2;
-  background: linear-gradient(135deg, hsl(217 91% 60%), hsl(250 80% 65%));
-  box-shadow: 0 0 12px hsl(217 91% 60% / 0.4);
-  border-color: hsl(var(--background));
-}
-
-/* ═══════════════════════════════════════════
-   NOISE TEXTURE OVERLAY
-   ═══════════════════════════════════════════ */
-.noise::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  opacity: 0.015;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  z-index: 9999;
+  background: linear-gradient(135deg, hsl(217 91% 50%), hsl(250 60% 50%));
+  box-shadow: 0 0 8px hsl(217 91% 50% / 0.3);
+  border-color: white;
 }
 
 /* ═══════════════════════════════════════════

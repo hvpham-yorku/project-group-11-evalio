@@ -10,7 +10,7 @@ export function Navbar() {
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="sticky top-0 z-50 border-b border-border/40 bg-background/60 backdrop-blur-xl"
+      className="sticky top-0 z-50 border-b border-border/40 bg-white/70 backdrop-blur-xl"
     >
       <div className="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-3 group">
