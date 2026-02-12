@@ -12,8 +12,8 @@ courses_db = []
 
 
 class AssessmentWeightUpdate(BaseModel):
-    name: str = Field(..., min_length=1)
-    weight: Decimal
+   name: str = Field(..., min_length=1)
+   weight: Decimal = Field(..., ge=0, le=100)
 
 
 class CourseWeightsUpdateRequest(BaseModel):

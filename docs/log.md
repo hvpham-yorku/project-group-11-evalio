@@ -17,8 +17,51 @@
 - Deferred persistent database integration to Iteration 2
 - Focused on clean API separation and validation
 
+### Architecture Notes
+- FastAPI application initialized in main.py
+- Course endpoints organized using APIRouter in routes/courses.py
+- Pydantic models enforce request validation
+- In-memory list (courses_db) acts as a temporary storage layer
+- Clear separation between routing, validation, and storage logic
+
+## Frontend: Manual Course Setup
+
+### Work Completed
+- Implemented UI for manual course creation
+- Added form inputs for course name and assessments
+- Allowed users to input assessment names and weights
+- Integrated frontend with backend `/courses` endpoint
+- Displayed validation errors returned from backend
+
+### Design Decisions
+- Frontend validation kept minimal; backend enforces grading rules
+- Relied on API responses for error handling and consistency
+
+### Architecture Notes
+- Frontend communicates with backend via REST API calls
+- Course creation form submits data to `/courses` endpoint
+- UI reflects backend validation responses
+
+## Testing
+
+### Work Completed
+- Manually tested endpoints using Swagger UI
+- Verified validation rules for:
+  - Empty assessment names
+  - Negative weights
+  - Total weight exceeding 100%
+- Confirmed correct API responses for valid and invalid inputs
+
+### Design Decisions
+- Focused on manual testing for Iteration 1
+- Automated tests deferred to later iterations
+
 ### Status
-- Backend and database stub complete for Iteration 1
+- Manual Course Setup user story completed for Iteration 1
+- Backend, frontend integration, and validation testing complete for Iteration 1
+
+
+
 
 
 # Iteration 2 – Grading Structure Validation
