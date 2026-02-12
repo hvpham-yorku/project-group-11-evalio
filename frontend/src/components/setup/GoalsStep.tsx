@@ -1,28 +1,106 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Target, TrendingUp } from "lucide-react";
+import { checkTarget, listCourses } from "@/lib/api";
 
 export function GoalsStep() {
   const [target, setTarget] = useState<number>(89);
+  const [courseIndex, setCourseIndex] = useState<number | null>(null);
+  const [currentStanding, setCurrentStanding] = useState(85.0);
+  const [explanation, setExplanation] = useState(
+    "This target looks realistic based on your current performance and remaining weight."
+  );
+  const [yorkEquivalent, setYorkEquivalent] = useState({
+    letter: "A",
+    grade_point: 8,
+    description: "Excellent",
+  });
+  const [gradedWeight, setGradedWeight] = useState<number>(30);
+  const [remainingWeight, setRemainingWeight] = useState<number>(70);
+  const [requiredAverage, setRequiredAverage] = useState(0);
+  const [requiredAverageDisplay, setRequiredAverageDisplay] = useState("0.0%");
+  const [requiredFractionDisplay, setRequiredFractionDisplay] = useState(
+    "(0.00 / 0 remaining weight)"
+  );
+  const [classification, setClassification] = useState("Comfortable");
+  const [error, setError] = useState("");
 
-const current: number = 85.0;
-const gradedWeight: number = 30;
-const remainingWeight: number = 70;
+  useEffect(() => {
+    const loadCourse = async () => {
+      try {
+        const courses = (await listCourses()) as Array<{
+          assessments: Array<{
+            weight: number;
+            raw_score?: number | null;
+            total_score?: number | null;
+          }>;
+        }>;
+        if (courses.length === 0) {
+          setError("No course found. Complete structure first.");
+          return;
+        }
 
-const requiredAvg: number = 80.2;
+        const latestIndex = courses.length - 1;
+        const latest = courses[latestIndex];
+        setCourseIndex(latestIndex);
+        const graded = latest.assessments.filter(
+          (a) =>
+            typeof a.raw_score === "number" && typeof a.total_score === "number"
+        );
+        const gradedW = graded.reduce((sum, a) => sum + a.weight, 0);
+        setGradedWeight(gradedW);
+        setRemainingWeight(100 - gradedW);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load goals.");
+      }
+    };
 
-  const status = useMemo(() => {
-    if (remainingWeight === 0) return "final";
-    if (target <= current + 2) return "achievable";
-    if (target <= 95) return "challenging";
-    return "not-possible";
-  }, [target, current, remainingWeight]);
+    loadCourse();
+  }, []);
+
+  useEffect(() => {
+    if (courseIndex === null) return;
+    const run = async () => {
+      try {
+        const response = (await checkTarget(courseIndex, { target })) as {
+          current_standing: number;
+          explanation: string;
+          york_equivalent: {
+            letter: string;
+            grade_point: number;
+            description: string;
+          };
+          required_points: number;
+          required_average: number;
+          required_average_display: string;
+          required_fraction_display: string;
+          classification: string;
+        };
+        setCurrentStanding(response.current_standing);
+        setExplanation(response.explanation);
+        setYorkEquivalent(response.york_equivalent);
+        setRequiredAverage(response.required_average);
+        setRequiredAverageDisplay(response.required_average_display);
+        setRequiredFractionDisplay(response.required_fraction_display);
+        setClassification(response.classification);
+        setError("");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to evaluate target.");
+      }
+    };
+    run();
+  }, [target, courseIndex]);
 
   const statusUI = useMemo(() => {
-    if (status === "achievable") {
+    if (
+      classification === "Comfortable" ||
+      classification === "Achievable" ||
+      classification === "Already Achieved" ||
+      classification === "Complete"
+    ) {
       return {
-        label: "Achievable",
+        label: classification,
         icon: TrendingUp,
         pillBg: "bg-green-50",
         pillText: "text-green-700",
@@ -30,14 +108,12 @@ const requiredAvg: number = 80.2;
         noteBg: "bg-green-50",
         noteBorder: "border-green-200",
         noteText: "text-green-700",
-        note:
-          "This target looks realistic based on your current performance and remaining weight.",
       };
     }
 
-    if (status === "not-possible") {
+    if (classification === "Not Possible") {
       return {
-        label: "Not Possible",
+        label: classification,
         icon: TrendingUp,
         pillBg: "bg-red-50",
         pillText: "text-red-700",
@@ -45,13 +121,11 @@ const requiredAvg: number = 80.2;
         noteBg: "bg-red-50",
         noteBorder: "border-red-200",
         noteText: "text-red-700",
-        note:
-          "This target would require an unusually high average on remaining work.",
       };
     }
 
     return {
-      label: "Challenging",
+      label: classification,
       icon: TrendingUp,
       pillBg: "bg-[#FFF3E6]",
       pillText: "text-[#C8833F]",
@@ -59,9 +133,8 @@ const requiredAvg: number = 80.2;
       noteBg: "bg-[#FFF6EC]",
       noteBorder: "border-[#F2D7BD]",
       noteText: "text-[#C8833F]",
-      note: "This target is technically possible but will require excellent work.",
     };
-  }, [status]);
+  }, [classification]);
 
   const StatusIcon = statusUI.icon;
 
@@ -89,7 +162,7 @@ const requiredAvg: number = 80.2;
                 max={100}
                 step={1}
                 value={target}
-                onChange={(e) => setTarget(parseInt(e.target.value))}
+                onChange={(e) => setTarget(parseInt(e.target.value, 10))}
                 className="w-full h-2 rounded-full appearance-none cursor-pointer"
                 style={{
                   background: "#E6E2DB",
@@ -114,6 +187,10 @@ const requiredAvg: number = 80.2;
 
           <p className="mt-5 text-sm text-gray-500">
             Most students aim for 75-85% in this type of course
+          </p>
+          <p className="mt-2 text-sm text-gray-500">
+            YorkU equivalent: {yorkEquivalent.letter} ({yorkEquivalent.grade_point}) -{" "}
+            {yorkEquivalent.description}
           </p>
         </div>
       </div>
@@ -140,11 +217,10 @@ const requiredAvg: number = 80.2;
           {/* Big required number box */}
           <div className="rounded-2xl p-8 text-center bg-[#F6F1EA] border border-gray-100">
             <div className="text-6xl font-semibold" style={{ color: statusUI.pillText.includes("#") ? "#C8833F" : undefined }}>
-              {/* keep the exact mock value */}
-              {requiredAvg.toFixed(1)}%
+              {requiredAverageDisplay}
             </div>
             <div className="mt-2 text-sm text-gray-500">
-              across {remainingWeight}% of remaining assessments
+              {requiredFractionDisplay}
             </div>
           </div>
 
@@ -153,7 +229,7 @@ const requiredAvg: number = 80.2;
             <div className="w-full bg-[#E6E2DB] h-3 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full ${statusUI.bar}`}
-                style={{ width: `${Math.min(requiredAvg, 100)}%` }}
+                style={{ width: `${Math.min(requiredAverage, 100)}%` }}
               />
             </div>
             <div className="flex justify-between text-xs text-[#C6B8A8] mt-2">
@@ -167,7 +243,7 @@ const requiredAvg: number = 80.2;
           <div
             className={`rounded-2xl p-4 border ${statusUI.noteBg} ${statusUI.noteBorder}`}
           >
-            <p className={`text-sm ${statusUI.noteText}`}>{statusUI.note}</p>
+            <p className={`text-sm ${statusUI.noteText}`}>{explanation}</p>
           </div>
 
           {/* Bottom mini cards */}
@@ -175,7 +251,7 @@ const requiredAvg: number = 80.2;
             <div className="rounded-2xl p-5 bg-[#F6F1EA] border border-gray-100">
               <div className="text-sm text-gray-500">Current Standing</div>
               <div className="mt-1 text-2xl font-semibold text-gray-800">
-                {current.toFixed(1)}%
+                {currentStanding.toFixed(1)}%
               </div>
               <div className="mt-1 text-xs text-[#C6B8A8]">{gradedWeight}% graded</div>
             </div>
@@ -190,6 +266,7 @@ const requiredAvg: number = 80.2;
           </div>
         </div>
       </div>
+      {error ? <p className="mt-4 text-sm text-red-500">{error}</p> : null}
 
       {/* Primary action */}
       <button className="mt-8 w-full bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition">

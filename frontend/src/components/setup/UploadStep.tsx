@@ -1,6 +1,11 @@
+"use client";
+
+import { useRouter } from "next/navigation";
 import { Upload, FileText } from "lucide-react";
 
 export function UploadStep() {
+  const router = useRouter();
+
   return (
     <div className="max-w-3xl mx-auto px-4">
       <h2 className="text-2xl font-bold text-gray-800">Upload Your Syllabus</h2>
@@ -32,7 +37,10 @@ export function UploadStep() {
 
         <div className="my-10 h-[1px] bg-gray-100 w-full" />
 
-        <button className="border border-gray-200 text-gray-600 px-8 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
+        <button
+          onClick={() => router.push("/setup/structure")}
+          className="border border-gray-200 text-gray-600 px-8 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 transition"
+        >
           Set up course manually
         </button>
       </div>

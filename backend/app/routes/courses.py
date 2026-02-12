@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -22,7 +23,8 @@ class CourseWeightsUpdateRequest(BaseModel):
 
 class AssessmentGradeUpdate(BaseModel):
     name: str = Field(..., min_length=1)
-    grade: float = Field(..., ge=0, le=100)
+    raw_score: Optional[float] = None
+    total_score: Optional[float] = None
 
 
 class CourseGradesUpdateRequest(BaseModel):
@@ -33,12 +35,107 @@ class TargetGradeRequest(BaseModel):
     target: float = Field(..., ge=0, le=100)
 
 
+YORKU_SCALE = [
+    {"letter": "A+", "min": 90, "point": 9, "desc": "Exceptional"},
+    {"letter": "A", "min": 80, "point": 8, "desc": "Excellent"},
+    {"letter": "B+", "min": 75, "point": 7, "desc": "Very Good"},
+    {"letter": "B", "min": 70, "point": 6, "desc": "Good"},
+    {"letter": "C+", "min": 65, "point": 5, "desc": "Competent"},
+    {"letter": "C", "min": 60, "point": 4, "desc": "Fairly Competent"},
+    {"letter": "D+", "min": 55, "point": 3, "desc": "Passing"},
+    {"letter": "D", "min": 50, "point": 2, "desc": "Marginally Passing"},
+    {"letter": "E", "min": 40, "point": 1, "desc": "Marginally Failing"},
+    {"letter": "F", "min": 0, "point": 0, "desc": "Failing"},
+]
+
+
+def calculate_assessment_percent(raw_score: float, total_score: float) -> float:
+    return (raw_score / total_score) * 100
+
+
 def calculate_current_standing(course: CourseCreate) -> float:
     standing = 0.0
     for assessment in course.assessments:
-        if assessment.grade is not None:
-            standing += (assessment.grade * assessment.weight) / 100
-    return float(standing)
+        if assessment.raw_score is not None and assessment.total_score is not None:
+            percent = calculate_assessment_percent(
+                assessment.raw_score,
+                assessment.total_score
+            )
+            standing += (percent * assessment.weight) / 100
+    return round(float(standing), 2)
+
+
+def get_york_grade(percent: float) -> dict[str, float | str]:
+    for band in YORKU_SCALE:
+        if percent >= band["min"]:
+            return {
+                "letter": band["letter"],
+                "grade_point": band["point"],
+                "description": band["desc"],
+            }
+    return {
+        "letter": "F",
+        "grade_point": 0,
+        "description": "Failing",
+    }
+
+
+def calculate_required_average_summary(
+    current_standing: float,
+    target_percentage: float,
+    remaining_weight: float
+) -> dict[str, float | str]:
+    remaining_weight_display = (
+        str(int(remaining_weight))
+        if float(remaining_weight).is_integer()
+        else str(remaining_weight)
+    )
+    required_points = target_percentage - current_standing
+
+    if remaining_weight <= 0:
+        return {
+            "required_points": round(required_points, 2),
+            "required_average": 0.0,
+            "required_average_display": "0.0%",
+            "required_fraction_display": (
+                f"({max(required_points, 0):.2f} / {remaining_weight_display} remaining weight)"
+            ),
+            "classification": "Complete",
+        }
+
+    if required_points <= 0:
+        return {
+            "required_points": 0.0,
+            "required_average": 0.0,
+            "required_average_display": "0.0%",
+            "required_fraction_display": (
+                f"(0.00 / {remaining_weight_display} remaining weight)"
+            ),
+            "classification": "Already Achieved",
+        }
+
+    required_average = (required_points / remaining_weight) * 100
+
+    if required_average > 100:
+        classification = "Not Possible"
+    elif required_average > 95:
+        classification = "Very Challenging"
+    elif required_average > 85:
+        classification = "Challenging"
+    elif required_average > 70:
+        classification = "Achievable"
+    else:
+        classification = "Comfortable"
+
+    return {
+        "required_points": round(required_points, 2),
+        "required_average": round(required_average, 1),
+        "required_average_display": f"{required_average:.1f}%",
+        "required_fraction_display": (
+            f"({required_points:.2f} / {remaining_weight_display} remaining weight)"
+        ),
+        "classification": classification,
+    }
 
 
 @router.post("/")
@@ -166,9 +263,36 @@ def update_course_grades(course_index: int, payload: CourseGradesUpdateRequest):
                 status_code=400,
                 detail=f"Assessment '{assessment.name}' does not exist in this course"
             )
+        if (assessment.raw_score is None) != (assessment.total_score is None):
+            raise HTTPException(
+                status_code=400,
+                detail="Both scores must be provided or both null"
+            )
+        if assessment.raw_score is None and assessment.total_score is None:
+            continue
+        if assessment.raw_score < 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Assessment '{assessment.name}' raw_score must be non-negative"
+            )
+        if assessment.total_score <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Assessment '{assessment.name}' total_score must be greater than 0"
+            )
+        if assessment.raw_score > assessment.total_score:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Assessment '{assessment.name}' raw_score cannot exceed total_score"
+            )
 
     for assessment in payload.assessments:
-        existing_assessments[assessment.name].grade = assessment.grade
+        if assessment.raw_score is None and assessment.total_score is None:
+            existing_assessments[assessment.name].raw_score = None
+            existing_assessments[assessment.name].total_score = None
+        else:
+            existing_assessments[assessment.name].raw_score = assessment.raw_score
+            existing_assessments[assessment.name].total_score = assessment.total_score
 
     current_standing = calculate_current_standing(course)
 
@@ -180,7 +304,8 @@ def update_course_grades(course_index: int, payload: CourseGradesUpdateRequest):
             {
                 "name": assessment.name,
                 "weight": assessment.weight,
-                "grade": assessment.grade
+                "raw_score": assessment.raw_score,
+                "total_score": assessment.total_score
             }
             for assessment in course.assessments
         ]
@@ -201,7 +326,7 @@ def check_target_feasibility(course_index: int, payload: TargetGradeRequest):
     remaining_potential = sum(
         assessment.weight
         for assessment in course.assessments
-        if assessment.grade is None
+        if assessment.raw_score is None or assessment.total_score is None
     )
 
     maximum_possible = current_standing + remaining_potential
@@ -215,11 +340,18 @@ def check_target_feasibility(course_index: int, payload: TargetGradeRequest):
         if feasible
         else "Target is not achievable even with perfect scores on remaining assessments."
     )
+    required_average_summary = calculate_required_average_summary(
+        current_standing=current_standing,
+        target_percentage=payload.target,
+        remaining_weight=remaining_potential,
+    )
 
     return {
         "target": payload.target,
         "current_standing": current_standing,
         "maximum_possible": maximum_possible,
         "feasible": feasible,
-        "explanation": explanation
+        "explanation": explanation,
+        "york_equivalent": get_york_grade(payload.target),
+        **required_average_summary,
     }
