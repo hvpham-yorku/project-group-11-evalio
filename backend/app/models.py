@@ -4,6 +4,7 @@ from typing import List, Optional
 class Assessment(BaseModel):
     name: str = Field(..., min_length=1)
     weight: float = Field(..., gt=0)
+    grade: Optional[float] = Field(None, ge=0, le=100)
 
 class CourseCreate(BaseModel):
     name: str = Field(..., min_length=1)

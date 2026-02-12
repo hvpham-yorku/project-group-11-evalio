@@ -20,6 +20,23 @@ class CourseWeightsUpdateRequest(BaseModel):
     assessments: list[AssessmentWeightUpdate]
 
 
+class AssessmentGradeUpdate(BaseModel):
+    name: str = Field(..., min_length=1)
+    grade: float = Field(..., ge=0, le=100)
+
+
+class CourseGradesUpdateRequest(BaseModel):
+    assessments: list[AssessmentGradeUpdate]
+
+
+def calculate_current_standing(course: CourseCreate) -> float:
+    standing = 0.0
+    for assessment in course.assessments:
+        if assessment.grade is not None:
+            standing += (assessment.grade * assessment.weight) / 100
+    return float(standing)
+
+
 @router.post("/")
 def create_course(course: CourseCreate):
     if not course.assessments:
@@ -111,4 +128,56 @@ def update_course_weights(course_index: int, payload: CourseWeightsUpdateRequest
         "course_index": course_index,
         "total_weight": float(total_weight),
         "course": course
+    }
+
+
+@router.put("/{course_index}/grades")
+def update_course_grades(course_index: int, payload: CourseGradesUpdateRequest):
+    if course_index < 0 or course_index >= len(courses_db):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Course not found for index {course_index}"
+        )
+
+    if not payload.assessments:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one assessment grade update is required"
+        )
+
+    course = courses_db[course_index]
+    existing_assessments = {assessment.name: assessment for assessment in course.assessments}
+
+    seen_names = set()
+    for assessment in payload.assessments:
+        if assessment.name in seen_names:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Duplicate assessment '{assessment.name}' in update payload"
+            )
+        seen_names.add(assessment.name)
+
+        if assessment.name not in existing_assessments:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Assessment '{assessment.name}' does not exist in this course"
+            )
+
+    for assessment in payload.assessments:
+        existing_assessments[assessment.name].grade = assessment.grade
+
+    current_standing = calculate_current_standing(course)
+
+    return {
+        "message": "Assessment grades updated successfully",
+        "course_index": course_index,
+        "current_standing": current_standing,
+        "assessments": [
+            {
+                "name": assessment.name,
+                "weight": assessment.weight,
+                "grade": assessment.grade
+            }
+            for assessment in course.assessments
+        ]
     }
