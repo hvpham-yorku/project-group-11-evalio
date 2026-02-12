@@ -77,10 +77,11 @@ Actual Time:
 ---
 
 ### ITR1-6: What-If Scenario (Stretch)
-Assigned to:  
+Assigned to:  Bardiya
 Tasks:  
--  
--  
+- Implemented what-if scenario testing as **read-only analysis** (no persistence): compute projected final grade using existing weighted-grade logic without modifying stored grades.  
+- Added automated unit tests covering: (1) real grades unchanged after what-if, (2) boundary inputs 0 and 100, (3) repeated what-if calls produce consistent results.  
+- Documented design decision: **no scenario persistence in ITR1** (scope control), defer multi-scenario saving/comparison to later iterations if time. 
 Planned Time:  
 Actual Time:  
 
