@@ -185,9 +185,6 @@ export function GoalsStep() {
             <span>Excellence (90%)</span>
           </div>
 
-          <p className="mt-5 text-sm text-gray-500">
-            Most students aim for 75-85% in this type of course
-          </p>
           <p className="mt-2 text-sm text-gray-500">
             YorkU equivalent: {yorkEquivalent.letter} ({yorkEquivalent.grade_point}) -{" "}
             {yorkEquivalent.description}
@@ -216,7 +213,7 @@ export function GoalsStep() {
 
           {/* Big required number box */}
           <div className="rounded-2xl p-8 text-center bg-[#F6F1EA] border border-gray-100">
-            <div className="text-6xl font-semibold" style={{ color: statusUI.pillText.includes("#") ? "#C8833F" : undefined }}>
+            <div className={`text-6xl font-semibold ${statusUI.pillText}`}>
               {requiredAverageDisplay}
             </div>
             <div className="mt-2 text-sm text-gray-500">

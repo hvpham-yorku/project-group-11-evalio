@@ -51,6 +51,39 @@ export function StructureStep() {
     [assessments]
   );
 
+  const weightStatus = useMemo(() => {
+    if (totalWeight === 100) {
+      return {
+        bg: "bg-green-50",
+        border: "border-green-200",
+        text: "text-green-700",
+        icon: "success",
+        message: "Perfect! Your weights add up to 100%.",
+      };
+    }
+
+    if (totalWeight < 100) {
+      const diff = (100 - totalWeight).toFixed(0);
+      return {
+        bg: "bg-yellow-50",
+        border: "border-yellow-200",
+        text: "text-yellow-700",
+        icon: "warning",
+        message: `You need ${diff}% more to reach 100%.`,
+      };
+    }
+
+    const diff = (totalWeight - 100).toFixed(0);
+    return {
+      bg: "bg-red-50",
+      border: "border-red-200",
+      text: "text-red-700",
+      icon: "error",
+      message: `Weights exceed 100% by ${diff}%. Please adjust to continue.`,
+    };
+  }, [totalWeight]);
+
+
   const handleNameChange = (id: number, name: string) => {
     setAssessments((prev) =>
       prev.map((item) => (item.id === id ? { ...item, name } : item))
@@ -190,7 +223,15 @@ export function StructureStep() {
       <div className="mt-8 bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
         <div className="flex justify-between items-center mb-2">
           <span className="text-sm text-gray-500">Total weight</span>
-          <span className="text-sm font-bold text-green-600">
+          <span
+            className={`text-sm font-bold ${
+              totalWeight === 100
+                ? "text-green-600"
+                : totalWeight < 100
+                ? "text-yellow-500"
+                : "text-red-500"
+            }`}
+          >
             {totalWeight}%
           </span>
         </div>
@@ -198,15 +239,27 @@ export function StructureStep() {
         {/* Large Status Progress Bar */}
         <div className="w-full bg-gray-100 h-3 rounded-full mb-6">
           <div
-            className="bg-green-600 h-full rounded-full"
+            className={`h-full rounded-full ${
+              totalWeight === 100
+                ? "bg-green-600"
+                : totalWeight < 100
+                ? "bg-yellow-500"
+                : "bg-red-500"
+            }`}
             style={{ width: `${Math.max(0, Math.min(totalWeight, 100))}%` }}
           />
         </div>
 
         {/* Success Message */}
-        <div className="flex items-center gap-3 bg-green-50 p-4 rounded-xl text-green-700 text-sm">
-          <CheckCircle2 size={18} />
-          Perfect! Your weights add up to 100%.
+        <div
+          className={`flex items-center gap-3 p-4 rounded-xl text-sm border ${weightStatus.bg} ${weightStatus.border} ${weightStatus.text}`}
+        >
+          {weightStatus.icon === "success" ? (
+            <CheckCircle2 size={18} />
+          ) : (
+            <CheckCircle2 size={18} />
+          )}
+          {weightStatus.message}
         </div>
         {error ? <p className="mt-3 text-sm text-red-500">{error}</p> : null}
       </div>
