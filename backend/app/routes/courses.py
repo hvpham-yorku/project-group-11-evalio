@@ -29,6 +29,10 @@ class CourseGradesUpdateRequest(BaseModel):
     assessments: list[AssessmentGradeUpdate]
 
 
+class TargetGradeRequest(BaseModel):
+    target: float = Field(..., ge=0, le=100)
+
+
 def calculate_current_standing(course: CourseCreate) -> float:
     standing = 0.0
     for assessment in course.assessments:
@@ -180,4 +184,42 @@ def update_course_grades(course_index: int, payload: CourseGradesUpdateRequest):
             }
             for assessment in course.assessments
         ]
+    }
+
+
+@router.post("/{course_index}/target")
+def check_target_feasibility(course_index: int, payload: TargetGradeRequest):
+    if course_index < 0 or course_index >= len(courses_db):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Course not found for index {course_index}"
+        )
+
+    course = courses_db[course_index]
+    current_standing = calculate_current_standing(course)
+
+    remaining_potential = sum(
+        assessment.weight
+        for assessment in course.assessments
+        if assessment.grade is None
+    )
+
+    maximum_possible = current_standing + remaining_potential
+
+    current_standing = round(current_standing, 2)
+    maximum_possible = round(maximum_possible, 2)
+    feasible = maximum_possible >= payload.target
+
+    explanation = (
+        "Target is achievable if perfect scores are obtained on remaining assessments."
+        if feasible
+        else "Target is not achievable even with perfect scores on remaining assessments."
+    )
+
+    return {
+        "target": payload.target,
+        "current_standing": current_standing,
+        "maximum_possible": maximum_possible,
+        "feasible": feasible,
+        "explanation": explanation
     }
