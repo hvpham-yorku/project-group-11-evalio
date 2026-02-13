@@ -40,21 +40,6 @@ function getPercent(assessment: CourseAssessment): number | null {
   return Math.max(0, Math.min(percent, 100));
 }
 
-function toBadgeClass(classification: string): string {
-  if (
-    classification === "Comfortable" ||
-    classification === "Achievable" ||
-    classification === "Already Achieved" ||
-    classification === "Complete"
-  ) {
-    return "bg-green-50 text-green-700";
-  }
-  if (classification === "Not Possible") {
-    return "bg-red-50 text-red-700";
-  }
-  return "bg-orange-50 text-orange-600";
-}
-
 function formatCompactNumber(value: number): string {
   if (!Number.isFinite(value)) return "0";
   if (Number.isInteger(value)) return String(value);
@@ -160,12 +145,41 @@ export function Dashboard() {
   const requiredAverage = targetResult?.required_average_display ?? "0.0%";
   const workCompleted = `${gradedWeight.toFixed(0)}%`;
   const remainingWeight = Math.max(0, 100 - gradedWeight);
-  // Progress toward target (current grade / target)
-  const progressTowardTarget = targetGrade > 0 ? Math.min((currentGrade / targetGrade) * 100, 100) : 0;
-  const progressWidth = `${Math.max(0, progressTowardTarget)}%`;
+  const targetFill = Math.max(0, Math.min(targetGrade, 100));
+  const progressWidth = `${targetFill}%`;
   // Use interactive slider value for performance assumption
   const clampedPerformanceAssumption = Math.max(0, Math.min(assumedPerformance, 100));
   const targetClassification = targetResult?.classification ?? "Challenging";
+  const targetTone =
+    targetClassification === "Not Possible"
+      ? "red"
+      : targetClassification === "Challenging" ||
+          targetClassification === "Very Challenging"
+        ? "orange"
+        : targetClassification === "Achievable" ||
+            targetClassification === "Comfortable" ||
+            targetClassification === "Already Achieved" ||
+            targetClassification === "Complete"
+          ? "green"
+          : "orange";
+  const targetBadgeClass =
+    targetTone === "red"
+      ? "bg-red-50 text-red-700"
+      : targetTone === "green"
+        ? "bg-green-50 text-green-700"
+        : "bg-orange-50 text-orange-700";
+  const targetBarClass =
+    targetTone === "red"
+      ? "bg-red-500"
+      : targetTone === "green"
+        ? "bg-green-500"
+        : "bg-orange-400";
+  const targetMessageClass =
+    targetTone === "red"
+      ? "border-red-100 bg-red-50 text-red-800"
+      : targetTone === "green"
+        ? "border-green-100 bg-green-50 text-green-800"
+        : "border-orange-100 bg-orange-50 text-orange-800";
   const targetExplanation =
     targetResult?.explanation ??
     "Your target is possible but will require strong performance. This target is achievable but will require strong performance ahead.";
@@ -230,36 +244,20 @@ export function Dashboard() {
         <div className="mb-6 flex justify-between items-center">
           <h3 className="font-bold text-gray-800">Target: {targetGrade}%</h3>
           <span
-            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${toBadgeClass(
-              targetClassification
-            )}`}
+            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${targetBadgeClass}`}
           >
             <TrendingUp size={12} /> {targetClassification}
           </span>
         </div>
         <div className="mb-2 flex justify-between text-xs text-gray-500">
-          <span>Current: {currentGrade.toFixed(1)}%</span>
-          <span>Target: {targetGrade}%</span>
         </div>
         <div className="mb-4 h-3 w-full rounded-full bg-gray-100">
           <div 
-            className={`h-full rounded-full transition-all ${
-              progressTowardTarget >= 100 ? 'bg-green-500' : 
-              progressTowardTarget >= 70 ? 'bg-[#5D737E]' : 
-              progressTowardTarget >= 40 ? 'bg-orange-400' : 'bg-red-400'
-            }`} 
+            className={`h-full rounded-full transition-all ${targetBarClass}`}
             style={{ width: progressWidth }} 
           />
         </div>
-        <p className={`text-xs font-medium mb-4 ${
-          progressTowardTarget >= 100 ? 'text-green-600' : 
-          progressTowardTarget >= 70 ? 'text-[#5D737E]' : 
-          progressTowardTarget >= 40 ? 'text-orange-600' : 'text-red-600'
-        }`}>
-          {progressTowardTarget >= 100 ? 'On track to meet your target!' : 
-           `${(100 - progressTowardTarget).toFixed(0)}% more progress needed`}
-        </p>
-        <div className="rounded-xl border border-orange-100 bg-orange-50 p-4 text-xs leading-relaxed text-orange-800">
+        <div className={`rounded-xl border p-4 text-xs leading-relaxed ${targetMessageClass}`}>
           {targetExplanation}
         </div>
       </div>
