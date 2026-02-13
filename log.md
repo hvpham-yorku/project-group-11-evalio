@@ -137,49 +137,6 @@ so that I can set up my grading structure at the beginning of the term.
 - Backend and frontend integration required alignment on validation error formats.
 - No major blockers were encountered during development.
 
-## 4. Major Design Decisions
-
-### 1. Three-Layer Architecture
-The system was structured using:
-- UI Layer (Frontend)
-- Business Logic Layer (Backend API)
-- Data Layer (Stub Database)
-
-This separation ensures clean organization and scalability.
-
-### 2. Stub Database Implementation
-An in-memory list (courses_db) was used as a temporary data store.
-This allows future replacement with a persistent database (e.g., PostgreSQL/MySQL) without major refactoring.
-
-### 3. Validation at Backend Level
-All grading rules (non-negative weights, total ≤ 100%) are enforced in backend logic using Pydantic and explicit checks.
-This ensures data consistency regardless of frontend behavior.
-
-### 4. API-Driven Integration
-- Frontend communicates strictly through REST endpoints.
-- Business logic is not embedded in the UI.
-
-## 5. Concerns / Issues
-- Floating-point precision required attention during weight summation.
-- Some validation messages required refinement for frontend display.
-- No major integration conflicts occurred.
-
-## 6. Iteration Summary
-The Manual Course Setup user story was successfully implemented.
-
-The system now:
-- Allows course creation with assessments
-- Enforces grading structure rules
-- Uses stub database storage
-- Maintains separation of concerns across layers
-
-Iteration 1 foundational functionality was delivered successfully.
-
-
-
-
-
-
 ### User Story: ITR1-4 — Target Grade Feasibility
 
 **Story Owner:** Shivam  
