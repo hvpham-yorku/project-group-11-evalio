@@ -119,7 +119,7 @@ so that I can set up my grading structure at the beginning of the term.
 3. Frontend: Course setup UI (manual input)
  - Assignee: Rima
 
-4. Frontend: Course setup UI (manual input)
+4. Frontend: UX/UI Designs in Figma
  - Assignee: Shadi
 
 5. Tests: Unit tests for course setup logic
@@ -135,6 +135,54 @@ so that I can set up my grading structure at the beginning of the term.
 - Validation logic ensured grading structure integrity from initial setup.
 - Stub database approach allowed rapid backend development.
 - Backend and frontend integration required alignment on validation error formats.
+- No major blockers were encountered during development.
+
+### User Story: ITR1-3 — Grade Entry & Current Standing
+
+**Story Owner:** Shadi  
+**Planned Effort:** 7 hours  
+**Actual Effort:** 5 hours  
+
+#### Story Description
+As a student, I want to enter the grades I have received so far,  
+so that I can see my current standing in the course.
+
+#### Scope (ITR1)
+- User can enter grades for completed assessments only  
+- Grades must be numeric values between 0 and 100  
+- Current standing is calculated as a weighted average  
+- Missing grades are ignored in the calculation  
+- Uses stub / in-memory data only  
+
+#### Out of Scope (Future Iterations)
+- Automatic grade import  
+- Grade history or trends  
+- Visual analytics or charts  
+
+#### Development Tasks & Assignments
+1. Frontend: Grade entry UI for completed assessments and UX/UI Design
+   - Assignee: Shadi 
+
+2. Backend: Calculate current weighted standing  
+   - Assignee: Shivam  
+
+3. Backend: API endpoint for grade submission and standing  
+   - Assignee: Shivam  
+
+4. Tests: Unit tests for the current standing calculation  
+   - Assignee: Bardiya  
+
+5. Database: Ensure schema supports grade storage (stub)  
+   - Assignee: Himanshi  
+
+6. Docs: Update log.md for grade entry & standing  
+   - Assignee: Shadi  
+
+#### Notes / Reflection 
+- Built a grade entry UI that updates the current standing in real-time as scores are entered.
+- Added validation to ensure scores are complete and logically valid before saving.
+- Made sure missing grades are ignored in the weighted average calculation.
+- Integrated frontend with backend API for grade submission and reset functionality.
 - No major blockers were encountered during development.
 
 ### User Story: ITR1-4 — Target Grade Feasibility
@@ -171,16 +219,13 @@ As a student, I want to enter a target final grade so that I can know whether it
 2. Backend: Create API endpoint for target grade feasibility  
    - Assignee: Shivam  
 
-3. Frontend: Target grade input and result display  
+3. Frontend: Target grade input and result display and UX/UI Design
    - Assignee: Shadi  
 
-4. Frontend: Target grade input and result display  
-   - Assignee: Rima  
-
-5. Tests: Unit tests for target feasibility logic  
+4. Tests: Unit tests for target feasibility logic  
    - Assignee: Bardiya  
 
-6. Documentation: Update log.md and related notes  
+5. Documentation: Update log.md and related notes  
    - Assignee: Shivam  
 
 ---
