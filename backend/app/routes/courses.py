@@ -355,3 +355,202 @@ def check_target_feasibility(course_index: int, payload: TargetGradeRequest):
         "york_equivalent": get_york_grade(payload.target),
         **required_average_summary,
     }
+
+
+# =============================================================================
+# SCRUM-60 & SCRUM-61: Minimum Required Score Calculation
+# =============================================================================
+
+class MinimumRequiredRequest(BaseModel):
+    target: float = Field(..., ge=0, le=100)
+    assessment_name: str = Field(..., min_length=1)
+
+
+def calculate_minimum_required_score(
+    course: CourseCreate,
+    target: float,
+    assessment_name: str
+) -> dict:
+    """
+    Calculate the minimum score needed on ONE specific assessment to achieve
+    the target grade, assuming 100% on all OTHER remaining assessments.
+    """
+    # Find the target assessment
+    target_assessment = None
+    for a in course.assessments:
+        if a.name == assessment_name:
+            target_assessment = a
+            break
+
+    if target_assessment is None:
+        raise ValueError(f"Assessment '{assessment_name}' not found")
+
+    # Check if assessment is already graded
+    if target_assessment.raw_score is not None and target_assessment.total_score is not None:
+        raise ValueError(f"Assessment '{assessment_name}' is already graded")
+
+    # Calculate current standing from graded assessments
+    current_standing = calculate_current_standing(course)
+
+    # Calculate points from other remaining assessments (assuming 100%)
+    other_remaining_max = 0.0
+    for a in course.assessments:
+        if a.name == assessment_name:
+            continue
+        if a.raw_score is None or a.total_score is None:
+            # Ungraded - assume 100%
+            other_remaining_max += a.weight
+
+    # Points needed from target assessment
+    # target = current_standing + other_remaining_max + (target_assessment.weight * X / 100)
+    # Solve for X (the percentage needed on target assessment)
+    points_after_others = current_standing + other_remaining_max
+    points_needed = target - points_after_others
+
+    if points_needed <= 0:
+        # Already achieved even without this assessment
+        minimum_required = 0.0
+        is_achievable = True
+    else:
+        # minimum_required% on this assessment gives us points_needed
+        # points_needed = target_assessment.weight * minimum_required / 100
+        minimum_required = (points_needed / target_assessment.weight) * 100
+        is_achievable = minimum_required <= 100
+
+    return {
+        "course_name": course.name,
+        "assessment_name": assessment_name,
+        "assessment_weight": target_assessment.weight,
+        "minimum_required": round(minimum_required, 1),
+        "is_achievable": is_achievable,
+        "current_standing": round(current_standing, 2),
+        "other_remaining_assumed_max": round(other_remaining_max, 2),
+        "target": target,
+        "explanation": (
+            f"You need at least {round(minimum_required, 1)}% on {assessment_name} "
+            f"to reach {target}% (assuming 100% on all other remaining assessments)."
+            if is_achievable
+            else f"Target {target}% is not achievable. Even with 100% on {assessment_name} "
+                 f"and all other remaining assessments, maximum is {round(points_after_others + target_assessment.weight, 1)}%."
+        )
+    }
+
+
+@router.post("/{course_index}/minimum-required")
+def get_minimum_required_score(course_index: int, payload: MinimumRequiredRequest):
+    """
+    SCRUM-61: API endpoint for minimum required score calculation.
+    Returns the minimum score needed on a specific assessment to achieve target grade.
+    """
+    if course_index < 0 or course_index >= len(courses_db):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Course not found for index {course_index}"
+        )
+
+    course = courses_db[course_index]
+
+    try:
+        result = calculate_minimum_required_score(
+            course=course,
+            target=payload.target,
+            assessment_name=payload.assessment_name
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# =============================================================================
+# SCRUM-66 & SCRUM-67: What-If Scenario Analysis
+# =============================================================================
+
+class WhatIfRequest(BaseModel):
+    assessment_name: str = Field(..., min_length=1)
+    hypothetical_score: float = Field(..., ge=0, le=100)
+
+
+def calculate_whatif_scenario(
+    course: CourseCreate,
+    assessment_name: str,
+    hypothetical_score: float
+) -> dict:
+    """
+    Calculate the resulting final grade if a hypothetical score is achieved
+    on ONE remaining assessment. This is read-only and does NOT persist.
+    """
+    # Find the target assessment
+    target_assessment = None
+    for a in course.assessments:
+        if a.name == assessment_name:
+            target_assessment = a
+            break
+
+    if target_assessment is None:
+        raise ValueError(f"Assessment '{assessment_name}' not found")
+
+    # Check if assessment is already graded
+    if target_assessment.raw_score is not None and target_assessment.total_score is not None:
+        raise ValueError(f"Assessment '{assessment_name}' is already graded")
+
+    # Calculate current standing from graded assessments
+    current_standing = calculate_current_standing(course)
+
+    # Calculate contribution from hypothetical score
+    hypothetical_contribution = (hypothetical_score * target_assessment.weight) / 100
+
+    # Calculate remaining potential (excluding target assessment)
+    remaining_potential = sum(
+        a.weight
+        for a in course.assessments
+        if a.name != assessment_name and (a.raw_score is None or a.total_score is None)
+    )
+
+    # Projected grade = current + hypothetical contribution
+    projected_grade = current_standing + hypothetical_contribution
+
+    # Maximum possible = projected + remaining potential (if 100% on rest)
+    maximum_possible = projected_grade + remaining_potential
+
+    return {
+        "course_name": course.name,
+        "assessment_name": assessment_name,
+        "assessment_weight": target_assessment.weight,
+        "hypothetical_score": hypothetical_score,
+        "hypothetical_contribution": round(hypothetical_contribution, 2),
+        "current_standing": round(current_standing, 2),
+        "projected_grade": round(projected_grade, 2),
+        "remaining_potential": round(remaining_potential, 2),
+        "maximum_possible": round(maximum_possible, 2),
+        "york_equivalent": get_york_grade(projected_grade),
+        "explanation": (
+            f"If you score {hypothetical_score}% on {assessment_name} ({target_assessment.weight}% weight), "
+            f"your grade will be {round(projected_grade, 2)}%. "
+            f"With {remaining_potential}% weight remaining, your maximum possible is {round(maximum_possible, 2)}%."
+        )
+    }
+
+
+@router.post("/{course_index}/whatif")
+def run_whatif_scenario(course_index: int, payload: WhatIfRequest):
+    """
+    SCRUM-67: API endpoint for what-if scenario analysis.
+    Calculates projected grade based on a hypothetical score. Read-only operation.
+    """
+    if course_index < 0 or course_index >= len(courses_db):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Course not found for index {course_index}"
+        )
+
+    course = courses_db[course_index]
+
+    try:
+        result = calculate_whatif_scenario(
+            course=course,
+            assessment_name=payload.assessment_name,
+            hypothetical_score=payload.hypothetical_score
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
