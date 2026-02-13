@@ -8,14 +8,13 @@ def _create_course():
         "name": "EECS2311",
         "term": "W26",
         "assessments": [
-            {"name": "A1", "weight": 20, "grade": None},
-            {"name": "Midterm", "weight": 30, "grade": None},
-            {"name": "Final", "weight": 50, "grade": None},
+            {"name": "A1", "weight": 20, "raw_score": None, "total_score": None},
+            {"name": "Midterm", "weight": 30, "raw_score": None, "total_score": None},
+            {"name": "Final", "weight": 50, "raw_score": None, "total_score": None},
         ],
     }
     r = client.post("/courses/", json=payload)
     assert r.status_code == 200
-
 
 def test_update_weights_success_total_100():
     _create_course()
@@ -29,7 +28,6 @@ def test_update_weights_success_total_100():
     assert r.status_code == 200
     assert r.json()["total_weight"] == 100.0
 
-
 def test_update_weights_reject_total_not_100():
     _create_course()
     r = client.put("/courses/0/weights", json={
@@ -41,7 +39,6 @@ def test_update_weights_reject_total_not_100():
     })
     assert r.status_code == 400
     assert "must equal 100" in r.json()["detail"]
-
 
 def test_update_weights_reject_duplicate_names():
     _create_course()
@@ -55,7 +52,6 @@ def test_update_weights_reject_duplicate_names():
     assert r.status_code == 400
     assert "Duplicate assessment" in r.json()["detail"]
 
-
 def test_update_weights_reject_missing_assessment():
     _create_course()
     r = client.put("/courses/0/weights", json={
@@ -66,7 +62,6 @@ def test_update_weights_reject_missing_assessment():
     })
     assert r.status_code == 400
     assert "Missing assessment updates" in r.json()["detail"]
-
 
 def test_update_weights_reject_unknown_assessment():
     _create_course()
@@ -80,7 +75,6 @@ def test_update_weights_reject_unknown_assessment():
     assert r.status_code == 400
     assert "does not exist" in r.json()["detail"]
 
-
 def test_update_weights_reject_negative_weight():
     _create_course()
     r = client.put("/courses/0/weights", json={
@@ -90,5 +84,5 @@ def test_update_weights_reject_negative_weight():
             {"name": "Final", "weight": "50"},
         ]
     })
-    assert r.status_code == 400
-    assert "non-negative" in r.json()["detail"]
+    # Pydantic rejects this before endpoint logic -> 422
+    assert r.status_code == 422
