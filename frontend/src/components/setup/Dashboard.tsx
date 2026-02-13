@@ -70,6 +70,7 @@ export function Dashboard() {
   const [gradedWeight, setGradedWeight] = useState(0);
   const [currentContribution, setCurrentContribution] = useState(0);
   const [targetGrade, setTargetGrade] = useState(DEFAULT_TARGET_GRADE);
+  const [assumedPerformance, setAssumedPerformance] = useState(75);
 
   useEffect(() => {
     const load = async () => {
@@ -159,13 +160,11 @@ export function Dashboard() {
   const requiredAverage = targetResult?.required_average_display ?? "0.0%";
   const workCompleted = `${gradedWeight.toFixed(0)}%`;
   const remainingWeight = Math.max(0, 100 - gradedWeight);
-  const progressWidth = `${Math.max(0, Math.min(gradedWeight, 100))}%`;
-  const performanceAssumption =
-    gradedWeight > 0 ? (currentContribution / gradedWeight) * 100 : 0;
-  const clampedPerformanceAssumption = Math.max(
-    0,
-    Math.min(performanceAssumption, 100)
-  );
+  // Progress toward target (current grade / target)
+  const progressTowardTarget = targetGrade > 0 ? Math.min((currentGrade / targetGrade) * 100, 100) : 0;
+  const progressWidth = `${Math.max(0, progressTowardTarget)}%`;
+  // Use interactive slider value for performance assumption
+  const clampedPerformanceAssumption = Math.max(0, Math.min(assumedPerformance, 100));
   const targetClassification = targetResult?.classification ?? "Challenging";
   const targetExplanation =
     targetResult?.explanation ??
@@ -238,9 +237,28 @@ export function Dashboard() {
             <TrendingUp size={12} /> {targetClassification}
           </span>
         </div>
-        <div className="mb-4 h-2 w-full rounded-full bg-gray-100">
-          <div className="h-full rounded-full bg-gray-300" style={{ width: progressWidth }} />
+        <div className="mb-2 flex justify-between text-xs text-gray-500">
+          <span>Current: {currentGrade.toFixed(1)}%</span>
+          <span>Target: {targetGrade}%</span>
         </div>
+        <div className="mb-4 h-3 w-full rounded-full bg-gray-100">
+          <div 
+            className={`h-full rounded-full transition-all ${
+              progressTowardTarget >= 100 ? 'bg-green-500' : 
+              progressTowardTarget >= 70 ? 'bg-[#5D737E]' : 
+              progressTowardTarget >= 40 ? 'bg-orange-400' : 'bg-red-400'
+            }`} 
+            style={{ width: progressWidth }} 
+          />
+        </div>
+        <p className={`text-xs font-medium mb-4 ${
+          progressTowardTarget >= 100 ? 'text-green-600' : 
+          progressTowardTarget >= 70 ? 'text-[#5D737E]' : 
+          progressTowardTarget >= 40 ? 'text-orange-600' : 'text-red-600'
+        }`}>
+          {progressTowardTarget >= 100 ? 'On track to meet your target!' : 
+           `${(100 - progressTowardTarget).toFixed(0)}% more progress needed`}
+        </p>
         <div className="rounded-xl border border-orange-100 bg-orange-50 p-4 text-xs leading-relaxed text-orange-800">
           {targetExplanation}
         </div>
@@ -248,18 +266,22 @@ export function Dashboard() {
 
       {/* 4. Performance Assumption */}
       <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
-        <h3 className="mb-6 font-bold text-gray-800">Performance Assumption</h3>
+        <h3 className="mb-2 font-bold text-gray-800">Performance Assumption</h3>
+        <p className="mb-6 text-xs text-gray-400">Adjust the slider to see how different performance levels affect your projected grade.</p>
         <div className="mb-8 flex items-center gap-6">
-          <div className="h-2 flex-1 rounded-full bg-gray-100">
-            <div
-              className="h-full rounded-full bg-gray-300"
-              style={{ width: `${clampedPerformanceAssumption}%` }}
-            />
-          </div>
-          <span className="text-3xl font-bold text-slate-400">
-            {clampedPerformanceAssumption.toFixed(1)}%
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={assumedPerformance}
+            onChange={(e) => setAssumedPerformance(Number(e.target.value))}
+            className="flex-1 h-2 bg-gray-200 rounded-full appearance-none cursor-pointer accent-[#5D737E]"
+          />
+          <span className="text-3xl font-bold text-[#5D737E]">
+            {clampedPerformanceAssumption.toFixed(0)}%
           </span>
         </div>
+        <p className="mb-4 text-xs text-gray-400">Assumed performance on remaining assessments</p>
         <div className="flex items-center justify-between rounded-2xl bg-[#F9F8F6] p-6">
           <div>
             <p className="text-[10px] text-gray-400 uppercase">Projected Final Grade</p>

@@ -141,8 +141,10 @@ export function ExploreScenarios() {
       return;
     }
 
+    // Apply scenario values to all assessments that have a scenario value set
+    // This includes overwriting already-graded assessments
     const updates = assessments
-      .filter((a) => !hasPersistedGrade(a))
+      .filter((a) => activeScenario[a.name] !== undefined || !hasPersistedGrade(a))
       .map((a) => {
         const percent = clampPercent(getScenarioValue(a));
         return {
@@ -153,7 +155,7 @@ export function ExploreScenarios() {
       });
 
     if (updates.length === 0) {
-      setError("All assessments are already graded.");
+      setError("No scenarios to apply.");
       return;
     }
 

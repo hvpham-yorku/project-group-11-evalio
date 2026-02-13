@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Circle, RotateCcw } from "lucide-react";
+import { CheckCircle2, Circle, RotateCcw, X } from "lucide-react";
 import { listCourses, updateCourseGrades } from "@/lib/api";
 
 type Assessment = {
@@ -156,6 +156,27 @@ export function GradesStep() {
     }
   };
 
+  const handleClearSingleGrade = async (assessment: Assessment) => {
+    if (courseIndex === null) {
+      setError("No course found. Complete structure first.");
+      return;
+    }
+
+    try {
+      await updateCourseGrades(courseIndex, {
+        assessments: [{ name: assessment.name, raw_score: null, total_score: null }],
+      });
+      setAssessments((prev) =>
+        prev.map((a) =>
+          a.id === assessment.id ? { ...a, raw_score: "", total_score: "" } : a
+        )
+      );
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to clear grade.");
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 pb-20">
       <h2 className="text-2xl font-bold text-gray-800">Enter Your Grades</h2>
@@ -257,6 +278,15 @@ export function GradesStep() {
                           step={0.1}
                           className="w-24 px-3 py-2 bg-white rounded-xl text-right text-sm border border-gray-200 shadow-sm focus:outline-none"
                         />
+                        {hasGrade && (
+                          <button
+                            onClick={() => handleClearSingleGrade(a)}
+                            className="ml-2 p-1 text-gray-400 hover:text-red-500 transition"
+                            title="Clear this grade"
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
                       </div>
                     </div>
 
