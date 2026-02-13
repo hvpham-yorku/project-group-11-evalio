@@ -119,7 +119,7 @@ so that I can set up my grading structure at the beginning of the term.
 3. Frontend: Course setup UI (manual input)
  - Assignee: Rima
 
-4. Frontend: Course setup UI (manual input)
+4. Frontend: UX/UI Designs in Figma
  - Assignee: Shadi
 
 5. Tests: Unit tests for course setup logic
@@ -160,25 +160,22 @@ so that I can see my current standing in the course.
 - Visual analytics or charts  
 
 #### Development Tasks & Assignments
-1. Frontend: Grade entry UI for completed assessments  
-   - Assignee: Rima  
+1. Frontend: Grade entry UI for completed assessments and UX/UI Design
+   - Assignee: Shadi 
 
-2. Frontend: Grade entry UI for completed assessments  
-   - Assignee: Shadi  
-
-3. Backend: Calculate current weighted standing  
+2. Backend: Calculate current weighted standing  
    - Assignee: Shivam  
 
-4. Backend: API endpoint for grade submission and standing  
+3. Backend: API endpoint for grade submission and standing  
    - Assignee: Shivam  
 
-5. Tests: Unit tests for the current standing calculation  
+4. Tests: Unit tests for the current standing calculation  
    - Assignee: Bardiya  
 
-6. Database: Ensure schema supports grade storage (stub)  
+5. Database: Ensure schema supports grade storage (stub)  
    - Assignee: Himanshi  
 
-7. Docs: Update log.md for grade entry & standing  
+6. Docs: Update log.md for grade entry & standing  
    - Assignee: Shadi  
 
 #### Notes / Reflection 
@@ -222,16 +219,13 @@ As a student, I want to enter a target final grade so that I can know whether it
 2. Backend: Create API endpoint for target grade feasibility  
    - Assignee: Shivam  
 
-3. Frontend: Target grade input and result display  
+3. Frontend: Target grade input and result display and UX/UI Design
    - Assignee: Shadi  
 
-4. Frontend: Target grade input and result display  
-   - Assignee: Rima  
-
-5. Tests: Unit tests for target feasibility logic  
+4. Tests: Unit tests for target feasibility logic  
    - Assignee: Bardiya  
 
-6. Documentation: Update log.md and related notes  
+5. Documentation: Update log.md and related notes  
    - Assignee: Shivam  
 
 ---
