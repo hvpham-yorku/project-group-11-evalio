@@ -235,6 +235,52 @@ As a student, I want to enter a target final grade so that I can know whether it
 - Stub database was reused from previous user story.
 - No major blockers encountered.
 
+### User Story: ITR1-6 — What-If Scenario Analysis (Stretch)
+
+**Story Owner:** Bardiya  
+**Planned Effort:** 6 hours  
+**Actual Effort:** 8 hours  
+
+#### Story Description
+As a student, I want to temporarily try a hypothetical score on a remaining assessment,  
+so that I can see how it would affect my final grade.
+
+#### Scope (ITR1 – Stretch)
+- User inputs **ONE** hypothetical score for **ONE** remaining assessment
+- System calculates projected grade impact using existing weighted-grade logic
+- Hypothetical data is **NOT saved or persisted** (read-only analysis)
+- Uses stub / in-memory data only
+
+#### Out of Scope (Future Iterations)
+- Multiple what-if scenarios
+- Saving/comparing scenarios
+- Charts/projections
+- Natural language / AI inputs
+
+#### Development Tasks & Assignments
+1. Backend: Add what-if scenario calculation function (read-only; no persistence)  
+   - Assignee: Kartik  
+
+2. Backend: Add API endpoint for what-if scenario analysis (`/courses/{course_index}/whatif`)  
+   - Assignee: Kartik  
+
+3. Tests: Unit tests for what-if scenario logic  
+   - Assignee: Bardiya  
+   - Coverage included:
+     - Real grades unchanged after what-if (non-mutating)
+     - Boundary inputs (0 and 100)
+     - Repeated what-if calls return consistent results
+     - Invalid cases (assessment not found / already graded)
+
+4. Docs: Update log.md to mark this story as a stretch feature and document the no-persistence decision  
+   - Assignee: Bardiya  
+
+#### Notes / Reflection
+- **Design decision (scope control):** hypothetical values are intentionally **not persisted** in ITR1.
+- Implemented as read-only scenario analysis using existing standing/weight calculations.
+- Main work on this story was split: **backend implementation by Kartik**, and **tests + documentation by Bardiya**.
+
+
 ## 4. Major Design Decisions
 
 During Iteration 1, the team made the following architectural and design decisions:

@@ -8,9 +8,9 @@ def _create_course():
         "name": "EECS2311",
         "term": "W26",
         "assessments": [
-            {"name": "A1", "weight": 20, "grade": None},
-            {"name": "Midterm", "weight": 30, "grade": None},
-            {"name": "Final", "weight": 50, "grade": None},
+            {"name": "A1", "weight": 20, "raw_score": None, "total_score": None},
+            {"name": "Midterm", "weight": 30, "raw_score": None, "total_score": None},
+            {"name": "Final", "weight": 50, "raw_score": None, "total_score": None},
         ],
     }
     r = client.post("/courses/", json=payload)
@@ -19,22 +19,26 @@ def _create_course():
 def test_target_check_does_not_change_grades():
     _create_course()
 
-    # Set one grade
-    r1 = client.put("/courses/0/grades", json={"assessments": [{"name": "A1", "grade": 80}]})
+    r1 = client.put(
+        "/courses/0/grades",
+        json={"assessments": [{"name": "A1", "raw_score": 80, "total_score": 100}]},
+    )
     assert r1.status_code == 200
 
-    # Snapshot stored state
     before = client.get("/courses/").json()
-    before_grades = [(a["name"], a["grade"]) for a in before[0]["assessments"]]
+    before_state = [
+        (a["name"], a["raw_score"], a["total_score"]) for a in before[0]["assessments"]
+    ]
 
-    # Call analysis endpoint (should not mutate anything)
     r2 = client.post("/courses/0/target", json={"target": 85})
     assert r2.status_code == 200
 
     after = client.get("/courses/").json()
-    after_grades = [(a["name"], a["grade"]) for a in after[0]["assessments"]]
+    after_state = [
+        (a["name"], a["raw_score"], a["total_score"]) for a in after[0]["assessments"]
+    ]
 
-    assert before_grades == after_grades
+    assert before_state == after_state
 
 def test_repeated_target_calls_consistent():
     _create_course()
