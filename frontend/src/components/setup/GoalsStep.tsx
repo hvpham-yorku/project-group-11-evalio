@@ -10,6 +10,7 @@ const TARGET_STORAGE_KEY = "evalio_target_grade";
 export function GoalsStep() {
   const router = useRouter();
   const [target, setTarget] = useState<number>(75);
+  const [isTargetLoaded, setIsTargetLoaded] = useState(false);
   const [courseIndex, setCourseIndex] = useState<number | null>(null);
   const [currentStanding, setCurrentStanding] = useState(85.0);
   const [explanation, setExplanation] = useState(
@@ -34,19 +35,22 @@ export function GoalsStep() {
     const saved = window.localStorage.getItem(TARGET_STORAGE_KEY);
     if (saved === null) {
       setTarget(75);
-      return;
-    }
-    const parsed = Number.parseFloat(saved);
-    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 100) {
-      setTarget(parsed);
     } else {
-      setTarget(75);
+      const parsed = Number.parseFloat(saved);
+      if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 100) {
+        setTarget(parsed);
+      } else {
+        setTarget(75);
+      }
     }
+    setIsTargetLoaded(true);
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(TARGET_STORAGE_KEY, String(target));
-  }, [target]);
+    if (isTargetLoaded) {
+      window.localStorage.setItem(TARGET_STORAGE_KEY, String(target));
+    }
+  }, [target, isTargetLoaded]);
 
   useEffect(() => {
     const loadCourse = async () => {
