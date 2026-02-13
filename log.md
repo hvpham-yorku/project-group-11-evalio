@@ -81,6 +81,62 @@ During Iteration 1, each user story was assigned to one primary owner.
 Development tasks were further broken down and assigned to team members.
 Time estimates and actual effort were tracked for accountability.
 
+### User Story: ITR1-1 — Manual Course Setup (Assessments + Weights)
+
+**Story Owner:** Himanshi
+**Planned Effort:** 8 hours  
+**Actual Effort:** 6 hours  
+
+#### Story Description
+As a student,I want to manually create a course and define its assessments with weights,
+so that I can set up my grading structure at the beginning of the term.
+
+#### Scope (ITR1)
+- User can create a course
+- User can add multiple assessments
+- Each assessment includes:
+  - Name
+  - Weight (percentage)
+- Validation rules:
+    -  Assessment names cannot be empty
+    - Weights must be non-negative
+    - Total assessment weight cannot exceed 100%
+- Uses stub / in-memory data only
+
+#### Out of Scope (Future Iterations)
+- Persistent database storage
+- Editing assessments after creation (handled in later story)
+- Advanced grading rules
+- Authentication and multi-user separation
+
+#### Development Tasks & Assignments
+1. Backend: Course & Assessment domain models
+ - Assignee: Himanshi
+
+2. Backend: API endpoints for course setup
+ - Assignee: Himanshi
+
+3. Frontend: Course setup UI (manual input)
+ - Assignee: Rima
+
+4. Frontend: Course setup UI (manual input)
+ - Assignee: Shadi
+
+5. Tests: Unit tests for course setup logic
+ - Assignee: Bardiya
+
+6. Docs: Update log.md for course setup
+ - Assignee: Himanshi
+
+7.  Database: Stub data layer & schema design for course setup
+ - Assignee: Himanshi
+
+ #### Notes / Reflection
+- Validation logic ensured grading structure integrity from initial setup.
+- Stub database approach allowed rapid backend development.
+- Backend and frontend integration required alignment on validation error formats.
+- No major blockers were encountered during development.
+
 ### User Story: ITR1-4 — Target Grade Feasibility
 
 **Story Owner:** Shivam  
