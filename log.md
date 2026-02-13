@@ -137,6 +137,57 @@ so that I can set up my grading structure at the beginning of the term.
 - Backend and frontend integration required alignment on validation error formats.
 - No major blockers were encountered during development.
 
+### User Story: ITR1-3 — Grade Entry & Current Standing
+
+**Story Owner:** Shadi  
+**Planned Effort:** 7 hours  
+**Actual Effort:** 5 hours  
+
+#### Story Description
+As a student, I want to enter the grades I have received so far,  
+so that I can see my current standing in the course.
+
+#### Scope (ITR1)
+- User can enter grades for completed assessments only  
+- Grades must be numeric values between 0 and 100  
+- Current standing is calculated as a weighted average  
+- Missing grades are ignored in the calculation  
+- Uses stub / in-memory data only  
+
+#### Out of Scope (Future Iterations)
+- Automatic grade import  
+- Grade history or trends  
+- Visual analytics or charts  
+
+#### Development Tasks & Assignments
+1. Frontend: Grade entry UI for completed assessments  
+   - Assignee: Rima  
+
+2. Frontend: Grade entry UI for completed assessments  
+   - Assignee: Shadi  
+
+3. Backend: Calculate current weighted standing  
+   - Assignee: Shivam  
+
+4. Backend: API endpoint for grade submission and standing  
+   - Assignee: Shivam  
+
+5. Tests: Unit tests for the current standing calculation  
+   - Assignee: Bardiya  
+
+6. Database: Ensure schema supports grade storage (stub)  
+   - Assignee: Himanshi  
+
+7. Docs: Update log.md for grade entry & standing  
+   - Assignee: Shadi  
+
+#### Notes / Reflection 
+- Built a grade entry UI that updates the current standing in real-time as scores are entered.
+- Added validation to ensure scores are complete and logically valid before saving.
+- Made sure missing grades are ignored in the weighted average calculation.
+- Integrated frontend with backend API for grade submission and reset functionality.
+- No major blockers were encountered during development.
+
 ### User Story: ITR1-4 — Target Grade Feasibility
 
 **Story Owner:** Shivam  
