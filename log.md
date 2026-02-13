@@ -81,6 +81,105 @@ During Iteration 1, each user story was assigned to one primary owner.
 Development tasks were further broken down and assigned to team members.
 Time estimates and actual effort were tracked for accountability.
 
+### User Story: ITR1-1 — Manual Course Setup (Assessments + Weights)
+
+**Story Owner:** Himanshi
+**Planned Effort:** 8 hours  
+**Actual Effort:** 6 hours  
+
+#### Story Description
+As a student,I want to manually create a course and define its assessments with weights,
+so that I can set up my grading structure at the beginning of the term.
+
+#### Scope (ITR1)
+- User can create a course
+- User can add multiple assessments
+- Each assessment includes:
+  - Name
+  - Weight (percentage)
+- Validation rules:
+    -  Assessment names cannot be empty
+    - Weights must be non-negative
+    - Total assessment weight cannot exceed 100%
+- Uses stub / in-memory data only
+
+#### Out of Scope (Future Iterations)
+- Persistent database storage
+- Editing assessments after creation (handled in later story)
+- Advanced grading rules
+- Authentication and multi-user separation
+
+#### Development Tasks & Assignments
+1. Backend: Course & Assessment domain models
+ - Assignee: Himanshi
+
+2. Backend: API endpoints for course setup
+ - Assignee: Himanshi
+
+3. Frontend: Course setup UI (manual input)
+ - Assignee: Rima
+
+4. Frontend: Course setup UI (manual input)
+ - Assignee: Shadi
+
+5. Tests: Unit tests for course setup logic
+ - Assignee: Bardiya
+
+6. Docs: Update log.md for course setup
+ - Assignee: Himanshi
+
+7.  Database: Stub data layer & schema design for course setup
+ - Assignee: Himanshi
+
+ #### Notes / Reflection
+- Validation logic ensured grading structure integrity from initial setup.
+- Stub database approach allowed rapid backend development.
+- Backend and frontend integration required alignment on validation error formats.
+- No major blockers were encountered during development.
+
+## 4. Major Design Decisions
+
+### 1. Three-Layer Architecture
+The system was structured using:
+- UI Layer (Frontend)
+- Business Logic Layer (Backend API)
+- Data Layer (Stub Database)
+
+This separation ensures clean organization and scalability.
+
+### 2. Stub Database Implementation
+An in-memory list (courses_db) was used as a temporary data store.
+This allows future replacement with a persistent database (e.g., PostgreSQL/MySQL) without major refactoring.
+
+### 3. Validation at Backend Level
+All grading rules (non-negative weights, total ≤ 100%) are enforced in backend logic using Pydantic and explicit checks.
+This ensures data consistency regardless of frontend behavior.
+
+### 4. API-Driven Integration
+- Frontend communicates strictly through REST endpoints.
+- Business logic is not embedded in the UI.
+
+## 5. Concerns / Issues
+- Floating-point precision required attention during weight summation.
+- Some validation messages required refinement for frontend display.
+- No major integration conflicts occurred.
+
+## 6. Iteration Summary
+The Manual Course Setup user story was successfully implemented.
+
+The system now:
+- Allows course creation with assessments
+- Enforces grading structure rules
+- Uses stub database storage
+- Maintains separation of concerns across layers
+
+Iteration 1 foundational functionality was delivered successfully.
+
+
+
+
+
+
 ### User Story: ITR1-4 — Target Grade Feasibility
 
 **Story Owner:** Shivam  
