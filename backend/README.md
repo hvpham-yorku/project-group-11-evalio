@@ -29,7 +29,3 @@ FastAPI-based backend for Evalio course grading rules and simulation.
 ## Database (Coming Soon)
 
 SQLAlchemy models and PostgreSQL integration.
-
-## Architecture Sketch (ITR1)
-
-![ITR1 Architecture Sketch](docs/architecture/itr1-architecture.png)

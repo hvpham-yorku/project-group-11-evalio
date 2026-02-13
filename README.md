@@ -165,6 +165,11 @@ uvicorn app.main:app --host 0.0.0.0    # Production
 - `POST /courses` – Create course (stub)
 - `GET /docs` – Swagger UI documentation
 
+## Architecture Sketch (ITR1)
+
+![ITR1 Architecture Sketch](docs/architecture/itr1-architecture.png)
+
+
 ## 📧 Questions?
 
 Refer to `docs/` folder for detailed user stories and design specifications.
