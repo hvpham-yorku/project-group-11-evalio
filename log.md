@@ -235,6 +235,48 @@ As a student, I want to enter a target final grade so that I can know whether it
 - Stub database was reused from previous user story.
 - No major blockers encountered.
 
+### User Story: ITR1-5 — Minimum Required Score Calculation
+
+**Story Owner:** Rima  
+**Planned Effort:** 6 hours  
+**Actual Effort:** 5 hours  
+
+#### Story Description
+As a student, I want to know the minimum score I need on a remaining assessment to achieve a target final grade, so that I can plan my effort realistically.
+
+#### Scope (ITR1)
+- User provides a target final grade (0–100)
+- System calculates the minimum required score on ONE remaining assessment
+- Assumes all other remaining assessments receive maximum possible scores
+- If the required score is above 100, the target is marked as not achievable
+- Uses stub / in-memory data only
+
+#### Out of Scope (Future Iterations)
+- Multiple remaining assessments at once
+- Strategy recommendations
+- Saving or comparing targets
+
+#### Development Tasks & Assignments
+1. Backend: Calculate minimum required score for target grade (SCRUM-60)
+   - Assignee: Kartik
+
+2. Backend: API endpoint for minimum required score (SCRUM-61)
+   - Assignee: Kartik
+
+3. Frontend: Minimum required score display
+   - Assignee: Rima
+
+4. Tests: Unit tests for minimum required logic
+   - Assignee: Bardiya
+
+5. Docs: Update log.md for minimum required score
+   - Assignee: Kartik
+
+#### Notes / Reflection
+- Logic handles edge cases: already achieved target, not achievable even with 100%
+- API returns detailed explanation and `is_achievable` flag
+- Frontend displays minimum needed in Dashboard assessment breakdown
+
 ### User Story: ITR1-6 — What-If Scenario Analysis (Stretch)
 
 **Story Owner:** Bardiya  
@@ -308,6 +350,31 @@ Database-dependent logic was tested using the stub implementation.
 
 ### 5. Controlled Scope for Iteration 1
 Advanced grading rules and persistent database were intentionally deferred to later iterations to maintain focus on core functionality.
+
+### 6. Grading Validation Rules (SCRUM-45)
+The following validation rules were implemented for grading structure integrity:
+
+**Assessment Weight Validation:**
+- Weights must be non-negative (≥ 0)
+- Total weight must equal exactly 100%
+- Each assessment must have a unique name
+
+**Grade Entry Validation:**
+- Grades must be numeric values
+- Raw score must be ≥ 0
+- Total score must be > 0
+- Raw score cannot exceed total score
+- Both raw_score and total_score must be provided together, or both null
+
+**What-If Scenario Validation (SCRUM-66/67):**
+- Hypothetical scores must be between 0-100%
+- Assessment must exist and be ungraded
+- Read-only operation - does not persist data
+
+**Minimum Required Score Validation (SCRUM-60/61):**
+- Target must be between 0-100%
+- Assessment must exist and be ungraded
+- Returns `is_achievable: false` if required score exceeds 100%
 
 ## 5. Concerns / Issues
 
