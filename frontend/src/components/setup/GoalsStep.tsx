@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Target, TrendingUp } from "lucide-react";
 import { checkTarget, listCourses } from "@/lib/api";
 
+const TARGET_STORAGE_KEY = "evalio_target_grade";
+
 export function GoalsStep() {
-  const [target, setTarget] = useState<number>(89);
+  const router = useRouter();
+  const [target, setTarget] = useState<number>(75);
   const [courseIndex, setCourseIndex] = useState<number | null>(null);
   const [currentStanding, setCurrentStanding] = useState(85.0);
   const [explanation, setExplanation] = useState(
@@ -25,6 +29,24 @@ export function GoalsStep() {
   );
   const [classification, setClassification] = useState("Comfortable");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(TARGET_STORAGE_KEY);
+    if (saved === null) {
+      setTarget(75);
+      return;
+    }
+    const parsed = Number.parseFloat(saved);
+    if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 100) {
+      setTarget(parsed);
+    } else {
+      setTarget(75);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(TARGET_STORAGE_KEY, String(target));
+  }, [target]);
 
   useEffect(() => {
     const loadCourse = async () => {
@@ -266,7 +288,10 @@ export function GoalsStep() {
       {error ? <p className="mt-4 text-sm text-red-500">{error}</p> : null}
 
       {/* Primary action */}
-      <button className="mt-8 w-full bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition">
+      <button
+        onClick={() => router.push("/setup/dashboard")}
+        className="mt-8 w-full bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition"
+      >
         Continue to Planning
       </button>
     </div>

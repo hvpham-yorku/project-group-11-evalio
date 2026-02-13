@@ -13,10 +13,16 @@ type Assessment = {
   total_score?: string;
 };
 
+const PARTIAL_SCORES_ERROR = "Please enter both received and total score.";
+
 function parseNumberOrNull(value?: string): number | null {
   if (!value || value.trim() === "") return null;
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isPartial(raw: number | null, total: number | null): boolean {
+  return (raw === null) !== (total === null);
 }
 
 export function GradesStep() {
@@ -83,9 +89,18 @@ export function GradesStep() {
     field: "raw_score" | "total_score",
     value: string
   ) => {
-    setAssessments((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, [field]: value } : a))
-    );
+    setAssessments((prev) => {
+      const next = prev.map((a) => (a.id === id ? { ...a, [field]: value } : a));
+      const updated = next.find((a) => a.id === id);
+      if (updated) {
+        const raw = parseNumberOrNull(updated.raw_score);
+        const total = parseNumberOrNull(updated.total_score);
+        if (!isPartial(raw, total)) {
+          setError((curr) => (curr === PARTIAL_SCORES_ERROR ? "" : curr));
+        }
+      }
+      return next;
+    });
   };
 
   const handleScoreBlur = async (assessment: Assessment) => {
@@ -96,7 +111,7 @@ export function GradesStep() {
 
     if (raw === null && total === null) return;
     if (raw === null || total === null) {
-      setError("Please enter both received and total score.");
+      setError(PARTIAL_SCORES_ERROR);
       return;
     }
     if (raw < 0 || total <= 0 || raw > total) {

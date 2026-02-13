@@ -1,21 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lightbulb, RotateCcw } from "lucide-react";
-import { listCourses } from "@/lib/api";
+import {
+  listCourses,
+  runWhatIf,
+  updateCourseGrades,
+  type Course,
+  type CourseAssessment,
+} from "@/lib/api";
 
-type Assessment = {
+type Assessment = CourseAssessment & {
   id: number;
-  name: string;
-  weight: number;
-  raw_score?: number | null;
-  total_score?: number | null;
 };
 
-type LoadedCourse = {
-  assessments: Assessment[];
-};
+function clampPercent(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(value, 100));
+}
+
+function hasPersistedGrade(a: CourseAssessment): boolean {
+  return typeof a.raw_score === "number" && typeof a.total_score === "number";
+}
+
+function formatCompactNumber(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2).replace(/\.?0+$/, "");
+}
 
 export function ExploreScenarios() {
   const router = useRouter();
@@ -23,27 +36,29 @@ export function ExploreScenarios() {
   const [courseIndex, setCourseIndex] = useState<number | null>(null);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const [activeScenario, setActiveScenario] = useState<Record<number, number>>(
-    {}
+  const [activeScenario, setActiveScenario] = useState<Record<string, number>>({});
+  const [activeAssessmentName, setActiveAssessmentName] = useState<string | null>(
+    null
   );
 
   useEffect(() => {
     const loadCourse = async () => {
       try {
-        const courses = (await listCourses()) as LoadedCourse[];
+        const courses = await listCourses();
         if (!courses.length) {
           setError("No course found. Complete setup first.");
           return;
         }
 
         const latestIndex = courses.length - 1;
-        const latest = courses[latestIndex];
+        const latest: Course = courses[latestIndex];
         setCourseIndex(latestIndex);
 
         const normalized = (latest.assessments ?? []).map((a, i) => ({
           ...a,
-          id: typeof a.id === "number" ? a.id : i + 1,
+          id: i + 1,
         }));
 
         setAssessments(normalized);
@@ -56,18 +71,41 @@ export function ExploreScenarios() {
     loadCourse();
   }, []);
 
+  useEffect(() => {
+    if (courseIndex === null || !activeAssessmentName) return;
+
+    const assessment = assessments.find((a) => a.name === activeAssessmentName);
+    if (!assessment || hasPersistedGrade(assessment)) return;
+
+    const value = activeScenario[activeAssessmentName];
+    if (typeof value !== "number") return;
+
+    const timer = window.setTimeout(async () => {
+      try {
+        await runWhatIf(courseIndex, {
+          assessment_name: activeAssessmentName,
+          hypothetical_score: clampPercent(value),
+        });
+      } catch {
+        // Avoid replacing main UI error text with noisy per-change failures.
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [courseIndex, activeAssessmentName, activeScenario, assessments]);
+
   const getActualGrade = (a: Assessment): number | undefined => {
     const raw = a.raw_score;
     const total = a.total_score;
     if (typeof raw !== "number" || typeof total !== "number") return undefined;
     if (!Number.isFinite(raw) || !Number.isFinite(total) || total <= 0)
       return undefined;
-    return Math.max(0, Math.min((raw / total) * 100, 100));
+    return clampPercent((raw / total) * 100);
   };
 
   const getScenarioValue = (a: Assessment) => {
-    const override = activeScenario[a.id];
-    if (typeof override === "number") return override;
+    const override = activeScenario[a.name];
+    if (typeof override === "number") return clampPercent(override);
 
     const actual = getActualGrade(a);
     if (typeof actual === "number") return actual;
@@ -77,28 +115,73 @@ export function ExploreScenarios() {
 
   const hasChanges = Object.keys(activeScenario).length > 0;
 
-  const projectedFinal = useMemo(() => {
+  const projectedFinal = (() => {
     if (!assessments.length) return 0;
     const sum = assessments.reduce((acc, a) => {
       const v = getScenarioValue(a);
       return acc + (v * a.weight) / 100;
     }, 0);
     return Number.isFinite(sum) ? sum : 0;
-  }, [assessments, activeScenario]);
+  })();
 
-  const handleSliderChange = (id: number, value: number) => {
-    setActiveScenario((prev) => ({ ...prev, [id]: value }));
+  const handleSliderChange = (name: string, value: number) => {
+    const safe = clampPercent(value);
+    setActiveAssessmentName(name);
+    setActiveScenario((prev) => ({ ...prev, [name]: safe }));
   };
 
-  const handleResetAll = () => setActiveScenario({});
+  const handleResetAll = () => {
+    setActiveScenario({});
+    setActiveAssessmentName(null);
+  };
 
-  const handleApplyToGrades = () => {
-    sessionStorage.setItem(
-      "evalio_activeScenario",
-      JSON.stringify(activeScenario)
-    );
+  const handleApplyToGrades = async () => {
+    if (courseIndex === null) {
+      setError("No course found. Complete setup first.");
+      return;
+    }
 
-    router.push("/setup/grades");
+    const updates = assessments
+      .filter((a) => !hasPersistedGrade(a))
+      .map((a) => {
+        const percent = clampPercent(getScenarioValue(a));
+        return {
+          name: a.name,
+          raw_score: percent,
+          total_score: 100,
+        };
+      });
+
+    if (updates.length === 0) {
+      setError("All assessments are already graded.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const response = await updateCourseGrades(courseIndex, {
+        assessments: updates,
+      });
+
+      setAssessments(
+        response.assessments.map((a, i) => ({
+          id: i + 1,
+          name: a.name,
+          weight: a.weight,
+          raw_score: a.raw_score,
+          total_score: a.total_score,
+        }))
+      );
+      setActiveScenario({});
+      setActiveAssessmentName(null);
+      setError("");
+
+      router.push("/setup/grades");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to apply scenario.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -127,8 +210,9 @@ export function ExploreScenarios() {
               {assessments.map((a) => {
                 const actual = getActualGrade(a);
                 const value = getScenarioValue(a);
+                const contribution = (value * a.weight) / 100;
 
-                const isModified = typeof activeScenario[a.id] === "number";
+                const isModified = typeof activeScenario[a.name] === "number";
 
                 return (
                   <div
@@ -141,61 +225,59 @@ export function ExploreScenarios() {
                   >
                     <div className="flex items-start justify-between gap-6 mb-4">
                       <div>
-                        <h4 className="font-semibold text-gray-800">
-                          {a.name}
-                        </h4>
+                        <h4 className="font-semibold text-gray-800">{a.name}</h4>
                         <p className="text-sm text-gray-500">
-                          {a.weight}% •{" "}
+                          {formatCompactNumber(a.weight)}% •{" "}
                           {typeof actual === "number"
-                            ? `Current: ${actual.toFixed(0)}%`
-                            : "Not graded"}
+                            ? `Current: ${actual.toFixed(1)}%`
+                            : "Not graded"}{" "}
+                          • {`${value.toFixed(1)}% (${contribution.toFixed(2)} / ${formatCompactNumber(a.weight)})`}
                         </p>
                       </div>
 
                       <div className="text-3xl font-semibold text-[#5D737E]">
-                        {value.toFixed(0)}%
+                        {value.toFixed(1)}%
                       </div>
                     </div>
 
                     <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={1}
-                        value={value}
-                        onChange={(e) =>
-                            handleSliderChange(a.id, Number(e.target.value))
-                        }
-                        className="mt-4 w-full h-2 rounded-full appearance-none cursor-pointer"
-                        style={{
-                            background: `linear-gradient(to right, #5D737E 0%, #5D737E ${value}%, #E6E2DB ${value}%, #E6E2DB 100%)`,
-                            WebkitAppearance: "none",
-                        }}
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={value}
+                      onChange={(e) =>
+                        handleSliderChange(a.name, Number(e.target.value))
+                      }
+                      className="mt-4 w-full h-2 rounded-full appearance-none cursor-pointer"
+                      style={{
+                        background: `linear-gradient(to right, #5D737E 0%, #5D737E ${value}%, #E6E2DB ${value}%, #E6E2DB 100%)`,
+                        WebkitAppearance: "none",
+                      }}
                     />
 
                     <style jsx>{`
-                        input[type="range"]::-webkit-slider-thumb {
-                            -webkit-appearance: none;
-                            appearance: none;
-                            width: 18px;
-                            height: 18px;
-                            background: #5D737E;
-                            border-radius: 9999px;
-                            border: none;
-                            cursor: pointer;
-                            margin-top: -5px;
-                        }
+                      input[type="range"]::-webkit-slider-thumb {
+                        -webkit-appearance: none;
+                        appearance: none;
+                        width: 18px;
+                        height: 18px;
+                        background: #5d737e;
+                        border-radius: 9999px;
+                        border: none;
+                        cursor: pointer;
+                        margin-top: -5px;
+                      }
 
-                        input[type="range"]::-moz-range-thumb {
-                            width: 18px;
-                            height: 18px;
-                            background: #5D737E;
-                            border-radius: 9999px;
-                            border: none;
-                            cursor: pointer;
-                        }
+                      input[type="range"]::-moz-range-thumb {
+                        width: 18px;
+                        height: 18px;
+                        background: #5d737e;
+                        border-radius: 9999px;
+                        border: none;
+                        cursor: pointer;
+                      }
                     `}</style>
-                    
                   </div>
                 );
               })}
@@ -226,7 +308,7 @@ export function ExploreScenarios() {
             <div className="rounded-3xl p-8 text-center bg-[#EEF3F5] border border-gray-100">
               <p className="text-sm text-gray-500">Projected Final Grade</p>
               <p className="mt-3 text-6xl font-semibold text-[#5D737E]">
-                {projectedFinal.toFixed(1)}%
+                {projectedFinal.toFixed(2)}%
               </p>
             </div>
 
@@ -242,7 +324,7 @@ export function ExploreScenarios() {
                   >
                     <span className="text-gray-500">{a.name}</span>
                     <span className="font-semibold text-gray-800">
-                      +{contribution.toFixed(1)}%
+                      +{contribution.toFixed(2)}%
                     </span>
                   </div>
                 );
@@ -253,7 +335,8 @@ export function ExploreScenarios() {
               <div className="mt-8">
                 <button
                   onClick={handleApplyToGrades}
-                  className="w-full bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition"
+                  disabled={saving}
+                  className="w-full bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition disabled:opacity-70"
                 >
                   Apply to Actual Grades
                 </button>
