@@ -159,6 +159,67 @@ so that I can set up my grading structure at the beginning of the term.
 - Backend and frontend integration required alignment on validation error formats.
 - No major blockers were encountered during development.
 
+### User Story: ITR1-2 — Edit & Validate Grading Structure
+
+**Story Owner:** Kartik  
+**Planned Effort:** 6 hours  
+**Actual Effort:** 5 hours
+
+#### Story Description
+
+As a student, I want to edit, delete, and reorder assessments with weight validation feedback,  
+so that I can correct mistakes and keep my grading structure consistent.
+
+#### Scope (ITR1)
+
+- User can edit assessment name and weight after creation
+- User can delete existing assessments
+- UI reflects total weight changes in real-time
+- System provides a visual warning if total weight ≠ 100%
+- Validation prevents invalid inputs (negative weights, empty names)
+- Uses stub / in-memory data only
+
+#### Out of Scope (Future Iterations)
+
+- Drag-and-drop reordering of assessments
+- Undo/redo functionality
+- Batch editing of multiple assessments
+- Assessment templates or presets
+
+#### Development Tasks & Assignments
+
+1. Backend: API endpoint for editing assessment weights (SCRUM-66)
+
+   - Assignee: Kartik
+
+2. Backend: API endpoint for what-if scenario analysis (SCRUM-67)
+
+   - Assignee: Kartik
+
+3. Frontend: Edit/delete UI for assessments
+
+   - Assignee: Rima
+
+4. Frontend: Real-time weight validation display
+
+   - Assignee: Shadi
+
+5. Tests: Unit tests for edit/delete logic
+
+   - Assignee: Bardiya
+
+6. Docs: Update log.md for edit & validate grading structure
+
+   - Assignee: Kartik
+
+#### Notes / Reflection
+
+- Implemented real-time validation feedback to show users when total weight deviates from 100%.
+- Added clear error messages for invalid inputs (negative weights, empty assessment names).
+- Backend API supports partial updates, allowing users to modify individual assessments without affecting others.
+- Frontend integrated with backend to persist changes immediately upon blur/save.
+- No major blockers were encountered during development.
+
 ### User Story: ITR1-3 — Grade Entry & Current Standing
 
 **Story Owner:** Shadi  
