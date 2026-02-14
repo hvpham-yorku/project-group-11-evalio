@@ -162,7 +162,7 @@ so that I can set up my grading structure at the beginning of the term.
 - No major blockers were encountered during development.
 
 ### ITR1-2 — Edit & Validate Grading Structure  
-([SCRUM-39](https://rimaaa.atlassian.net/browse/SCRUM-39))
+(https://rimaaa.atlassian.net/browse/SCRUM-39)
 
 
 **Story Owner:** Kartik  
