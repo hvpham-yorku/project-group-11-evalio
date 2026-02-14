@@ -374,6 +374,9 @@ so that I can see how it would affect my final grade.
 4. Docs: Update log.md to mark this story as a stretch feature and document the no-persistence decision
    - Assignee: Bardiya
 
+5. Frontend: What-if input (slider or number) and result display (Explore Scenarios page), and UX/UI Design
+   - Assignee: Shadi
+
 #### Notes / Reflection
 
 - **Design decision (scope control):** hypothetical values are intentionally **not persisted** in ITR1.
