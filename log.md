@@ -93,6 +93,8 @@ Time estimates and actual effort were tracked for accountability.
 
 ### User Story: ITR1-1 — Manual Course Setup (Assessments + Weights)
 
+[SCRUM-17](https://rimaaa.atlassian.net/browse/SCRUM-17)
+
 **Story Owner:** Himanshi
 **Planned Effort:** 8 hours  
 **Actual Effort:** 6 hours
@@ -159,7 +161,9 @@ so that I can set up my grading structure at the beginning of the term.
 - Backend and frontend integration required alignment on validation error formats.
 - No major blockers were encountered during development.
 
-### User Story: ITR1-2 — Edit & Validate Grading Structure
+### ITR1-2 — Edit & Validate Grading Structure  
+([SCRUM-39](https://rimaaa.atlassian.net/browse/SCRUM-39))
+
 
 **Story Owner:** Kartik  
 **Planned Effort:** 6 hours  
@@ -190,11 +194,11 @@ so that I can correct mistakes and keep my grading structure consistent.
 
 1. Backend: API endpoint for editing assessment weights (SCRUM-66)
 
-   - Assignee: Kartik
+   - Assignee: Shivam
 
 2. Backend: API endpoint for what-if scenario analysis (SCRUM-67)
 
-   - Assignee: Kartik
+   - Assignee: Shivam
 
 3. Frontend: Edit/delete UI for assessments
 
@@ -207,6 +211,10 @@ so that I can correct mistakes and keep my grading structure consistent.
 5. Tests: Unit tests for edit/delete logic
 
    - Assignee: Bardiya
+  
+7.  Database: Ensure schema supports weight updates
+
+   - Assignee: Himanshi
 
 6. Docs: Update log.md for edit & validate grading structure
 
@@ -220,7 +228,8 @@ so that I can correct mistakes and keep my grading structure consistent.
 - Frontend integrated with backend to persist changes immediately upon blur/save.
 - No major blockers were encountered during development.
 
-### User Story: ITR1-3 — Grade Entry & Current Standing
+### ITR1-3 — Grade Entry & Current Standing  
+([SCRUM-46](https://rimaaa.atlassian.net/browse/SCRUM-46))
 
 **Story Owner:** Shadi  
 **Planned Effort:** 7 hours  
@@ -278,7 +287,8 @@ so that I can see my current standing in the course.
 - Integrated frontend with backend API for grade submission and reset functionality.
 - No major blockers were encountered during development.
 
-### User Story: ITR1-4 — Target Grade Feasibility
+### ITR1-4 — Target Grade Feasibility  
+([SCRUM-53](https://rimaaa.atlassian.net/browse/SCRUM-53))
 
 **Story Owner:** Shivam  
 **Planned Effort:** 7 hours  
@@ -336,7 +346,8 @@ As a student, I want to enter a target final grade so that I can know whether it
 - Stub database was reused from previous user story.
 - No major blockers encountered.
 
-### User Story: ITR1-5 — Minimum Required Score Calculation
+### ITR1-5 — Minimum Required Score Calculation  
+([SCRUM-59](https://rimaaa.atlassian.net/browse/SCRUM-59))
 
 **Story Owner:** Rima  
 **Planned Effort:** 8 hours  
@@ -388,7 +399,8 @@ As a student, I want to know the minimum score I need on a remaining assessment 
 - **Frontend Integration:** Linked the calculation to the Dashboard Assessment Breakdown, ensuring that if a target is mathematically impossible (>100% required), the UI clearly flags the goal as "Not Achievable."
 - **Edge Cases:** Handled scenarios where a user has already achieved their target grade before all assessments are completed.
 
-### User Story: ITR1-6 — What-If Scenario Analysis (Stretch)
+### ITR1-6 — What-If Scenario Analysis (Stretch)  
+([SCRUM-65](https://rimaaa.atlassian.net/browse/SCRUM-65))
 
 **Story Owner:** Bardiya  
 **Planned Effort:** 6 hours  
@@ -426,11 +438,6 @@ so that I can see how it would affect my final grade.
 3. Tests: Unit tests for what-if scenario logic
 
    - Assignee: Bardiya
-   - Coverage included:
-     - Real grades unchanged after what-if (non-mutating)
-     - Boundary inputs (0 and 100)
-     - Repeated what-if calls return consistent results
-     - Invalid cases (assessment not found / already graded)
 
 4. Docs: Update log.md to mark this story as a stretch feature and document the no-persistence decision
    - Assignee: Bardiya
