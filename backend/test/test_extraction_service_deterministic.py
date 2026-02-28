@@ -218,6 +218,62 @@ def test_non_numeric_weight_still_fails_strictly():
     assert response.deadlines == []
 
 
+def test_rule_best_x_of_y_preserved():
+    llm_payload = {
+        "assessments": [
+            {"name": "Quizzes", "weight": "15%", "rule": "Best 10 of 11 count"},
+            {"name": "Midterm", "weight": 35},
+            {"name": "Final", "weight": 50},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    quizzes = next(a for a in response.assessments if a.name == "Quizzes")
+    assert quizzes.rule == "Best 10 of 11 count"
+    assert quizzes.weight == 15.0
+
+
+def test_rule_must_pass_preserved():
+    llm_payload = {
+        "assessments": [
+            {"name": "Assignment", "weight": 20},
+            {"name": "Midterm", "weight": 40},
+            {"name": "Final Exam", "weight": 40, "rule": "Must pass final exam"},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    final_exam = next(a for a in response.assessments if a.name == "Final Exam")
+    assert final_exam.rule == "Must pass final exam"
+
+
+def test_missing_or_blank_rule_maps_to_none():
+    llm_payload = {
+        "assessments": [
+            {"name": "Assignment", "weight": 20},
+            {"name": "Midterm", "weight": 30, "rule": "   "},
+            {"name": "Final", "weight": 50},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    assignment = next(a for a in response.assessments if a.name == "Assignment")
+    midterm = next(a for a in response.assessments if a.name == "Midterm")
+    final = next(a for a in response.assessments if a.name == "Final")
+    assert assignment.rule is None
+    assert midterm.rule is None
+    assert final.rule is None
+
+
 def test_less_than_three_non_bonus_assessments_passes_with_relaxed_validator():
     llm_payload = {
         "assessments": [

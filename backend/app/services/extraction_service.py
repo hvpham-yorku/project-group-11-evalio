@@ -337,7 +337,11 @@ class ExtractionService:
 
         rule = raw_item.get("rule")
         notes = raw_item.get("notes")
-        rule_value = rule if isinstance(rule, str) else None
+        if isinstance(rule, str):
+            stripped_rule = rule.strip()
+            rule_value = stripped_rule if stripped_rule else None
+        else:
+            rule_value = None
         notes_value = notes if isinstance(notes, str) else None
 
         assessment = ExtractionAssessment(

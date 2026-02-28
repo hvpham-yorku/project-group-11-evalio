@@ -119,13 +119,14 @@ class LlmExtractionClient:
             "Nested grading rule:\n"
             "- If a parent has 40% and children sum to 40%, return parent only.\n"
             "- If children are independent weighted components, return children.\n"
+            'If the syllabus specifies grading conditions (e.g., “best X of Y”, “drop lowest”, “must pass”, minimum score requirements, or bonus caps), include a short description in the "rule" field of that assessment. Otherwise set "rule" to null. Keep rule concise (one short sentence).\n'
             "Do NOT invent or infer weights.\n"
             'If grading structure is unclear, return {"assessments": [], "deadlines": []}.\n'
             "Return ONLY valid JSON.\n"
             "No markdown.\n"
             "No commentary.\n"
             "Output schema:\n"
-            '{"assessments":[{"name":"string","weight":number_or_percent_string,"is_bonus":bool}],'
+            '{"assessments":[{"name":"string","weight":number_or_percent_string,"is_bonus":bool,"rule":string_or_null}],'
             '"deadlines":[]}'
         )
         user_prompt = f"Course outline text:\n{text}"
