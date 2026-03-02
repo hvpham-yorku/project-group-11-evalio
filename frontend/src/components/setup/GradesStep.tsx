@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Circle, RotateCcw } from "lucide-react";
+import { CheckCircle2, Circle, RotateCcw, X } from "lucide-react";
 import { listCourses, updateCourseGrades } from "@/lib/api";
+import { useSetupCourse } from "@/app/setup/course-context";
+import { getApiErrorMessage } from "@/lib/errors";
 
 type Assessment = {
   id: number;
@@ -13,36 +15,38 @@ type Assessment = {
   total_score?: string;
 };
 
+const PARTIAL_SCORES_ERROR = "Please enter both received and total score.";
+
 function parseNumberOrNull(value?: string): number | null {
   if (!value || value.trim() === "") return null;
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function isPartial(raw: number | null, total: number | null): boolean {
+  return (raw === null) !== (total === null);
+}
+
 export function GradesStep() {
   const router = useRouter();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
-  const [courseIndex, setCourseIndex] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const { courseId, ensureCourseIdFromList } = useSetupCourse();
 
   useEffect(() => {
     const loadCourse = async () => {
       try {
-        const courses = (await listCourses()) as Array<{
-          assessments: Array<{
-            name: string;
-            weight: number;
-            raw_score?: number | null;
-            total_score?: number | null;
-          }>;
-        }>;
-        if (courses.length === 0) {
+        const courses = await listCourses();
+        const resolvedCourseId = ensureCourseIdFromList(courses);
+        if (!resolvedCourseId) {
           setError("No course found. Complete structure first.");
           return;
         }
-        const latestIndex = courses.length - 1;
-        const latest = courses[latestIndex];
-        setCourseIndex(latestIndex);
+        const latest = courses.find((course) => course.course_id === resolvedCourseId);
+        if (!latest) {
+          setError("No course found. Complete structure first.");
+          return;
+        }
         setAssessments(
           latest.assessments.map((a, i) => ({
             id: i + 1,
@@ -55,12 +59,12 @@ export function GradesStep() {
           }))
         );
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load grades.");
+        setError(getApiErrorMessage(e, "Failed to load grades."));
       }
     };
 
     loadCourse();
-  }, []);
+  }, [ensureCourseIdFromList]);
 
   const graded = assessments.filter((a) => {
     const raw = parseNumberOrNull(a.raw_score);
@@ -83,20 +87,29 @@ export function GradesStep() {
     field: "raw_score" | "total_score",
     value: string
   ) => {
-    setAssessments((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, [field]: value } : a))
-    );
+    setAssessments((prev) => {
+      const next = prev.map((a) => (a.id === id ? { ...a, [field]: value } : a));
+      const updated = next.find((a) => a.id === id);
+      if (updated) {
+        const raw = parseNumberOrNull(updated.raw_score);
+        const total = parseNumberOrNull(updated.total_score);
+        if (!isPartial(raw, total)) {
+          setError((curr) => (curr === PARTIAL_SCORES_ERROR ? "" : curr));
+        }
+      }
+      return next;
+    });
   };
 
   const handleScoreBlur = async (assessment: Assessment) => {
-    if (courseIndex === null) return;
+    if (!courseId) return;
 
     const raw = parseNumberOrNull(assessment.raw_score);
     const total = parseNumberOrNull(assessment.total_score);
 
     if (raw === null && total === null) return;
     if (raw === null || total === null) {
-      setError("Please enter both received and total score.");
+      setError(PARTIAL_SCORES_ERROR);
       return;
     }
     if (raw < 0 || total <= 0 || raw > total) {
@@ -105,23 +118,23 @@ export function GradesStep() {
     }
 
     try {
-      await updateCourseGrades(courseIndex, {
+      await updateCourseGrades(courseId, {
         assessments: [{ name: assessment.name, raw_score: raw, total_score: total }],
       });
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save grade.");
+      setError(getApiErrorMessage(e, "Failed to save grade."));
     }
   };
 
   const handleResetAllGrades = async () => {
-    if (courseIndex === null) {
+    if (!courseId) {
       setError("No course found. Complete structure first.");
       return;
     }
 
     try {
-      await updateCourseGrades(courseIndex, {
+      await updateCourseGrades(courseId, {
         assessments: assessments.map((assessment) => ({
           name: assessment.name,
           raw_score: null,
@@ -137,7 +150,28 @@ export function GradesStep() {
       );
       setError("");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to reset grades.");
+      setError(getApiErrorMessage(e, "Failed to reset grades."));
+    }
+  };
+
+  const handleClearSingleGrade = async (assessment: Assessment) => {
+    if (!courseId) {
+      setError("No course found. Complete structure first.");
+      return;
+    }
+
+    try {
+      await updateCourseGrades(courseId, {
+        assessments: [{ name: assessment.name, raw_score: null, total_score: null }],
+      });
+      setAssessments((prev) =>
+        prev.map((a) =>
+          a.id === assessment.id ? { ...a, raw_score: "", total_score: "" } : a
+        )
+      );
+      setError("");
+    } catch (e) {
+      setError(getApiErrorMessage(e, "Failed to clear grade."));
     }
   };
 
@@ -242,6 +276,15 @@ export function GradesStep() {
                           step={0.1}
                           className="w-24 px-3 py-2 bg-white rounded-xl text-right text-sm border border-gray-200 shadow-sm focus:outline-none"
                         />
+                        {hasGrade && (
+                          <button
+                            onClick={() => handleClearSingleGrade(a)}
+                            className="ml-2 p-1 text-gray-400 hover:text-red-500 transition"
+                            title="Clear this grade"
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
                       </div>
                     </div>
 

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, Plus, CheckCircle2 } from "lucide-react";
 import { createCourse, listCourses, updateCourseWeights } from "@/lib/api";
+import { useSetupCourse } from "@/app/setup/course-context";
+import { getApiErrorMessage } from "@/lib/errors";
 
 export function StructureStep() {
   const router = useRouter();
@@ -11,23 +13,20 @@ export function StructureStep() {
     { id: 1, name: "Midterm Exam", weight: "30" },
     { id: 2, name: "Final Exam", weight: "40" },
   ]);
-  const [courseIndex, setCourseIndex] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const { courseId, setCourseId, ensureCourseIdFromList } = useSetupCourse();
 
   useEffect(() => {
     const loadCourse = async () => {
       try {
-        const courses = (await listCourses()) as Array<{
-          assessments: Array<{ name: string; weight: number }>;
-        }>;
-        if (courses.length === 0) return;
-        const latestIndex = courses.length - 1;
-        const latest = courses[latestIndex];
-        setCourseIndex(latestIndex);
-        if (latest.assessments.length > 0) {
+        const courses = await listCourses();
+        const resolvedCourseId = ensureCourseIdFromList(courses);
+        if (!resolvedCourseId) return;
+        const activeCourse = courses.find((course) => course.course_id === resolvedCourseId);
+        if (activeCourse && activeCourse.assessments.length > 0) {
           setAssessments(
-            latest.assessments.map((a, i) => ({
+            activeCourse.assessments.map((a, i) => ({
               id: i + 1,
               name: a.name,
               weight: String(a.weight),
@@ -35,12 +34,12 @@ export function StructureStep() {
           );
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load course.");
+        setError(getApiErrorMessage(e, "Failed to load course."));
       }
     };
 
     loadCourse();
-  }, []);
+  }, [ensureCourseIdFromList]);
 
   const totalWeight = useMemo(
     () =>
@@ -127,8 +126,8 @@ export function StructureStep() {
 
     try {
       setSaving(true);
-      if (courseIndex === null) {
-        await createCourse({
+      if (courseId === null) {
+        const response = await createCourse({
           name: "Untitled Course",
           term: null,
           assessments: cleaned.map((a) => ({
@@ -137,12 +136,13 @@ export function StructureStep() {
             total_score: null,
           })),
         });
+        setCourseId(response.course_id);
       } else {
-        await updateCourseWeights(courseIndex, { assessments: cleaned });
+        await updateCourseWeights(courseId, { assessments: cleaned });
       }
       router.push("/setup/grades");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save structure.");
+      setError(getApiErrorMessage(e, "Failed to save structure."));
     } finally {
       setSaving(false);
     }

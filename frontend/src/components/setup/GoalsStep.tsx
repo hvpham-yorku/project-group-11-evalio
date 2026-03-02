@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Target, TrendingUp } from "lucide-react";
 import { checkTarget, listCourses } from "@/lib/api";
+import { useSetupCourse } from "@/app/setup/course-context";
+import { getApiErrorMessage } from "@/lib/errors";
+
+const TARGET_STORAGE_KEY = "evalio_target_grade";
 
 export function GoalsStep() {
-  const [target, setTarget] = useState<number>(89);
-  const [courseIndex, setCourseIndex] = useState<number | null>(null);
+  const router = useRouter();
+  const [target, setTarget] = useState<number>(75);
+  const [isTargetLoaded, setIsTargetLoaded] = useState(false);
   const [currentStanding, setCurrentStanding] = useState(85.0);
   const [explanation, setExplanation] = useState(
     "This target looks realistic based on your current performance and remaining weight."
@@ -25,25 +31,44 @@ export function GoalsStep() {
   );
   const [classification, setClassification] = useState("Comfortable");
   const [error, setError] = useState("");
+  const { courseId, ensureCourseIdFromList } = useSetupCourse();
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(TARGET_STORAGE_KEY);
+    if (saved === null) {
+      setTarget(75);
+    } else {
+      const parsed = Number.parseFloat(saved);
+      if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 100) {
+        setTarget(parsed);
+      } else {
+        setTarget(75);
+      }
+    }
+    setIsTargetLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (isTargetLoaded) {
+      window.localStorage.setItem(TARGET_STORAGE_KEY, String(target));
+    }
+  }, [target, isTargetLoaded]);
 
   useEffect(() => {
     const loadCourse = async () => {
       try {
-        const courses = (await listCourses()) as Array<{
-          assessments: Array<{
-            weight: number;
-            raw_score?: number | null;
-            total_score?: number | null;
-          }>;
-        }>;
-        if (courses.length === 0) {
+        const courses = await listCourses();
+        const resolvedCourseId = ensureCourseIdFromList(courses);
+        if (!resolvedCourseId) {
           setError("No course found. Complete structure first.");
           return;
         }
 
-        const latestIndex = courses.length - 1;
-        const latest = courses[latestIndex];
-        setCourseIndex(latestIndex);
+        const latest = courses.find((course) => course.course_id === resolvedCourseId);
+        if (!latest) {
+          setError("No course found. Complete structure first.");
+          return;
+        }
         const graded = latest.assessments.filter(
           (a) =>
             typeof a.raw_score === "number" && typeof a.total_score === "number"
@@ -52,18 +77,18 @@ export function GoalsStep() {
         setGradedWeight(gradedW);
         setRemainingWeight(100 - gradedW);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load goals.");
+        setError(getApiErrorMessage(e, "Failed to load goals."));
       }
     };
 
     loadCourse();
-  }, []);
+  }, [ensureCourseIdFromList]);
 
   useEffect(() => {
-    if (courseIndex === null) return;
+    if (!courseId) return;
     const run = async () => {
       try {
-        const response = (await checkTarget(courseIndex, { target })) as {
+        const response = (await checkTarget(courseId, { target })) as {
           current_standing: number;
           explanation: string;
           york_equivalent: {
@@ -86,11 +111,11 @@ export function GoalsStep() {
         setClassification(response.classification);
         setError("");
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to evaluate target.");
+        setError(getApiErrorMessage(e, "Failed to evaluate target."));
       }
     };
     run();
-  }, [target, courseIndex]);
+  }, [target, courseId]);
 
   const statusUI = useMemo(() => {
     if (
@@ -266,7 +291,10 @@ export function GoalsStep() {
       {error ? <p className="mt-4 text-sm text-red-500">{error}</p> : null}
 
       {/* Primary action */}
-      <button className="mt-8 w-full bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition">
+      <button
+        onClick={() => router.push("/setup/dashboard")}
+        className="mt-8 w-full bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition"
+      >
         Continue to Planning
       </button>
     </div>
