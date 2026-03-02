@@ -16,6 +16,10 @@ class ExtractionAssessment(BaseModel):
     is_bonus: bool = False
     children: list["ExtractionAssessment"] = Field(default_factory=list)
     rule: Optional[str] = None
+    total_count: Optional[float] = None
+    effective_count: Optional[float] = None
+    unit_weight: Optional[float] = None
+    rule_type: Optional[str] = None
     notes: Optional[str] = None
 
 

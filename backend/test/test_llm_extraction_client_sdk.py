@@ -57,4 +57,14 @@ def test_llm_client_responses_compat_smoke_extract():
     assert raw_client.chat.completions.call_count == 1
     assert raw_client.chat.completions.last_kwargs["temperature"] == 0
     assert raw_client.chat.completions.last_kwargs["max_completion_tokens"] == 1000
-    assert "response_format" not in raw_client.chat.completions.last_kwargs
+    response_format = raw_client.chat.completions.last_kwargs["response_format"]
+    assert response_format["type"] == "json_schema"
+    schema = response_format["json_schema"]["schema"]
+    assessment_items = schema["properties"]["assessments"]["items"]
+    assessment_props = assessment_items["properties"]
+    assert "children" in assessment_props
+    assert "total_count" in assessment_props
+    assert "effective_count" in assessment_props
+    assert "unit_weight" in assessment_props
+    assert "rule_type" in assessment_props
+    assert set(assessment_items["required"]) == set(assessment_props.keys())

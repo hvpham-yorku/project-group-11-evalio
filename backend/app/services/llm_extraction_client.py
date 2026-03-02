@@ -90,10 +90,10 @@ class LlmExtractionError(RuntimeError):
         self.message = message
 
 
-FLAT_EXTRACTION_RESPONSE_FORMAT: dict[str, Any] = {
+HIERARCHICAL_EXTRACTION_RESPONSE_FORMAT: dict[str, Any] = {
     "type": "json_schema",
     "json_schema": {
-        "name": "course_outline_flat_extraction",
+        "name": "course_outline_hierarchical_extraction",
         "strict": True,
         "schema": {
             "type": "object",
@@ -105,12 +105,70 @@ FLAT_EXTRACTION_RESPONSE_FORMAT: dict[str, Any] = {
                     "items": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["name", "weight", "is_bonus", "rule"],
+                        "required": [
+                            "name",
+                            "weight",
+                            "is_bonus",
+                            "rule",
+                            "children",
+                            "total_count",
+                            "effective_count",
+                            "unit_weight",
+                            "rule_type",
+                        ],
                         "properties": {
                             "name": {"type": "string"},
                             "weight": {"anyOf": [{"type": "number"}, {"type": "string"}]},
                             "is_bonus": {"type": "boolean"},
                             "rule": {"type": ["string", "null"]},
+                            "total_count": {"type": ["number", "null"]},
+                            "effective_count": {"type": ["number", "null"]},
+                            "unit_weight": {"type": ["number", "null"]},
+                            "rule_type": {
+                                "type": ["string", "null"],
+                                "enum": ["pure_multiplicative", "best_of", None],
+                            },
+                            "children": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "required": [
+                                        "name",
+                                        "weight",
+                                        "is_bonus",
+                                        "rule",
+                                        "children",
+                                        "total_count",
+                                        "effective_count",
+                                        "unit_weight",
+                                        "rule_type",
+                                    ],
+                                    "properties": {
+                                        "name": {"type": "string"},
+                                        "weight": {"anyOf": [{"type": "number"}, {"type": "string"}]},
+                                        "is_bonus": {"type": "boolean"},
+                                        "rule": {"type": ["string", "null"]},
+                                        "total_count": {"type": ["number", "null"]},
+                                        "effective_count": {"type": ["number", "null"]},
+                                        "unit_weight": {"type": ["number", "null"]},
+                                        "rule_type": {
+                                            "type": ["string", "null"],
+                                            "enum": ["pure_multiplicative", "best_of", None],
+                                        },
+                                        "children": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "additionalProperties": False,
+                                                "required": [],
+                                                "properties": {},
+                                            },
+                                            "maxItems": 0,
+                                        },
+                                    },
+                                },
+                            },
                         },
                     },
                 },
@@ -119,7 +177,7 @@ FLAT_EXTRACTION_RESPONSE_FORMAT: dict[str, Any] = {
                     "items": {
                         "type": "object",
                         "additionalProperties": False,
-                        "required": ["title"],
+                        "required": ["title", "due_date", "due_time"],
                         "properties": {
                             "title": {"type": "string"},
                             "due_date": {"type": ["string", "null"]},
@@ -177,32 +235,35 @@ class LlmExtractionClient:
                 f"filtered_text_len={len(text)} approx_tokens={int(len(text) / 4)}"
             )
         system_prompt = (
-            "Extract ONLY grading components that contribute to the final grade as a FLAT list.\n"
-            "Inclusion rule:\n"
-            "Include only components that explicitly show a numeric weight or percentage in the text.\n"
-            "Do NOT include items without an explicit numeric weight.\n"
-            "Do NOT infer or assume missing weights.\n"
-            "If a category is split into numeric ranges with different weights (e.g., 'Labs 2–6' and 'Labs 7–9'), output each range as a separate assessment item using the numeric range in the name.\n"
-            "If a grading table already lists a parent category with a total percentage,\n"
-            "and later notes break that category into numeric ranges with weights,\n"
-            "do NOT output the ranges as separate top-level assessments.\n"
-            "Keep only the parent category.\n"
-            "Range details will be handled later.\n"
-            "Every assessment must be a top-level item in assessments.\n"
-            "Do NOT create child assessments.\n"
-            "Do NOT group assessments.\n"
-            "Do NOT infer equal splits.\n"
-            "Do NOT invent components.\n"
-            "Ignore these items entirely: attendance, review sessions, exam setup, scheduling, "
-            "academic integrity, late penalties, formatting instructions, administrative notes.\n"
-            'If the syllabus specifies grading conditions (e.g., “best X of Y”, “drop lowest”, “must pass”, minimum score requirements, or bonus caps), include a short description in the "rule" field of that assessment. Otherwise set "rule" to null. Keep rule concise (one short sentence).\n'
-            "Do NOT invent or infer weights.\n"
-            'If grading structure is unclear, return {"assessments": [], "deadlines": []}.\n'
+            "Extract grading components that directly contribute to the final grade.\n\n"
+            "INCLUSION RULE:\n"
+            "- Include only items that explicitly display a numeric weight (percentage or marks).\n"
+            "- Do not include items without an explicit numeric weight.\n\n"
+            "STRUCTURE:\n"
+            "- Maximum depth 2: top-level assessments and optional children.\n"
+            "- Every object must include a 'children' field.\n"
+            "- Child objects must have 'children': [].\n"
+            "- Do not create hierarchy unless explicitly indicated in text.\n"
+            "- Do not assume equal splits.\n\n"
+            "MULTIPLICATIVE METADATA:\n"
+            "- Extract total_count only if a total number of items is explicitly written.\n"
+            "- Extract unit_weight only if a per-item weight is explicitly written.\n"
+            "- Extract effective_count only if text explicitly states that only some items count.\n"
+            "- Set rule_type = 'pure_multiplicative' only if all items count and per-item weight is explicit.\n"
+            "- Set rule_type = 'best_of' only if text explicitly states drop-lowest, best-of, or subset counting.\n"
+            "- If multiplicative structure is not explicitly stated, set total_count, effective_count, "
+            "unit_weight, and rule_type to null.\n"
+            "- Do NOT compute, divide, infer, or derive values.\n"
+            "- Only extract multiplicative metadata if the arithmetic explicitly matches the total weight written in the text.\n\n"
+            "EXCLUSIONS:\n"
+            "- Ignore attendance policies, academic integrity, scheduling details, formatting instructions, "
+            "administrative notes, and non-graded activities.\n\n"
+            "FAIL-SAFE:\n"
+            "- If grading structure cannot be clearly determined, return "
+            "{\"assessments\": [], \"deadlines\": []}.\n\n"
             "Return ONLY valid JSON.\n"
             "No markdown.\n"
             "No commentary.\n"
-            "Output schema:\n"
-            '{"assessments":[{"name":"string","weight":number_or_percent_string,"is_bonus":bool,"rule":string_or_null}],"deadlines":[{"title":"string","due_date":"string_or_null","due_time":"string_or_null"}]}'
         )
         user_prompt = f"Course outline text:\n{text}"
 
@@ -214,6 +275,7 @@ class LlmExtractionClient:
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0,
+                response_format=HIERARCHICAL_EXTRACTION_RESPONSE_FORMAT,
                 max_output_tokens=1000,
             )
         except Exception as exc:
@@ -229,6 +291,7 @@ class LlmExtractionClient:
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt},
                         ],
+                        response_format=HIERARCHICAL_EXTRACTION_RESPONSE_FORMAT,
                         max_output_tokens=1000,
                     )
                 except Exception as fallback_exc:
@@ -272,6 +335,7 @@ class LlmExtractionClient:
                         {"role": "user", "content": user_prompt},
                     ],
                     temperature=0,
+                    response_format=HIERARCHICAL_EXTRACTION_RESPONSE_FORMAT,
                     max_output_tokens=1000,
                 )
             except Exception as retry_exc:
@@ -287,6 +351,7 @@ class LlmExtractionClient:
                                 {"role": "system", "content": retry_system_prompt},
                                 {"role": "user", "content": user_prompt},
                             ],
+                            response_format=HIERARCHICAL_EXTRACTION_RESPONSE_FORMAT,
                             max_output_tokens=1000,
                         )
                     except Exception as retry_fallback_exc:

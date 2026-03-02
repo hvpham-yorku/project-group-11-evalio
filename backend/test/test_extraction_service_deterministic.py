@@ -4,7 +4,6 @@ import types
 from app.services.extraction_service import ExtractionService
 from app.services.grading_section_filter import GradingSectionFilter
 from app.services.llm_extraction_client import LlmExtractionClient, LlmExtractionError
-from app.models_extraction import ExtractionAssessment
 
 
 class _StaticLlmClient:
@@ -404,14 +403,27 @@ def test_missing_or_blank_rule_maps_to_none():
     assert final.rule is None
 
 
-def test_best_of_children_generated():
+def test_llm_explicit_children_are_preserved():
     llm_payload = {
         "assessments": [
             {
-                "name": "11 Quizzes",
+                "name": "Quizzes",
                 "weight": "15%",
                 "is_bonus": False,
-                "rule": "Best 10 of 11 quizzes count, each worth 1.5%",
+                "rule": "Best 10 of 11 quizzes count",
+                "children": [
+                    {"name": "Quiz 1", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 2", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 3", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 4", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 5", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 6", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 7", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 8", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 9", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 10", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 11", "weight": "1.5%", "is_bonus": False, "rule": None, "children": []},
+                ],
             },
             {"name": "Midterm", "weight": 35, "is_bonus": False},
             {"name": "Final", "weight": 50, "is_bonus": False},
@@ -428,14 +440,13 @@ def test_best_of_children_generated():
     assert parent.children[0].weight == 1.5
     assert parent.weight == 15.0
     assert sum(child.weight for child in parent.children) > parent.weight
-    assert parent.notes is None
 
 
-def test_best_of_without_each_percent_applies_normalization():
+def test_rule_does_not_synthesize_children():
     llm_payload = {
         "assessments": [
             {
-                "name": "11 Quizzes",
+                "name": "Quizzes",
                 "weight": "15%",
                 "is_bonus": False,
                 "rule": "Best 10 of 11 quizzes count",
@@ -450,20 +461,21 @@ def test_best_of_without_each_percent_applies_normalization():
 
     assert response.structure_valid is True
     parent = next(a for a in response.assessments if a.name == "Quizzes")
-    assert len(parent.children) == 11
-    assert parent.children[0].weight == 1.5
+    assert parent.children == []
     assert parent.weight == 15.0
-    assert parent.notes == "Weights normalized due to rule-based grading."
 
 
-def test_drop_lowest_explicit_each_correct_math():
+def test_parent_without_rule_requires_exact_child_sum():
     llm_payload = {
         "assessments": [
             {
-                "name": "5 Labs",
+                "name": "Labs",
                 "weight": "20%",
                 "is_bonus": False,
-                "rule": "Drop lowest 1 of 5 labs, each worth 5%",
+                "children": [
+                    {"name": "Lab 1", "weight": "8%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Lab 2", "weight": "8%", "is_bonus": False, "rule": None, "children": []},
+                ],
             },
             {"name": "Midterm", "weight": 30, "is_bonus": False},
             {"name": "Final", "weight": 50, "is_bonus": False},
@@ -473,26 +485,25 @@ def test_drop_lowest_explicit_each_correct_math():
     service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
     response = _extract_txt(service, "ignored by mocked llm")
 
-    assert response.structure_valid is True
-    parent = next(a for a in response.assessments if a.name == "Labs")
-    assert len(parent.children) == 5
-    assert parent.children[0].name == "Lab 1"
-    assert parent.children[0].weight == 5.0
-    assert parent.weight == 20.0
-    assert parent.notes is None
+    assert response.structure_valid is False
+    assert response.diagnostics.failure_reason == "Parent assessment weight must equal sum of child assessment weights"
 
 
-def test_drop_lowest_conflicting_each_applies_normalization():
+def test_parent_with_rule_allows_child_sum_above_parent():
     llm_payload = {
         "assessments": [
             {
-                "name": "5 Labs",
+                "name": "Quizzes",
                 "weight": "20%",
                 "is_bonus": False,
-                "rule": "Drop lowest 1 of 5 labs, each worth 3%",
+                "rule": "Best 2 of 3 count",
+                "children": [
+                    {"name": "Quiz 1", "weight": "10%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 2", "weight": "10%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Quiz 3", "weight": "10%", "is_bonus": False, "rule": None, "children": []},
+                ],
             },
-            {"name": "Midterm", "weight": 30, "is_bonus": False},
-            {"name": "Final", "weight": 50, "is_bonus": False},
+            {"name": "Final", "weight": 80, "is_bonus": False},
         ],
         "deadlines": [],
     }
@@ -500,24 +511,60 @@ def test_drop_lowest_conflicting_each_applies_normalization():
     response = _extract_txt(service, "ignored by mocked llm")
 
     assert response.structure_valid is True
-    parent = next(a for a in response.assessments if a.name == "Labs")
-    assert len(parent.children) == 5
-    assert parent.children[0].weight == 5.0
-    assert parent.weight == 20.0
-    assert parent.notes == "Weights normalized due to rule-based grading."
-    assert sum(child.weight for child in parent.children) > parent.weight
+    quizzes = next(a for a in response.assessments if a.name == "Quizzes")
+    assert len(quizzes.children) == 3
+    assert sum(child.weight for child in quizzes.children) > quizzes.weight
 
 
-def test_rule_child_generation_does_not_mutate_parent_weight():
+def test_duplicate_child_and_top_level_name_rejected():
     llm_payload = {
         "assessments": [
             {
-                "name": "8 Assignments",
-                "weight": "16%",
+                "name": "Labs",
+                "weight": "40%",
                 "is_bonus": False,
-                "rule": "Best 6 of 8 assignments count, each worth 2%",
+                "children": [
+                    {"name": "Lab 1", "weight": "20%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Lab 2", "weight": "20%", "is_bonus": False, "rule": None, "children": []},
+                ],
             },
-            {"name": "Midterm", "weight": 34, "is_bonus": False},
+            {"name": "Lab 1", "weight": 20, "is_bonus": False},
+            {"name": "Final", "weight": 40, "is_bonus": False},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is False
+    assert response.diagnostics.failure_reason == "Child assessments must not be duplicated as top-level assessments"
+
+
+def test_depth_greater_than_two_rejected():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "Quizzes",
+                "weight": "50%",
+                "is_bonus": False,
+                "children": [
+                    {
+                        "name": "Quiz Group",
+                        "weight": "50%",
+                        "is_bonus": False,
+                        "rule": None,
+                        "children": [
+                            {
+                                "name": "Quiz 1",
+                                "weight": "50%",
+                                "is_bonus": False,
+                                "rule": None,
+                                "children": [],
+                            }
+                        ],
+                    }
+                ],
+            },
             {"name": "Final", "weight": 50, "is_bonus": False},
         ],
         "deadlines": [],
@@ -525,31 +572,186 @@ def test_rule_child_generation_does_not_mutate_parent_weight():
     service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
     response = _extract_txt(service, "ignored by mocked llm")
 
-    assert response.structure_valid is True
-    parent = next(a for a in response.assessments if a.name == "Assignments")
-    assert parent.weight == 16.0
-    assert len(parent.children) == 8
-    assert parent.children[0].weight == 2.67
-    assert parent.notes == "Weights normalized due to rule-based grading."
-    assert sum(child.weight for child in parent.children) > parent.weight
+    assert response.structure_valid is False
+    assert response.diagnostics.failure_reason == "Assessment nesting depth cannot exceed 2"
 
 
-def test_labs_ranges_remain_separate_assessments():
+def test_top_level_sum_uses_only_top_level_weights():
     llm_payload = {
         "assessments": [
             {
-                "name": "Labs 2-6",
+                "name": "Labs",
+                "weight": "30%",
+                "is_bonus": False,
+                "children": [
+                    {"name": "Lab 1", "weight": "15%", "is_bonus": False, "rule": None, "children": []},
+                    {"name": "Lab 2", "weight": "15%", "is_bonus": False, "rule": None, "children": []},
+                ],
+            },
+            {"name": "Final", "weight": 60, "is_bonus": False},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is False
+    assert response.diagnostics.failure_reason == "Weight sum does not equal 100"
+
+
+def test_pure_multiplicative_expansion_synthesizes_children_on_exact_match():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "Lab tests",
+                "weight": "40 marks",
+                "is_bonus": False,
+                "rule": None,
+                "children": [],
+                "total_count": 5,
+                "effective_count": 5,
+                "unit_weight": 8,
+                "rule_type": "pure_multiplicative",
+            },
+            {
+                "name": "Final exam",
+                "weight": "60 marks",
+                "is_bonus": False,
+                "rule": None,
+                "children": [],
+                "total_count": None,
+                "effective_count": None,
+                "unit_weight": None,
+                "rule_type": None,
+            },
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    labs = next(a for a in response.assessments if a.name == "Lab tests")
+    assert len(labs.children) == 5
+    assert labs.children[0].name == "Lab test 1"
+    assert all(child.weight == 8.0 for child in labs.children)
+    assert all(child.total_count is None for child in labs.children)
+    assert all(child.effective_count is None for child in labs.children)
+    assert all(child.unit_weight is None for child in labs.children)
+    assert all(child.rule_type is None for child in labs.children)
+
+
+def test_best_of_expansion_synthesizes_total_count_children():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "Online activities",
+                "weight": "10%",
+                "is_bonus": False,
+                "rule": "Best 10 out of 12 count.",
+                "children": [],
+                "total_count": 12,
+                "effective_count": 10,
+                "unit_weight": 1,
+                "rule_type": "best_of",
+            },
+            {
+                "name": "Final exam",
+                "weight": "90%",
+                "is_bonus": False,
+                "rule": None,
+                "children": [],
+                "total_count": None,
+                "effective_count": None,
+                "unit_weight": None,
+                "rule_type": None,
+            },
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    activities = next(a for a in response.assessments if a.name == "Online activities")
+    assert len(activities.children) == 12
+    assert activities.children[0].weight == 1.0
+    assert activities.weight == 10.0
+    assert activities.rule == "Best 10 out of 12 count."
+
+
+def test_best_of_expansion_skips_on_mismatch():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "Online activities",
+                "weight": "10%",
+                "is_bonus": False,
+                "rule": "Best 10 out of 12 count.",
+                "children": [],
+                "total_count": 12,
+                "effective_count": 10,
+                "unit_weight": 0.9,
+                "rule_type": "best_of",
+            },
+            {
+                "name": "Final exam",
+                "weight": "90%",
+                "is_bonus": False,
+                "rule": None,
+                "children": [],
+                "total_count": None,
+                "effective_count": None,
+                "unit_weight": None,
+                "rule_type": None,
+            },
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    activities = next(a for a in response.assessments if a.name == "Online activities")
+    assert activities.children == []
+
+
+def test_flat_case_without_count_metadata_does_not_expand():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "Assignment",
                 "weight": "20%",
                 "is_bonus": False,
-                "rule": "Best 4 of 5 labs count, each worth 5%",
+                "rule": None,
+                "children": [],
+                "total_count": None,
+                "effective_count": None,
+                "unit_weight": None,
+                "rule_type": None,
             },
             {
-                "name": "Labs 7-9",
-                "weight": "15%",
+                "name": "Midterm",
+                "weight": "30%",
                 "is_bonus": False,
-                "rule": "Best 2 of 3 labs count, each worth 7.5%",
+                "rule": None,
+                "children": [],
+                "total_count": None,
+                "effective_count": None,
+                "unit_weight": None,
+                "rule_type": None,
             },
-            {"name": "Final", "weight": 65, "is_bonus": False},
+            {
+                "name": "Final",
+                "weight": "50%",
+                "is_bonus": False,
+                "rule": None,
+                "children": [],
+                "total_count": None,
+                "effective_count": None,
+                "unit_weight": None,
+                "rule_type": None,
+            },
         ],
         "deadlines": [],
     }
@@ -557,55 +759,8 @@ def test_labs_ranges_remain_separate_assessments():
     response = _extract_txt(service, "ignored by mocked llm")
 
     assert response.structure_valid is True
-    labs_2_6 = next(a for a in response.assessments if a.name == "Labs 2-6")
-    labs_7_9 = next(a for a in response.assessments if a.name == "Labs 7-9")
-    assert len(labs_2_6.children) == 5
-    assert len(labs_7_9.children) == 3
-    assert labs_2_6.weight == 20.0
-    assert labs_7_9.weight == 15.0
-
-
-def test_repeated_rule_generation_clears_previous_children():
-    service = ExtractionService(llm_client=_StaticLlmClient(payload={"assessments": [], "deadlines": []}))
-    assessment = ExtractionAssessment(
-        name="5 Labs",
-        weight=20.0,
-        is_bonus=False,
-        children=[],
-        rule="Drop lowest 1 of 5 labs, each worth 5%",
-        notes=None,
-    )
-
-    service._maybe_generate_best_of_children(assessment)
-    assert len(assessment.children) == 5
-
-    assessment.rule = "Best 2 of 3 labs count, each worth 10%"
-    service._maybe_generate_best_of_children(assessment)
-    assert len(assessment.children) == 3
-
-
-def test_generic_assignment_case():
-    llm_payload = {
-        "assessments": [
-            {
-                "name": "8 Assignments",
-                "weight": "16%",
-                "is_bonus": False,
-                "rule": "Best 6 of 8 assignments count, each worth 2%",
-            },
-            {"name": "Midterm", "weight": 34, "is_bonus": False},
-            {"name": "Final", "weight": 50, "is_bonus": False},
-        ],
-        "deadlines": [],
-    }
-    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
-    response = _extract_txt(service, "ignored by mocked llm")
-
-    assert response.structure_valid is True
-    parent = next(a for a in response.assessments if a.name == "Assignments")
-    assert len(parent.children) == 8
-    assert parent.children[0].name == "Assignment 1"
-    assert parent.children[0].weight == 2.67
+    assignment = next(a for a in response.assessments if a.name == "Assignment")
+    assert assignment.children == []
 
 
 def test_grading_filter_reduces_text_when_keywords_present():

@@ -163,10 +163,6 @@ MAX_TEXT_CHARS = 120000
 MAX_SCAN_LINES = 2000
 MAX_OCR_PAGES = 10
 PDF_SUSPICIOUS_TEXT_THRESHOLD = 400
-RULE_WEIGHT_TOLERANCE = Decimal("0.001")
-RULE_WEIGHT_NORMALIZATION_NOTE = "Weights normalized due to rule-based grading."
-
-
 def _read_field(raw_item: Any, field_name: str, default: Any = None) -> Any:
     if isinstance(raw_item, dict):
         return raw_item.get(field_name, default)
@@ -568,8 +564,7 @@ class ExtractionService:
         parse_warnings: list[str] = []
         unit_kinds: list[str | None] = []
         for raw_item in raw_assessments:
-            assessment, entry, warnings, unit_kind = self._normalize_assessment_item(raw_item)
-            self._maybe_generate_best_of_children(assessment)
+            assessment, entry, warnings, unit_kind = self._normalize_assessment_item(raw_item, depth=0)
             entry["name"] = assessment.name
             entry["normalized_name"] = self._normalize_assessment_name(assessment.name)
             if entry.get("weight") is not None:
@@ -585,6 +580,10 @@ class ExtractionService:
             unit_kinds=unit_kinds,
         )
         parse_warnings.extend(scaled_warnings)
+        self._maybe_synthesize_children_from_count_metadata(
+            assessments=assessments,
+            assessment_entries=assessment_entries,
+        )
 
         deadlines: list[ExtractionDeadline] = []
         for raw_deadline in raw_deadlines:
@@ -600,6 +599,8 @@ class ExtractionService:
     def _normalize_assessment_item(
         self,
         raw_item: Any,
+        *,
+        depth: int,
     ) -> tuple[ExtractionAssessment, dict[str, Any], list[str], str | None]:
         if not isinstance(raw_item, dict):
             raise ValueError("Each assessment must be an object")
@@ -620,28 +621,64 @@ class ExtractionService:
             rule_value = stripped_rule if stripped_rule else None
         else:
             rule_value = None
+        total_count_value = self._normalize_nullable_number(raw_item.get("total_count"))
+        effective_count_value = self._normalize_nullable_number(raw_item.get("effective_count"))
+        unit_weight_value = self._normalize_nullable_number(raw_item.get("unit_weight"))
+        rule_type_value = self._normalize_count_rule_type(raw_item.get("rule_type"))
         notes_value = notes if isinstance(notes, str) else None
+
+        raw_children = raw_item.get("children", [])
+        if raw_children is None:
+            raw_children = []
+        if not isinstance(raw_children, list):
+            raise ValueError("Assessment children must be a list")
+
+        child_assessments: list[ExtractionAssessment] = []
+        child_entries: list[dict[str, Any]] = []
+        child_unit_kinds: list[str | None] = []
+        child_warnings: list[str] = []
+        for raw_child in raw_children:
+            child_assessment, child_entry, child_item_warnings, child_unit_kind = self._normalize_assessment_item(
+                raw_child,
+                depth=depth + 1,
+            )
+            child_assessments.append(child_assessment)
+            child_entries.append(child_entry)
+            child_unit_kinds.append(child_unit_kind)
+            child_warnings.extend(child_item_warnings)
 
         assessment = ExtractionAssessment(
             name=name,
             weight=weight_float,
             is_bonus=is_bonus,
-            children=[],
+            children=child_assessments,
             rule=rule_value,
+            total_count=total_count_value,
+            effective_count=effective_count_value,
+            unit_weight=unit_weight_value,
+            rule_type=rule_type_value,
             notes=notes_value,
         )
         entry = {
             "name": name,
             "weight": weight_float if weight_decimal is not None else None,
             "is_bonus": is_bonus,
-            "children": [],
+            "children": child_entries,
             "rule": rule_value,
+            "total_count": total_count_value,
+            "effective_count": effective_count_value,
+            "unit_weight": unit_weight_value,
+            "rule_type": rule_type_value,
             "notes": notes_value,
             "line_idx": 0,
             "normalized_name": self._normalize_assessment_name(name),
             "accepted_by_keyword": True,
+            "depth": depth,
+            "unit_kind": unit_kind,
         }
-        return assessment, entry, weight_warnings, unit_kind
+        combined_warnings = [*weight_warnings, *child_warnings]
+        _ = child_unit_kinds  # Tracked for this sibling level for downstream normalization.
+        return assessment, entry, combined_warnings, unit_kind
 
     def _normalize_deadline_item(self, raw_deadline: Any) -> ExtractionDeadline:
         if not isinstance(raw_deadline, dict):
@@ -735,6 +772,25 @@ class ExtractionService:
     def _quantize_weight(self, value: Decimal) -> Decimal:
         return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
+    def _normalize_nullable_number(self, value: Any) -> float | None:
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            decimal_value = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+        if decimal_value.is_nan() or not decimal_value.is_finite():
+            return None
+        return float(self._quantize_weight(decimal_value))
+
+    def _normalize_count_rule_type(self, value: Any) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip().lower()
+        if normalized in {"pure_multiplicative", "best_of"}:
+            return normalized
+        return None
+
     def _maybe_scale_mark_weights(
         self,
         *,
@@ -781,110 +837,99 @@ class ExtractionService:
 
         return ["weight_scaled_from_marks"]
 
-    def _maybe_generate_best_of_children(self, assessment: ExtractionAssessment) -> None:
-        # Always reset children so repeated normalization does not preserve stale data.
-        assessment.children = []
-        rule_text = (assessment.rule or "").strip()
-        if not rule_text:
+    def _maybe_synthesize_children_from_count_metadata(
+        self,
+        *,
+        assessments: list[ExtractionAssessment],
+        assessment_entries: list[dict[str, Any]],
+    ) -> None:
+        if len(assessments) != len(assessment_entries):
             return
 
-        total_count: int | None = None
-        counted = 0
-        best_match = BEST_OF_REGEX.search(rule_text)
-        if best_match is not None:
-            try:
-                best_count = int(best_match.group(1))
-                total_count = int(best_match.group(2))
-            except (TypeError, ValueError):
-                return
-            if total_count <= 0 or best_count <= 0 or best_count > total_count:
-                return
-            counted = best_count
-        else:
-            drop_count: int | None = None
-            drop_match = DROP_LOWEST_RULE_REGEX.search(rule_text)
-            if drop_match is not None:
-                if drop_match.group(1):
-                    try:
-                        drop_count = int(drop_match.group(1))
-                    except ValueError:
-                        drop_count = 1
-                else:
-                    drop_count = 1
+        tolerance = Decimal("0.5")
+        for index, assessment in enumerate(assessments):
+            entry = assessment_entries[index]
+            if assessment.children:
+                continue
+
+            total_count_raw = assessment.total_count
+            effective_count_raw = assessment.effective_count
+            unit_weight_raw = assessment.unit_weight
+            rule_type_raw = assessment.rule_type
+            if rule_type_raw not in {"pure_multiplicative", "best_of"}:
+                continue
+            if total_count_raw is None or unit_weight_raw is None:
+                continue
+
+            total_count_decimal = self._to_decimal(total_count_raw)
+            unit_weight_decimal = self._to_decimal(unit_weight_raw)
+            parent_weight_decimal = self._quantize_weight(Decimal(str(assessment.weight)))
+            if total_count_decimal <= Decimal("0") or unit_weight_decimal <= Decimal("0"):
+                continue
+            if not total_count_decimal.is_finite() or not unit_weight_decimal.is_finite():
+                continue
+            if total_count_decimal != total_count_decimal.to_integral_value():
+                continue
+
+            divisor: Decimal
+            expected_parent: Decimal
+            if rule_type_raw == "pure_multiplicative":
+                expected_parent = self._quantize_weight(total_count_decimal * unit_weight_decimal)
+                divisor = total_count_decimal
             else:
-                alt_drop_match = DROP_LOWEST_ALT_RULE_REGEX.search(rule_text)
-                if alt_drop_match is not None:
-                    try:
-                        drop_count = int(alt_drop_match.group(1))
-                    except ValueError:
-                        drop_count = 1
-            if drop_count is None or drop_count < 0:
-                return
-            total_count = _parse_total_count_from_rule(rule_text)
-            if total_count is None:
-                total_count = _parse_total_count_from_name(assessment.name)
-            if total_count is None or total_count <= 0:
-                return
-            counted = total_count - drop_count
-            if counted <= 0:
-                return
+                if effective_count_raw is None:
+                    continue
+                effective_count_decimal = self._to_decimal(effective_count_raw)
+                if effective_count_decimal <= Decimal("0") or not effective_count_decimal.is_finite():
+                    continue
+                if effective_count_decimal != effective_count_decimal.to_integral_value():
+                    continue
+                expected_parent = self._quantize_weight(effective_count_decimal * unit_weight_decimal)
+                divisor = effective_count_decimal
 
-        parent_weight = self._quantize_weight(Decimal(str(assessment.weight)))
-        if parent_weight <= Decimal("0"):
-            return
+            if abs(expected_parent - parent_weight_decimal) > tolerance:
+                continue
 
-        syllabus_each = _parse_optional_syllabus_each(rule_text)
-        normalization_applied = False
-        if syllabus_each is not None:
-            candidate_each = self._quantize_weight(syllabus_each)
-            expected_parent_weight = self._quantize_weight(candidate_each * Decimal(counted))
-            if abs(expected_parent_weight - parent_weight) <= RULE_WEIGHT_TOLERANCE:
-                effective_each = candidate_each
-            else:
-                effective_each = self._quantize_weight(parent_weight / Decimal(counted))
-                normalization_applied = True
-        else:
-            effective_each = self._quantize_weight(parent_weight / Decimal(counted))
-            normalization_applied = True
-        if effective_each <= Decimal("0"):
-            return
+            total_count = int(total_count_decimal)
+            normalized_unit_weight = float(parent_weight_decimal / divisor)
+            base_name = assessment.name[:-1] if assessment.name.endswith("s") else assessment.name
 
-        sanitized_parent_name = assessment.name.strip()
-        base_name = sanitized_parent_name
-        leading_count_match = LEADING_COUNT_REGEX.match(sanitized_parent_name)
-        if leading_count_match is not None:
-            total_from_name = int(leading_count_match.group(1))
-            if total_from_name == total_count:
-                base_name = leading_count_match.group(2).strip()
-                sanitized_parent_name = base_name
-
-        singular_base = base_name
-        lowered_base = base_name.lower()
-        if lowered_base.endswith("quizzes"):
-            singular_base = base_name[:-3]
-        elif lowered_base.endswith("ies") and len(base_name) > 3:
-            singular_base = base_name[:-3] + "y"
-        elif lowered_base.endswith("s") and len(base_name) > 1:
-            singular_base = base_name[:-1]
-
-        assessment.children = [
-            ExtractionAssessment(
-                name=f"{singular_base} {idx}",
-                weight=float(effective_each),
-                is_bonus=False,
-                children=[],
-                rule=None,
-                notes=None,
-            )
-            for idx in range(1, total_count + 1)
-        ]
-        assessment.name = sanitized_parent_name
-        if normalization_applied:
-            if assessment.notes:
-                if RULE_WEIGHT_NORMALIZATION_NOTE not in assessment.notes:
-                    assessment.notes = f"{assessment.notes.rstrip()} {RULE_WEIGHT_NORMALIZATION_NOTE}"
-            else:
-                assessment.notes = RULE_WEIGHT_NORMALIZATION_NOTE
+            synthesized_children = [
+                ExtractionAssessment(
+                    name=f"{base_name} {child_index}",
+                    weight=normalized_unit_weight,
+                    is_bonus=False,
+                    children=[],
+                    rule=None,
+                    total_count=None,
+                    effective_count=None,
+                    unit_weight=None,
+                    rule_type=None,
+                    notes=None,
+                )
+                for child_index in range(1, total_count + 1)
+            ]
+            assessment.children = synthesized_children
+            entry["children"] = [
+                {
+                    "name": child.name,
+                    "weight": child.weight,
+                    "is_bonus": child.is_bonus,
+                    "children": [],
+                    "rule": child.rule,
+                    "total_count": None,
+                    "effective_count": None,
+                    "unit_weight": None,
+                    "rule_type": None,
+                    "notes": None,
+                    "line_idx": 0,
+                    "normalized_name": self._normalize_assessment_name(child.name),
+                    "accepted_by_keyword": True,
+                    "depth": (entry.get("depth", 0) or 0) + 1,
+                    "unit_kind": "plain",
+                }
+                for child in synthesized_children
+            ]
 
     def _coerce_bool(self, value: Any, *, default: bool = False) -> bool:
         if value is None:
@@ -1489,32 +1534,62 @@ class ExtractionService:
         return {"year": year, "start": date(year, 9, 1), "end": date(year, 12, 31)}
 
     def _validate_structure(self, *, assessment_entries: list[dict[str, Any]]) -> dict[str, Any]:
+        def _error(*, code: str, message: str, path: str | None = None) -> dict[str, str]:
+            item = {"code": code, "message": message}
+            if path:
+                item["path"] = path
+            return item
+
+        def _first_error_by_code(code: str) -> dict[str, str]:
+            for item in errors:
+                if item["code"] == code:
+                    return item
+            return _error(code=code, message="")
+
         if not assessment_entries:
+            errors = [
+                _error(
+                    code="no_assessments",
+                    message="No assessments could be extracted",
+                    path="assessments",
+                )
+            ]
             return {
                 "valid": False,
-                "reason": "No assessments could be extracted",
-                "reason_code": "no_assessments",
+                "reason": errors[0]["message"],
+                "reason_code": errors[0]["code"],
                 "sum_non_bonus": Decimal("0"),
                 "has_duplicate_names": False,
                 "has_invalid_weights": False,
                 "has_invalid_names": False,
                 "warnings": [],
+                "errors": errors,
             }
 
         normalized_names: list[str] = []
+        child_normalized_names: list[str] = []
         has_invalid_names = False
-
         has_invalid_weights = False
         sum_non_bonus = Decimal("0.00")
         non_bonus_count = 0
         quantize_scale = Decimal("0.01")
         warnings: list[str] = []
+        errors: list[dict[str, str]] = []
+        parent_child_mismatch = False
+        depth_limit_exceeded = False
 
-        for entry in assessment_entries:
+        for index, entry in enumerate(assessment_entries):
             raw_name = entry.get("name")
             if not isinstance(raw_name, str) or not raw_name.strip():
                 has_invalid_names = True
                 normalized_name = ""
+                errors.append(
+                    _error(
+                        code="invalid_assessment_names",
+                        message="Assessment names must be non-empty",
+                        path=f"assessments[{index}].name",
+                    )
+                )
             else:
                 normalized_name = self._normalize_assessment_name(raw_name)
                 normalized_names.append(normalized_name)
@@ -1527,6 +1602,13 @@ class ExtractionService:
                 or weight_decimal > Decimal("100")
             ):
                 has_invalid_weights = True
+                errors.append(
+                    _error(
+                        code="invalid_weight_values",
+                        message="Assessment weights contain invalid values",
+                        path=f"assessments[{index}].weight",
+                    )
+                )
             if not entry["is_bonus"]:
                 non_bonus_count += 1
                 if not (
@@ -1541,67 +1623,347 @@ class ExtractionService:
                     )
                     sum_non_bonus += quantized_weight
 
+            raw_children = entry.get("children", [])
+            if raw_children is None:
+                raw_children = []
+            if not isinstance(raw_children, list):
+                has_invalid_names = True
+                errors.append(
+                    _error(
+                        code="invalid_children_type",
+                        message="Assessment children must be a list",
+                        path=f"assessments[{index}].children",
+                    )
+                )
+                continue
+
+            if not raw_children:
+                continue
+
+            tolerance = Decimal("0.5")
+            child_weight_sum = Decimal("0.00")
+            child_weight_values: list[Decimal] = []
+            for child_index, child in enumerate(raw_children):
+                if not isinstance(child, dict):
+                    has_invalid_names = True
+                    errors.append(
+                        _error(
+                            code="invalid_child_assessment",
+                            message="Each child assessment must be an object",
+                            path=f"assessments[{index}].children[{child_index}]",
+                        )
+                    )
+                    continue
+
+                raw_child_name = child.get("name")
+                if not isinstance(raw_child_name, str) or not raw_child_name.strip():
+                    has_invalid_names = True
+                    errors.append(
+                        _error(
+                            code="invalid_assessment_names",
+                            message="Assessment names must be non-empty",
+                            path=f"assessments[{index}].children[{child_index}].name",
+                        )
+                    )
+                else:
+                    child_normalized_names.append(self._normalize_assessment_name(raw_child_name))
+
+                child_weight_decimal = self._to_decimal(child.get("weight"))
+                if (
+                    child_weight_decimal.is_nan()
+                    or not child_weight_decimal.is_finite()
+                    or child_weight_decimal < Decimal("0")
+                    or child_weight_decimal > Decimal("100")
+                ):
+                    has_invalid_weights = True
+                    errors.append(
+                        _error(
+                            code="invalid_weight_values",
+                            message="Assessment weights contain invalid values",
+                            path=f"assessments[{index}].children[{child_index}].weight",
+                        )
+                    )
+                else:
+                    quantized_child_weight = child_weight_decimal.quantize(
+                        quantize_scale,
+                        rounding=ROUND_HALF_UP,
+                    )
+                    child_weight_sum += quantized_child_weight
+                    child_weight_values.append(quantized_child_weight)
+
+                grand_children = child.get("children", [])
+                if grand_children is None:
+                    grand_children = []
+                if not isinstance(grand_children, list):
+                    depth_limit_exceeded = True
+                    errors.append(
+                        _error(
+                            code="depth_limit_exceeded",
+                            message="Assessment nesting depth cannot exceed 2",
+                            path=f"assessments[{index}].children[{child_index}].children",
+                        )
+                    )
+                elif grand_children:
+                    depth_limit_exceeded = True
+                    errors.append(
+                        _error(
+                            code="depth_limit_exceeded",
+                            message="Assessment nesting depth cannot exceed 2",
+                            path=f"assessments[{index}].children[{child_index}].children",
+                        )
+                    )
+
+            if (
+                not (
+                    weight_decimal.is_nan()
+                    or not weight_decimal.is_finite()
+                    or weight_decimal < Decimal("0")
+                    or weight_decimal > Decimal("100")
+                )
+            ):
+                quantized_parent_weight = weight_decimal.quantize(
+                    quantize_scale,
+                    rounding=ROUND_HALF_UP,
+                )
+                rule_type = entry.get("rule_type")
+                fallback_effective_count: Decimal | None = None
+                if rule_type not in {"pure_multiplicative", "best_of"}:
+                    raw_rule_text = entry.get("rule")
+                    if isinstance(raw_rule_text, str):
+                        best_match = BEST_OF_REGEX.search(raw_rule_text)
+                        if best_match is not None:
+                            rule_type = "best_of"
+                            try:
+                                fallback_effective_count = Decimal(best_match.group(1))
+                            except (InvalidOperation, TypeError, ValueError):
+                                fallback_effective_count = None
+                if rule_type == "pure_multiplicative":
+                    total_count_decimal = self._to_decimal(entry.get("total_count"))
+                    if (
+                        not child_weight_values
+                        or total_count_decimal <= Decimal("0")
+                        or not total_count_decimal.is_finite()
+                        or total_count_decimal != total_count_decimal.to_integral_value()
+                    ):
+                        parent_child_mismatch = True
+                        errors.append(
+                            _error(
+                                code="rule_based_parent_child_weight_mismatch",
+                                message=(
+                                    "Rule-based parent assessment child weights do not align "
+                                    "with parent weight"
+                                ),
+                                path=f"assessments[{index}]",
+                            )
+                        )
+                    else:
+                        expected_parent_weight = self._quantize_weight(
+                            total_count_decimal * child_weight_values[0]
+                        )
+                        if abs(expected_parent_weight - quantized_parent_weight) > tolerance:
+                            parent_child_mismatch = True
+                            errors.append(
+                                _error(
+                                    code="rule_based_parent_child_weight_mismatch",
+                                    message=(
+                                        "Rule-based parent assessment child weights do not align "
+                                        "with parent weight"
+                                    ),
+                                    path=f"assessments[{index}]",
+                                )
+                            )
+                elif rule_type == "best_of":
+                    effective_count_decimal = self._to_decimal(entry.get("effective_count"))
+                    if (
+                        (effective_count_decimal <= Decimal("0") or not effective_count_decimal.is_finite())
+                        and fallback_effective_count is not None
+                    ):
+                        effective_count_decimal = fallback_effective_count
+                    if (
+                        not child_weight_values
+                        or effective_count_decimal <= Decimal("0")
+                        or not effective_count_decimal.is_finite()
+                        or effective_count_decimal != effective_count_decimal.to_integral_value()
+                    ):
+                        parent_child_mismatch = True
+                        errors.append(
+                            _error(
+                                code="rule_based_parent_child_weight_mismatch",
+                                message=(
+                                    "Rule-based parent assessment child weights do not align "
+                                    "with parent weight"
+                                ),
+                                path=f"assessments[{index}]",
+                            )
+                        )
+                    else:
+                        expected_parent_weight = self._quantize_weight(
+                            effective_count_decimal * child_weight_values[0]
+                        )
+                        if abs(expected_parent_weight - quantized_parent_weight) > tolerance:
+                            parent_child_mismatch = True
+                            errors.append(
+                                _error(
+                                    code="rule_based_parent_child_weight_mismatch",
+                                    message=(
+                                        "Rule-based parent assessment child weights do not align "
+                                        "with parent weight"
+                                    ),
+                                    path=f"assessments[{index}]",
+                                )
+                            )
+                elif abs(child_weight_sum - quantized_parent_weight) > tolerance:
+                    parent_child_mismatch = True
+                    errors.append(
+                        _error(
+                            code="parent_child_weight_mismatch",
+                            message="Parent assessment weight must equal sum of child assessment weights",
+                            path=f"assessments[{index}]",
+                        )
+                    )
+
         name_counts = Counter(normalized_names)
-        has_duplicate_names = any(count > 1 for count in name_counts.values())
+        has_top_level_duplicates = any(count > 1 for count in name_counts.values())
+        has_duplicate_representation = bool(set(normalized_names) & set(child_normalized_names))
+        has_duplicate_names = has_top_level_duplicates or has_duplicate_representation
 
         if non_bonus_count == 0:
+            errors.append(
+                _error(
+                    code="bonus_only_structure",
+                    message="Bonus-only assessment structures are invalid",
+                )
+            )
+            first = _first_error_by_code("bonus_only_structure")
             return {
                 "valid": False,
-                "reason": "Bonus-only assessment structures are invalid",
-                "reason_code": "bonus_only_structure",
+                "reason": first["message"],
+                "reason_code": first["code"],
                 "sum_non_bonus": sum_non_bonus,
                 "has_duplicate_names": has_duplicate_names,
                 "has_invalid_weights": has_invalid_weights,
                 "has_invalid_names": has_invalid_names,
                 "warnings": warnings,
+                "errors": errors,
             }
 
         if has_invalid_names:
+            first = _first_error_by_code("invalid_assessment_names")
             return {
                 "valid": False,
-                "reason": "Assessment names must be non-empty",
-                "reason_code": "invalid_assessment_names",
+                "reason": first["message"],
+                "reason_code": first["code"],
                 "sum_non_bonus": sum_non_bonus,
                 "has_duplicate_names": has_duplicate_names,
                 "has_invalid_weights": has_invalid_weights,
                 "has_invalid_names": has_invalid_names,
                 "warnings": warnings,
+                "errors": errors,
             }
 
-        if has_duplicate_names:
+        if has_top_level_duplicates:
+            errors.append(
+                _error(
+                    code="duplicate_assessment_names",
+                    message="Duplicate assessment names detected",
+                )
+            )
+            first = _first_error_by_code("duplicate_assessment_names")
             return {
                 "valid": False,
-                "reason": "Duplicate assessment names detected",
-                "reason_code": "duplicate_assessment_names",
+                "reason": first["message"],
+                "reason_code": first["code"],
                 "sum_non_bonus": sum_non_bonus,
                 "has_duplicate_names": has_duplicate_names,
                 "has_invalid_weights": has_invalid_weights,
                 "has_invalid_names": has_invalid_names,
                 "warnings": warnings,
+                "errors": errors,
+            }
+
+        if has_duplicate_representation:
+            errors.append(
+                _error(
+                    code="duplicate_parent_child_representation",
+                    message="Child assessments must not be duplicated as top-level assessments",
+                )
+            )
+            first = _first_error_by_code("duplicate_parent_child_representation")
+            return {
+                "valid": False,
+                "reason": first["message"],
+                "reason_code": first["code"],
+                "sum_non_bonus": sum_non_bonus,
+                "has_duplicate_names": has_duplicate_names,
+                "has_invalid_weights": has_invalid_weights,
+                "has_invalid_names": has_invalid_names,
+                "warnings": warnings,
+                "errors": errors,
             }
 
         if has_invalid_weights:
+            first = _first_error_by_code("invalid_weight_values")
             return {
                 "valid": False,
-                "reason": "Assessment weights contain invalid values",
-                "reason_code": "invalid_weight_values",
+                "reason": first["message"],
+                "reason_code": first["code"],
                 "sum_non_bonus": sum_non_bonus,
                 "has_duplicate_names": has_duplicate_names,
                 "has_invalid_weights": has_invalid_weights,
                 "has_invalid_names": has_invalid_names,
                 "warnings": warnings,
+                "errors": errors,
             }
 
         if abs(sum_non_bonus - Decimal("100.00")) > Decimal("0.01"):
+            errors.append(
+                _error(
+                    code="weight_sum_not_100",
+                    message="Weight sum does not equal 100",
+                )
+            )
+            first = _first_error_by_code("weight_sum_not_100")
             return {
                 "valid": False,
-                "reason": "Weight sum does not equal 100",
-                "reason_code": "weight_sum_not_100",
+                "reason": first["message"],
+                "reason_code": first["code"],
                 "sum_non_bonus": sum_non_bonus,
                 "has_duplicate_names": has_duplicate_names,
                 "has_invalid_weights": has_invalid_weights,
                 "has_invalid_names": has_invalid_names,
                 "warnings": warnings,
+                "errors": errors,
+            }
+
+        if depth_limit_exceeded:
+            first = _first_error_by_code("depth_limit_exceeded")
+            return {
+                "valid": False,
+                "reason": first["message"],
+                "reason_code": first["code"],
+                "sum_non_bonus": sum_non_bonus,
+                "has_duplicate_names": has_duplicate_names,
+                "has_invalid_weights": has_invalid_weights,
+                "has_invalid_names": has_invalid_names,
+                "warnings": warnings,
+                "errors": errors,
+            }
+
+        if parent_child_mismatch:
+            if _first_error_by_code("parent_child_weight_mismatch")["message"]:
+                first = _first_error_by_code("parent_child_weight_mismatch")
+            else:
+                first = _first_error_by_code("rule_based_parent_child_weight_mismatch")
+            return {
+                "valid": False,
+                "reason": first["message"],
+                "reason_code": first["code"],
+                "sum_non_bonus": sum_non_bonus,
+                "has_duplicate_names": has_duplicate_names,
+                "has_invalid_weights": has_invalid_weights,
+                "has_invalid_names": has_invalid_names,
+                "warnings": warnings,
+                "errors": errors,
             }
 
         return {
@@ -1613,6 +1975,7 @@ class ExtractionService:
             "has_invalid_weights": has_invalid_weights,
             "has_invalid_names": has_invalid_names,
             "warnings": warnings,
+            "errors": [],
         }
 
     def _compute_confidence(
