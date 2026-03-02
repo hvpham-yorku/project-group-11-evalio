@@ -1,5 +1,10 @@
+import sys
+import types
+
 from app.services.extraction_service import ExtractionService
+from app.services.grading_section_filter import GradingSectionFilter
 from app.services.llm_extraction_client import LlmExtractionClient, LlmExtractionError
+from app.models_extraction import ExtractionAssessment
 
 
 class _StaticLlmClient:
@@ -49,6 +54,38 @@ class _SequentialOpenAiClient:
         self.responses = _SequentialResponses(output_texts)
 
 
+class _TrackingLlmClient:
+    def __init__(self):
+        self.call_count = 0
+
+    def extract(self, text: str):
+        _ = text
+        self.call_count += 1
+        return {"assessments": [], "deadlines": []}
+
+
+class _FakePdfPage:
+    def __init__(self, text: str):
+        self._text = text
+
+    def extract_text(self):
+        return self._text
+
+
+class _FakePdfContext:
+    def __init__(self, pages: list[_FakePdfPage]):
+        self.pages = pages
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        _ = exc_type
+        _ = exc
+        _ = tb
+        return False
+
+
 def _extract_txt(service: ExtractionService, text: str, term: str | None = "W26"):
     return service.extract(
         filename="outline.txt",
@@ -69,6 +106,95 @@ def test_ocr_dependencies_missing_is_handled_gracefully(monkeypatch):
     assert any("ocr_dependencies_missing" in warning for warning in result["parse_warnings"])
 
 
+def test_pdfplumber_exception_attempts_ocr(monkeypatch):
+    service = ExtractionService(llm_client=_StaticLlmClient(payload={"assessments": [], "deadlines": []}))
+
+    def _raise_open(_stream):
+        raise RuntimeError("pdfplumber blew up")
+
+    monkeypatch.setitem(sys.modules, "pdfplumber", types.SimpleNamespace(open=_raise_open))
+
+    ocr_called = {"value": False}
+
+    def _fake_ocr(_file_bytes):
+        ocr_called["value"] = True
+        return {
+            "text": "OCR text",
+            "available": True,
+            "error": None,
+            "parse_warnings": [],
+        }
+
+    monkeypatch.setattr(service, "_extract_text_ocr", _fake_ocr)
+    result = service._extract_text_pdf(b"pdf-bytes")
+
+    assert ocr_called["value"] is True
+    assert result["text"] == "OCR text"
+    assert any("pdf_parse_error" in warning for warning in result["parse_warnings"])
+
+
+def test_pdf_long_text_without_percent_does_not_attempt_ocr(monkeypatch):
+    service = ExtractionService(llm_client=_StaticLlmClient(payload={"assessments": [], "deadlines": []}))
+    long_text = "final exam details " * 30  # > 400 chars and no percent symbols
+
+    def _open_pdf(_stream):
+        return _FakePdfContext([_FakePdfPage(long_text)])
+
+    monkeypatch.setitem(sys.modules, "pdfplumber", types.SimpleNamespace(open=_open_pdf))
+
+    ocr_called = {"value": False}
+
+    def _fake_ocr(_file_bytes):
+        ocr_called["value"] = True
+        return {
+            "text": "should-not-be-used",
+            "available": True,
+            "error": None,
+            "parse_warnings": [],
+        }
+
+    monkeypatch.setattr(service, "_extract_text_ocr", _fake_ocr)
+    result = service._extract_text_pdf(b"pdf-bytes")
+
+    assert ocr_called["value"] is False
+    assert result["text"] == long_text.strip()
+    assert result["ocr_used"] is False
+
+
+def test_pdf_primary_and_ocr_empty_returns_failure_without_llm(monkeypatch):
+    llm_client = _TrackingLlmClient()
+    service = ExtractionService(llm_client=llm_client)
+
+    def _raise_open(_stream):
+        raise RuntimeError("pdf parser failed")
+
+    monkeypatch.setitem(sys.modules, "pdfplumber", types.SimpleNamespace(open=_raise_open))
+    monkeypatch.setattr(
+        service,
+        "_extract_text_ocr",
+        lambda _file_bytes: {
+            "text": "",
+            "available": False,
+            "error": "OCR unavailable",
+            "parse_warnings": ["ocr_dependencies_missing:OCR unavailable"],
+        },
+    )
+
+    response = service.extract(
+        filename="outline.pdf",
+        content_type="application/pdf",
+        file_bytes=b"pdf-bytes",
+        term="W26",
+    )
+
+    assert response.structure_valid is False
+    assert response.assessments == []
+    assert response.deadlines == []
+    assert response.diagnostics.failure_reason == "No text could be extracted from the file"
+    assert "text_extraction_failed" in response.diagnostics.parse_warnings
+    assert llm_client.call_count == 0
+
+
 def test_llm_valid_structure_passes():
     llm_payload = {
         "assessments": [
@@ -85,6 +211,10 @@ def test_llm_valid_structure_passes():
     assert [a.name for a in response.assessments] == ["Assignment", "Midterm", "Final Exam"]
     assert response.diagnostics.method == "llm"
     assert response.diagnostics.deterministic_failed_validation is False
+    assert any(
+        warning in {"filtered_text_used:true", "filtered_text_used:false"}
+        for warning in response.diagnostics.parse_warnings
+    )
 
 
 def test_llm_valid_cumulative_structure_passes():
@@ -272,6 +402,393 @@ def test_missing_or_blank_rule_maps_to_none():
     assert assignment.rule is None
     assert midterm.rule is None
     assert final.rule is None
+
+
+def test_best_of_children_generated():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "11 Quizzes",
+                "weight": "15%",
+                "is_bonus": False,
+                "rule": "Best 10 of 11 quizzes count, each worth 1.5%",
+            },
+            {"name": "Midterm", "weight": 35, "is_bonus": False},
+            {"name": "Final", "weight": 50, "is_bonus": False},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    parent = next(a for a in response.assessments if a.name == "Quizzes")
+    assert len(parent.children) == 11
+    assert parent.children[0].name == "Quiz 1"
+    assert parent.children[0].weight == 1.5
+    assert parent.weight == 15.0
+    assert sum(child.weight for child in parent.children) > parent.weight
+    assert parent.notes is None
+
+
+def test_best_of_without_each_percent_applies_normalization():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "11 Quizzes",
+                "weight": "15%",
+                "is_bonus": False,
+                "rule": "Best 10 of 11 quizzes count",
+            },
+            {"name": "Midterm", "weight": 35, "is_bonus": False},
+            {"name": "Final", "weight": 50, "is_bonus": False},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    parent = next(a for a in response.assessments if a.name == "Quizzes")
+    assert len(parent.children) == 11
+    assert parent.children[0].weight == 1.5
+    assert parent.weight == 15.0
+    assert parent.notes == "Weights normalized due to rule-based grading."
+
+
+def test_drop_lowest_explicit_each_correct_math():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "5 Labs",
+                "weight": "20%",
+                "is_bonus": False,
+                "rule": "Drop lowest 1 of 5 labs, each worth 5%",
+            },
+            {"name": "Midterm", "weight": 30, "is_bonus": False},
+            {"name": "Final", "weight": 50, "is_bonus": False},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    parent = next(a for a in response.assessments if a.name == "Labs")
+    assert len(parent.children) == 5
+    assert parent.children[0].name == "Lab 1"
+    assert parent.children[0].weight == 5.0
+    assert parent.weight == 20.0
+    assert parent.notes is None
+
+
+def test_drop_lowest_conflicting_each_applies_normalization():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "5 Labs",
+                "weight": "20%",
+                "is_bonus": False,
+                "rule": "Drop lowest 1 of 5 labs, each worth 3%",
+            },
+            {"name": "Midterm", "weight": 30, "is_bonus": False},
+            {"name": "Final", "weight": 50, "is_bonus": False},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    parent = next(a for a in response.assessments if a.name == "Labs")
+    assert len(parent.children) == 5
+    assert parent.children[0].weight == 5.0
+    assert parent.weight == 20.0
+    assert parent.notes == "Weights normalized due to rule-based grading."
+    assert sum(child.weight for child in parent.children) > parent.weight
+
+
+def test_rule_child_generation_does_not_mutate_parent_weight():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "8 Assignments",
+                "weight": "16%",
+                "is_bonus": False,
+                "rule": "Best 6 of 8 assignments count, each worth 2%",
+            },
+            {"name": "Midterm", "weight": 34, "is_bonus": False},
+            {"name": "Final", "weight": 50, "is_bonus": False},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    parent = next(a for a in response.assessments if a.name == "Assignments")
+    assert parent.weight == 16.0
+    assert len(parent.children) == 8
+    assert parent.children[0].weight == 2.67
+    assert parent.notes == "Weights normalized due to rule-based grading."
+    assert sum(child.weight for child in parent.children) > parent.weight
+
+
+def test_labs_ranges_remain_separate_assessments():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "Labs 2-6",
+                "weight": "20%",
+                "is_bonus": False,
+                "rule": "Best 4 of 5 labs count, each worth 5%",
+            },
+            {
+                "name": "Labs 7-9",
+                "weight": "15%",
+                "is_bonus": False,
+                "rule": "Best 2 of 3 labs count, each worth 7.5%",
+            },
+            {"name": "Final", "weight": 65, "is_bonus": False},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    labs_2_6 = next(a for a in response.assessments if a.name == "Labs 2-6")
+    labs_7_9 = next(a for a in response.assessments if a.name == "Labs 7-9")
+    assert len(labs_2_6.children) == 5
+    assert len(labs_7_9.children) == 3
+    assert labs_2_6.weight == 20.0
+    assert labs_7_9.weight == 15.0
+
+
+def test_repeated_rule_generation_clears_previous_children():
+    service = ExtractionService(llm_client=_StaticLlmClient(payload={"assessments": [], "deadlines": []}))
+    assessment = ExtractionAssessment(
+        name="5 Labs",
+        weight=20.0,
+        is_bonus=False,
+        children=[],
+        rule="Drop lowest 1 of 5 labs, each worth 5%",
+        notes=None,
+    )
+
+    service._maybe_generate_best_of_children(assessment)
+    assert len(assessment.children) == 5
+
+    assessment.rule = "Best 2 of 3 labs count, each worth 10%"
+    service._maybe_generate_best_of_children(assessment)
+    assert len(assessment.children) == 3
+
+
+def test_generic_assignment_case():
+    llm_payload = {
+        "assessments": [
+            {
+                "name": "8 Assignments",
+                "weight": "16%",
+                "is_bonus": False,
+                "rule": "Best 6 of 8 assignments count, each worth 2%",
+            },
+            {"name": "Midterm", "weight": 34, "is_bonus": False},
+            {"name": "Final", "weight": 50, "is_bonus": False},
+        ],
+        "deadlines": [],
+    }
+    service = ExtractionService(llm_client=_StaticLlmClient(payload=llm_payload))
+    response = _extract_txt(service, "ignored by mocked llm")
+
+    assert response.structure_valid is True
+    parent = next(a for a in response.assessments if a.name == "Assignments")
+    assert len(parent.children) == 8
+    assert parent.children[0].name == "Assignment 1"
+    assert parent.children[0].weight == 2.67
+
+
+def test_grading_filter_reduces_text_when_keywords_present():
+    filler_top = "\n".join(f"intro line {i}" for i in range(200))
+    grading_block = "\n".join(
+        [
+            "Grading Policy",
+            "Assignment 20%",
+            "Midterm 30%",
+            "Final Exam 50%",
+        ]
+    )
+    filler_bottom = "\n".join(f"policy line {i}" for i in range(200))
+    text = f"{filler_top}\n{grading_block}\n{filler_bottom}"
+
+    filtered_text, filtered_used = GradingSectionFilter().filter(text)
+
+    assert filtered_used is True
+    assert len(filtered_text) < len(text)
+    assert "Grading Policy" in filtered_text
+    assert "Assignment 20%" in filtered_text
+
+
+def test_grading_filter_fallback_when_no_keywords():
+    text = "\n".join(f"random narrative line {i}" for i in range(50))
+
+    filtered_text, filtered_used = GradingSectionFilter().filter(text)
+
+    assert filtered_used is False
+    assert filtered_text == text
+
+
+def test_grading_filter_anchors_small_section_without_semantic_validation():
+    text = "\n".join(
+        [
+            "Course information",
+            "Grading",
+            "Attendance policy details",
+        ]
+    )
+
+    filtered_text, filtered_used = GradingSectionFilter().filter(text)
+
+    assert filtered_used is True
+    assert "Grading" in filtered_text
+    assert "Attendance policy details" in filtered_text
+
+
+def test_anchor_rejects_sentence_like_line():
+    text = "\n".join(
+        [
+            "",
+            "Students will be evaluated using quizzes and assignments.",
+            "",
+            "Random syllabus details without grading table",
+            "More policy statements only",
+        ]
+    )
+
+    filtered_text, filtered_used = GradingSectionFilter().filter(text)
+
+    assert filtered_used is False
+    assert filtered_text == text
+
+
+def test_anchor_detects_header_without_following_blank_line():
+    text = "\n".join(
+        [
+            "",
+            "Grading Policy",
+            "The grade will count the assessments listed below.",
+            "",
+            "Quiz 10%",
+            "Exam 40%",
+            "Final 50%",
+            "Week 1 introduction",
+            "Week 2 review",
+            "Week 3 quiz prep",
+        ]
+    )
+
+    filtered_text, filtered_used = GradingSectionFilter().filter(text)
+
+    assert filtered_used is True
+    assert "Grading Policy" in filtered_text
+    assert "Quiz 10%" in filtered_text
+    assert "Exam 40%" in filtered_text
+    assert "Final 50%" in filtered_text
+
+
+def test_plain_number_not_weight_without_grading_context():
+    text = "\n".join(
+        [
+            "",
+            "Grading",
+            "",
+            "Task 10",
+            "Week 10",
+            "Milestone 20",
+            "Project final notes",
+        ]
+    )
+
+    filtered_text, filtered_used = GradingSectionFilter().filter(text)
+
+    assert filtered_used is True
+    assert "Grading" in filtered_text
+    assert "Milestone 20" in filtered_text
+
+
+def test_anchor_prefix_with_allowed_delimiter_matches():
+    text = "\n".join(
+        [
+            "Intro",
+            "Grading: policy details",
+            "Assignment 20%",
+            "Midterm 30%",
+            "Final 50%",
+        ]
+    )
+
+    filtered_text, filtered_used = GradingSectionFilter().filter(text)
+
+    assert filtered_used is True
+    assert "Grading: policy details" in filtered_text
+
+
+def test_overlapping_anchor_windows_are_merged():
+    lines = [f"line {i}" for i in range(80)]
+    lines[20] = "Grading"
+    lines[30] = "Evaluation"
+    text = "\n".join(lines)
+
+    filtered_text, filtered_used = GradingSectionFilter().filter(text)
+
+    assert filtered_used is True
+    assert "line 15" in filtered_text
+    assert "line 60" in filtered_text
+
+
+def test_filter_fallback_when_anchor_not_exact_phrase():
+    text = "\n".join(
+        [
+            "Course details",
+            "Course Grading Breakdown",
+            "Assignment 20%",
+            "Midterm 30%",
+            "Final 50%",
+        ]
+    )
+
+    filtered_text, filtered_used = GradingSectionFilter().filter(text)
+
+    assert filtered_used is False
+    assert filtered_text == text
+
+
+def test_grading_filter_table_mode_uses_table_rows_only_for_sum():
+    filler_top = "\n".join(f"intro line {i}" for i in range(120))
+    grading_block = "\n".join(
+        [
+            "Grading Policy",
+            "S. No. Assessment %age Due Date/ Time",
+            "1 11 Quizzes 15 10-02-2025 11:59",
+            "2 9 Labs 15 17-02-2025 11:59",
+            "3 Lab Test 15 24-02-2025 11:59",
+            "4 Midterm Exam 20 10-03-2025 12:00",
+            "5 Final Exam 35 25-04-2025 09:30",
+            "Rules:",
+            "- best 10 of 11 quizzes count",
+            "- Labs 7 to 9 have additional prep checks",
+            "- Lab 1 demo required in week 2",
+        ]
+    )
+    filler_bottom = "\n".join(f"admin line {i}" for i in range(120))
+    text = f"{filler_top}\n{grading_block}\n{filler_bottom}"
+
+    filtered_text, filtered_used = GradingSectionFilter().filter(text)
+
+    assert filtered_used is True
+    assert filtered_text != text
+    assert "S. No. Assessment %age Due Date/ Time" in filtered_text
+    assert "Final Exam 35" in filtered_text
 
 
 def test_less_than_three_non_bonus_assessments_passes_with_relaxed_validator():

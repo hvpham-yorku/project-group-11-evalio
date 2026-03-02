@@ -1,50 +1,40 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, Plus, CheckCircle2 } from "lucide-react";
-import { createCourse, listCourses, updateCourseWeights } from "@/lib/api";
+import { CheckCircle2, ChevronDown } from "lucide-react";
+import { confirmExtraction } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
 
+type ExtractedAssessment = {
+  name: string;
+  weight: number;
+  is_bonus?: boolean;
+  rule?: string | null;
+  rule_type?: string | null;
+  rule_config?: Record<string, unknown> | null;
+  children?: ExtractedAssessment[];
+};
+
 export function StructureStep() {
   const router = useRouter();
-  const [assessments, setAssessments] = useState([
-    { id: 1, name: "Midterm Exam", weight: "30" },
-    { id: 2, name: "Final Exam", weight: "40" },
-  ]);
+  const [courseName, setCourseName] = useState("Untitled Course");
+  const [term, setTerm] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const { courseId, setCourseId, ensureCourseIdFromList } = useSetupCourse();
+  const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>({});
+  const { setCourseId, extractionResult } = useSetupCourse();
 
-  useEffect(() => {
-    const loadCourse = async () => {
-      try {
-        const courses = await listCourses();
-        const resolvedCourseId = ensureCourseIdFromList(courses);
-        if (!resolvedCourseId) return;
-        const activeCourse = courses.find((course) => course.course_id === resolvedCourseId);
-        if (activeCourse && activeCourse.assessments.length > 0) {
-          setAssessments(
-            activeCourse.assessments.map((a, i) => ({
-              id: i + 1,
-              name: a.name,
-              weight: String(a.weight),
-            }))
-          );
-        }
-      } catch (e) {
-        setError(getApiErrorMessage(e, "Failed to load course."));
-      }
-    };
-
-    loadCourse();
-  }, [ensureCourseIdFromList]);
+  const assessments = useMemo<ExtractedAssessment[]>(
+    () => (Array.isArray(extractionResult?.assessments) ? extractionResult.assessments : []),
+    [extractionResult]
+  );
 
   const totalWeight = useMemo(
     () =>
       assessments.reduce((sum, item) => {
-        const parsed = Number.parseFloat(item.weight);
+        const parsed = Number(item.weight);
         return sum + (Number.isFinite(parsed) ? parsed : 0);
       }, 0),
     [assessments]
@@ -83,139 +73,134 @@ export function StructureStep() {
   }, [totalWeight]);
 
 
-  const handleNameChange = (id: number, name: string) => {
-    setAssessments((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, name } : item))
-    );
-  };
-
-  const handleWeightChange = (id: number, value: string) => {
-    setAssessments((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, weight: value } : item
-      )
-    );
-  };
-
-  const handleRemove = (id: number) => {
-    setAssessments((prev) => prev.filter((item) => item.id !== id));
-  };
-
-  const handleAdd = () => {
-    setAssessments((prev) => [
-      ...prev,
-      { id: (prev[prev.length - 1]?.id ?? 0) + 1, name: "", weight: "" },
-    ]);
-  };
-
   const handleContinue = async () => {
     setError("");
-    const cleaned = assessments.map((a) => ({
-      name: a.name.trim(),
-      weight: Number.parseFloat(a.weight),
-    }));
-
-    if (cleaned.some((a) => !a.name || !Number.isFinite(a.weight))) {
-      setError("Assessment names and weights are required.");
+    if (!extractionResult) {
+      setError("Please upload an outline first.");
       return;
     }
-    if (Math.round(totalWeight * 100) / 100 !== 100) {
-      setError("Total assessment weight must equal 100.");
-      return;
-    }
-
     try {
       setSaving(true);
-      if (courseId === null) {
-        const response = await createCourse({
-          name: "Untitled Course",
-          term: null,
-          assessments: cleaned.map((a) => ({
-            ...a,
-            raw_score: null,
-            total_score: null,
-          })),
-        });
-        setCourseId(response.course_id);
-      } else {
-        await updateCourseWeights(courseId, { assessments: cleaned });
-      }
+      const response = await confirmExtraction({
+        course_name: courseName.trim() || "Untitled Course",
+        term: term.trim() ? term.trim() : null,
+        extraction_result: extractionResult,
+      });
+      setCourseId(response.course_id);
       router.push("/setup/grades");
     } catch (e) {
-      setError(getApiErrorMessage(e, "Failed to save structure."));
+      setError(getApiErrorMessage(e, "Failed to confirm extracted structure."));
     } finally {
       setSaving(false);
     }
   };
 
+  const renderAssessment = (assessment: ExtractedAssessment, depth = 0, nodeKey = "root") => {
+    const children = Array.isArray(assessment.children) ? assessment.children : [];
+    const hasChildren = children.length > 0;
+    const expanded = !!expandedByKey[nodeKey];
+    const ruleLabel =
+      (typeof assessment.rule_type === "string" && assessment.rule_type) ||
+      (typeof assessment.rule === "string" && assessment.rule) ||
+      "";
+
+    return (
+      <div key={nodeKey} className="space-y-2">
+        <button
+          type="button"
+          className="bg-[#F9F8F6] p-4 rounded-2xl border border-gray-100"
+          style={{ marginLeft: `${depth * 20}px` }}
+          onClick={() => {
+            if (!hasChildren) return;
+            setExpandedByKey((prev) => ({ ...prev, [nodeKey]: !prev[nodeKey] }));
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              {hasChildren ? (
+                <ChevronDown
+                  size={16}
+                  className={`text-gray-500 transition-transform ${expanded ? "rotate-180" : "rotate-0"}`}
+                />
+              ) : null}
+              <p className="text-sm text-gray-800 font-medium">{assessment.name}</p>
+            </div>
+            <p className="text-sm text-gray-600">{assessment.weight}%</p>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            {assessment.is_bonus ? (
+              <span className="px-2 py-1 rounded-full bg-green-50 text-green-700 border border-green-200">
+                Bonus
+              </span>
+            ) : null}
+            {ruleLabel ? (
+              <span className="px-2 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200">
+                Rule: {ruleLabel}
+              </span>
+            ) : null}
+            {hasChildren ? (
+              <span className="px-2 py-1 rounded-full bg-gray-50 text-gray-700 border border-gray-200">
+                {expanded ? "Collapse" : "Expand"}
+              </span>
+            ) : null}
+          </div>
+        </button>
+        {hasChildren && expanded
+          ? children.map((child, index) => renderAssessment(child, depth + 1, `${nodeKey}-${index}`))
+          : null}
+      </div>
+    );
+  };
+
+  if (!extractionResult) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 pb-20">
+        <h2 className="text-2xl font-bold text-gray-800">Course Structure</h2>
+        <p className="mt-2 text-gray-500 text-sm leading-relaxed">
+          No extracted outline is available. Upload a course outline first.
+        </p>
+        <button
+          onClick={() => router.push("/setup/upload")}
+          className="mt-8 bg-[#5D737E] text-white py-3 px-6 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition"
+        >
+          Go to Upload
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-4 pb-20">
       <h2 className="text-2xl font-bold text-gray-800">Course Structure</h2>
       <p className="mt-2 text-gray-500 text-sm leading-relaxed">
-        Review and adjust your grading components. We&apos;ll watch for
-        duplicates and make sure everything adds up.
+        Review your extracted grading components and confirm to save.
       </p>
 
       {/* MAIN EDITOR CARD */}
       <div className="mt-8 bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Course name</label>
+            <input
+              type="text"
+              value={courseName}
+              onChange={(e) => setCourseName(e.target.value)}
+              className="w-full p-3 rounded-xl border border-gray-200 bg-white text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Term (optional)</label>
+            <input
+              type="text"
+              value={term}
+              onChange={(e) => setTerm(e.target.value)}
+              className="w-full p-3 rounded-xl border border-gray-200 bg-white text-sm"
+              placeholder="W26"
+            />
+          </div>
+        </div>
         <div className="space-y-6">
-          {assessments.map((item) => (
-            <div
-              key={item.id}
-              className="bg-[#F9F8F6] p-6 rounded-2xl relative border border-gray-100"
-            >
-              {/* Name and Trash Row */}
-              <div className="flex gap-4 items-center mb-4">
-                <input
-                  type="text"
-                  value={item.name}
-                  onChange={(e) => handleNameChange(item.id, e.target.value)}
-                  className="flex-1 p-3 rounded-xl border border-gray-200 bg-white text-sm"
-                />
-                <button
-                  onClick={() => handleRemove(item.id)}
-                  className="text-gray-300 hover:text-red-400 transition"
-                >
-                  <Trash2 size={20} />
-                </button>
-              </div>
-
-              {/* Slider and Percentage Row */}
-              <div className="flex items-center gap-6">
-                <div className="flex-1 bg-gray-200 h-2 rounded-full relative">
-                  <div
-                    className="bg-slate-500 h-full rounded-full"
-                    style={{
-                      width: `${Math.max(
-                        0,
-                        Math.min(Number.parseFloat(item.weight) || 0, 100)
-                      )}%`,
-                    }}
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-500 font-medium">
-                    {(Number.parseFloat(item.weight) || 0)}%
-                  </span>
-                  <input
-                    type="number"
-                    value={item.weight}
-                    onChange={(e) => handleWeightChange(item.id, e.target.value)}
-                    className="w-16 p-2 text-center rounded-xl border border-gray-200 bg-white text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {/* ADD ASSESSMENT BUTTON */}
-          <button
-            onClick={handleAdd}
-            className="w-full py-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 flex items-center justify-center gap-2 hover:bg-gray-50 transition text-sm font-medium"
-          >
-            <Plus size={18} />
-            Add Assessment
-          </button>
+          {assessments.map((assessment, index) => renderAssessment(assessment, 0, `parent-${index}`))}
         </div>
       </div>
 
@@ -270,7 +255,7 @@ export function StructureStep() {
         disabled={saving}
         className="mt-8 w-full bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition"
       >
-        Continue to Grades
+        {saving ? "Confirming..." : "Confirm and Continue"}
       </button>
     </div>
   );

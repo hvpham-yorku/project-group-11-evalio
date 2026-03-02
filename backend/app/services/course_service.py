@@ -4,7 +4,8 @@ from uuid import UUID
 from app.models import CourseCreate
 from app.repositories.base import CourseRepository, StoredCourse
 from app.services.grading_service import (
-    calculate_current_standing,
+    calculate_course_totals,
+    compute_assessment_contribution,
     calculate_minimum_required_score,
     calculate_required_average_summary,
     calculate_whatif_scenario,
@@ -160,7 +161,8 @@ class CourseService:
                 existing.total_score = total_score
 
         self._repository.update(user_id=user_id, course_id=course_id, course=stored.course)
-        current_standing = calculate_current_standing(stored.course)
+        totals = calculate_course_totals(stored.course)
+        current_standing = totals["final_total"]
         course_index = self._repository.get_index(user_id=user_id, course_id=course_id)
 
         return {
@@ -168,6 +170,9 @@ class CourseService:
             "course_id": course_id,
             "course_index": course_index,
             "current_standing": current_standing,
+            "core_total": totals["core_total"],
+            "bonus_total": totals["bonus_total"],
+            "final_total": totals["final_total"],
             "assessments": [
                 {
                     "name": assessment.name,
@@ -181,18 +186,26 @@ class CourseService:
 
     def check_target_feasibility(self, user_id: UUID, course_id: UUID, target: float) -> dict:
         stored = self._get_course_or_raise(user_id=user_id, course_id=course_id)
-        current_standing = calculate_current_standing(stored.course)
-
-        remaining_potential = sum(
-            assessment.weight
+        current_core_contrib = sum(
+            compute_assessment_contribution(assessment, missing_percent=0.0)
             for assessment in stored.course.assessments
-            if assessment.raw_score is None or assessment.total_score is None
+            if not assessment.is_bonus
         )
+        max_core_contrib = sum(
+            compute_assessment_contribution(assessment, missing_percent=100.0)
+            for assessment in stored.course.assessments
+            if not assessment.is_bonus
+        )
+        remaining_potential = max(0.0, max_core_contrib - current_core_contrib)
 
-        maximum_possible = current_standing + remaining_potential
-        current_standing = round(current_standing, 2)
-        maximum_possible = round(maximum_possible, 2)
-        feasible = maximum_possible >= target
+        current_standing = round(current_core_contrib, 2)
+        maximum_possible = round(current_core_contrib + remaining_potential, 2)
+        if current_core_contrib >= target:
+            feasible = True
+        elif current_core_contrib + remaining_potential >= target:
+            feasible = True
+        else:
+            feasible = False
 
         explanation = (
             "Target is achievable if perfect scores are obtained on remaining assessments."
@@ -204,12 +217,16 @@ class CourseService:
             target_percentage=target,
             remaining_weight=remaining_potential,
         )
+        totals = calculate_course_totals(stored.course)
 
         return {
             "course_id": course_id,
             "target": target,
             "current_standing": current_standing,
             "maximum_possible": maximum_possible,
+            "core_total": totals["core_total"],
+            "bonus_total": totals["bonus_total"],
+            "final_total": totals["final_total"],
             "feasible": feasible,
             "explanation": explanation,
             "york_equivalent": get_york_grade(target),

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 import shutil
+import time
 from collections import Counter
 from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
+from app.models import CourseCreate
 from app.models_extraction import (
     ExtractionAssessment,
     ExtractionDeadline,
@@ -15,6 +18,7 @@ from app.models_extraction import (
     ExtractionResponse,
     OutlineExtractionRequest,
 )
+from app.services.grading_section_filter import GradingSectionFilter
 from app.services.llm_extraction_client import LlmExtractionClient, LlmExtractionError
 
 PERCENTAGE_REGEX = re.compile(r"(?<!\d)(100(?:\.0+)?|[1-9]?\d(?:\.\d+)?)\s*%")
@@ -148,16 +152,219 @@ TOKEN_REGEX = re.compile(r"[a-z0-9]+")
 WEIGHT_NUMBER_REGEX = re.compile(r"[-+]?\d*\.?\d+")
 WEIGHT_MARKS_UNIT_REGEX = re.compile(r"\b(?:marks?|pts?|points?)\b", re.IGNORECASE)
 WEIGHT_PERCENT_UNIT_REGEX = re.compile(r"%")
+BEST_OF_REGEX = re.compile(r"best\s+(\d+)\s+(?:(?:out\s+of|of)\s+)?(\d+)", re.IGNORECASE)
+EACH_PERCENT_REGEX = re.compile(r"each.*?(\d+(?:\.\d+)?)\s*%", re.IGNORECASE)
+LEADING_COUNT_REGEX = re.compile(r"^(\d+)\s+(.*)")
+DROP_LOWEST_RULE_REGEX = re.compile(r"\bdrop\s+lowest(?:\s+(\d+))?\b", re.IGNORECASE)
+DROP_LOWEST_ALT_RULE_REGEX = re.compile(r"\bdrop\s+(\d+)\s+lowest\b", re.IGNORECASE)
+TOTAL_COUNT_REGEX = re.compile(r"\b(?:out\s+of|of)\s+(\d+)\b", re.IGNORECASE)
 
 MAX_TEXT_CHARS = 120000
 MAX_SCAN_LINES = 2000
 MAX_OCR_PAGES = 10
 PDF_SUSPICIOUS_TEXT_THRESHOLD = 400
+RULE_WEIGHT_TOLERANCE = Decimal("0.001")
+RULE_WEIGHT_NORMALIZATION_NOTE = "Weights normalized due to rule-based grading."
+
+
+def _read_field(raw_item: Any, field_name: str, default: Any = None) -> Any:
+    if isinstance(raw_item, dict):
+        return raw_item.get(field_name, default)
+    return getattr(raw_item, field_name, default)
+
+
+def _parse_total_count_from_name(name_value: Any) -> int | None:
+    if not isinstance(name_value, str):
+        return None
+    match = LEADING_COUNT_REGEX.match(name_value.strip())
+    if match is None:
+        return None
+    try:
+        count = int(match.group(1))
+    except ValueError:
+        return None
+    return count if count > 0 else None
+
+
+def _parse_total_count_from_rule(rule_text: str) -> int | None:
+    match = TOTAL_COUNT_REGEX.search(rule_text)
+    if match is None:
+        return None
+    try:
+        count = int(match.group(1))
+    except ValueError:
+        return None
+    return count if count > 0 else None
+
+
+def _parse_optional_syllabus_each(rule_text: str) -> Decimal | None:
+    each_match = EACH_PERCENT_REGEX.search(rule_text)
+    if each_match is None:
+        return None
+    try:
+        value = Decimal(each_match.group(1))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    return value if value > Decimal("0") else None
+
+
+def _derive_rule_metadata(raw_item: Any) -> tuple[str | None, dict[str, Any] | None]:
+    explicit_rule_type = _read_field(raw_item, "rule_type")
+    explicit_rule_config = _read_field(raw_item, "rule_config")
+
+    if isinstance(explicit_rule_type, str) and explicit_rule_type.strip():
+        rule_type = explicit_rule_type.strip()
+        if isinstance(explicit_rule_config, dict):
+            return rule_type, explicit_rule_config
+        return rule_type, None
+
+    rule_text = _read_field(raw_item, "rule")
+    if not isinstance(rule_text, str) or not rule_text.strip():
+        return None, None
+
+    best_match = BEST_OF_REGEX.search(rule_text)
+    if best_match:
+        try:
+            best_count = int(best_match.group(1))
+            total_count = int(best_match.group(2))
+        except ValueError:
+            return "best_of", None
+        config: dict[str, Any] = {
+            "best_count": best_count,
+            "total_count": total_count,
+        }
+        syllabus_each = _parse_optional_syllabus_each(rule_text)
+        if syllabus_each is not None:
+            config["syllabus_each"] = float(syllabus_each)
+        return "best_of", config
+
+    drop_count = 1
+    drop_rule_present = False
+    drop_match = DROP_LOWEST_RULE_REGEX.search(rule_text)
+    if drop_match:
+        drop_rule_present = True
+        if drop_match.group(1):
+            try:
+                drop_count = int(drop_match.group(1))
+            except ValueError:
+                drop_count = 1
+
+    alt_drop_match = DROP_LOWEST_ALT_RULE_REGEX.search(rule_text)
+    if alt_drop_match:
+        drop_rule_present = True
+        try:
+            drop_count = int(alt_drop_match.group(1))
+        except ValueError:
+            drop_count = 1
+
+    if drop_rule_present:
+        config = {"drop_count": drop_count}
+        total_count = _parse_total_count_from_rule(rule_text)
+        if total_count is None:
+            total_count = _parse_total_count_from_name(_read_field(raw_item, "name"))
+        if total_count is not None:
+            config["total_count"] = total_count
+        syllabus_each = _parse_optional_syllabus_each(rule_text)
+        if syllabus_each is not None:
+            config["syllabus_each"] = float(syllabus_each)
+        return "drop_lowest", config
+
+    return None, None
+
+
+def map_extraction_to_course_create(extraction_result: Any) -> CourseCreate:
+    course_name = _read_field(extraction_result, "course_name")
+    if not isinstance(course_name, str) or not course_name.strip():
+        course_name = _read_field(extraction_result, "name")
+    if not isinstance(course_name, str) or not course_name.strip():
+        raise ValueError("course_name is required")
+    course_name = course_name.strip()
+
+    term_value = _read_field(extraction_result, "term")
+    if term_value is not None and not isinstance(term_value, str):
+        raise ValueError("term must be a string or null")
+
+    raw_assessments = _read_field(extraction_result, "assessments")
+    if not isinstance(raw_assessments, list):
+        raise ValueError("extraction_result.assessments must be a list")
+    debug_enabled = bool(os.getenv("FILTER_DEBUG"))
+
+    mapped_assessments: list[dict[str, Any]] = []
+    confirm_parent_debug: list[dict[str, Any]] = []
+    for raw_assessment in raw_assessments:
+        name = _read_field(raw_assessment, "name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("assessment name must be a non-empty string")
+        weight = _read_field(raw_assessment, "weight")
+        try:
+            weight_value = float(weight)
+        except (TypeError, ValueError):
+            raise ValueError("assessment weight must be numeric") from None
+
+        is_bonus = bool(_read_field(raw_assessment, "is_bonus", False))
+        rule_type, rule_config = _derive_rule_metadata(raw_assessment)
+
+        raw_children = _read_field(raw_assessment, "children", None)
+        child_payload: list[dict[str, Any]] | None = None
+        if isinstance(raw_children, list) and raw_children:
+            child_payload = []
+            for raw_child in raw_children:
+                child_name = _read_field(raw_child, "name")
+                if not isinstance(child_name, str) or not child_name.strip():
+                    raise ValueError("child assessment name must be a non-empty string")
+                child_weight = _read_field(raw_child, "weight")
+                try:
+                    child_weight_value = float(child_weight)
+                except (TypeError, ValueError):
+                    raise ValueError("child assessment weight must be numeric") from None
+                child_payload.append(
+                    {
+                        "name": child_name.strip(),
+                        "weight": child_weight_value,
+                        "raw_score": None,
+                        "total_score": None,
+                    }
+                )
+        if debug_enabled:
+            confirm_parent_debug.append(
+                {
+                    "name": name.strip(),
+                    "child_count": len(child_payload) if isinstance(child_payload, list) else 0,
+                    "rule_type": rule_type,
+                    "rule_config": rule_config,
+                }
+            )
+
+        mapped_assessments.append(
+            {
+                "name": name.strip(),
+                "weight": weight_value,
+                "raw_score": None,
+                "total_score": None,
+                "children": child_payload,
+                "rule_type": rule_type,
+                "rule_config": rule_config,
+                "is_bonus": is_bonus,
+            }
+        )
+    if debug_enabled:
+        child_counts = [entry["child_count"] for entry in confirm_parent_debug]
+        print(
+            f"[CONFIRM_PAYLOAD_RECEIVED] assessments={len(raw_assessments)} "
+            f"child_counts={child_counts} rules={confirm_parent_debug}"
+        )
+
+    return CourseCreate(
+        name=course_name,
+        term=term_value.strip() if isinstance(term_value, str) else None,
+        assessments=mapped_assessments,
+    )
 
 
 class ExtractionService:
     def __init__(self, *, llm_client: LlmExtractionClient | None = None):
         self._llm_client = llm_client or LlmExtractionClient()
+        self._grading_filter = GradingSectionFilter()
 
     def extract(
         self,
@@ -167,43 +374,82 @@ class ExtractionService:
         file_bytes: bytes,
         term: str | None = None,
     ) -> ExtractionResponse:
+        debug_enabled = bool(os.getenv("FILTER_DEBUG"))
+        start_total = time.perf_counter()
         text_result = self._extract_text(
             filename=filename,
             content_type=content_type,
             file_bytes=file_bytes,
         )
         full_text = text_result["text"]
+        print("FULL_TEXT_LEN:", len(full_text))
+        print("FULL_TEXT_APPROX_TOKENS:", len(full_text) / 4)
         if not full_text.strip():
+            end_total = time.perf_counter()
+            print("TOTAL_EXTRACTION_SECONDS:", round(end_total - start_total, 3))
+            if debug_enabled:
+                print("[FINAL_EXTRACTION_RESULT] assessments=0 deadlines=0 structure_valid=False")
             return self._failure_response(
                 text_result=text_result,
                 failure_reason="No text could be extracted from the file",
                 trigger_reasons=["no_extracted_text"],
             )
+        llm_input_text, filtered_used = self._grading_filter.filter(full_text)
+        print("FILTERED_TEXT_LEN:", len(llm_input_text))
+        print("FILTERED_TEXT_APPROX_TOKENS:", len(llm_input_text) / 4)
+        print("FILTER_USED:", filtered_used)
+        filtered_warning = f"filtered_text_used:{str(filtered_used).lower()}"
 
         try:
-            llm_payload = self._llm_client.extract(full_text)
+            start_llm = time.perf_counter()
+            llm_payload = self._llm_client.extract(llm_input_text)
+            end_llm = time.perf_counter()
+            print("LLM_DURATION_SECONDS:", round(end_llm - start_llm, 3))
         except LlmExtractionError as exc:
+            end_total = time.perf_counter()
+            print("TOTAL_EXTRACTION_SECONDS:", round(end_total - start_total, 3))
+            if debug_enabled:
+                print(f"[GPT_ERROR] reason={exc.reason_code} message={exc.message}")
+            if debug_enabled:
+                print("[FINAL_EXTRACTION_RESULT] assessments=0 deadlines=0 structure_valid=False")
             return self._failure_response(
                 text_result=text_result,
                 failure_reason=exc.reason_code,
                 trigger_reasons=[exc.reason_code],
+                extra_warnings=[filtered_warning],
                 method="llm",
             )
         except Exception as exc:  # pragma: no cover - defensive fallback
+            end_total = time.perf_counter()
+            print("TOTAL_EXTRACTION_SECONDS:", round(end_total - start_total, 3))
+            if debug_enabled:
+                print("[FINAL_EXTRACTION_RESULT] assessments=0 deadlines=0 structure_valid=False")
             return self._failure_response(
                 text_result=text_result,
                 failure_reason=f"LLM extraction failed unexpectedly: {exc}",
                 trigger_reasons=["llm_unexpected_failure"],
+                extra_warnings=[filtered_warning],
                 method="llm",
             )
 
         try:
             normalized = self._normalize_llm_payload(llm_payload)
+            if debug_enabled:
+                first_assessment = normalized["assessments"][0].model_dump() if normalized["assessments"] else None
+                print(
+                    f"[POST_GPT_NORMALIZED] assessments={len(normalized['assessments'])} "
+                    f"first_assessment={first_assessment}"
+                )
         except ValueError as exc:
+            end_total = time.perf_counter()
+            print("TOTAL_EXTRACTION_SECONDS:", round(end_total - start_total, 3))
+            if debug_enabled:
+                print("[FINAL_EXTRACTION_RESULT] assessments=0 deadlines=0 structure_valid=False")
             return self._failure_response(
                 text_result=text_result,
                 failure_reason=str(exc),
                 trigger_reasons=["llm_invalid_schema"],
+                extra_warnings=[filtered_warning],
                 method="llm",
             )
 
@@ -219,6 +465,7 @@ class ExtractionService:
             text_result.get("parse_warnings", []),
             normalized.get("parse_warnings", []),
             validation_result.get("warnings", []),
+            [filtered_warning],
         )
         if confidence_result["confidence_score"] < 60:
             parse_warnings = self._merge_parse_warnings(parse_warnings, ["low_confidence"])
@@ -228,6 +475,15 @@ class ExtractionService:
             structure_valid=validation_result["valid"],
             reason_code=validation_result["reason_code"],
         )
+        if debug_enabled:
+            print(
+                f"[DETERMINISTIC_RESULT] assessments={len(normalized['assessment_entries'])} "
+                f"structure_valid={validation_result['valid']} "
+                f"trigger_gpt={trigger_result['trigger_gpt']} "
+                f"trigger_reasons={trigger_result['trigger_reasons']}"
+            )
+            if trigger_result["trigger_gpt"]:
+                print(f"[GPT_TRIGGERED] trigger_reasons={trigger_result['trigger_reasons']}")
 
         diagnostics = ExtractionDiagnostics(
             method="llm",
@@ -245,8 +501,22 @@ class ExtractionService:
         )
 
         if not validation_result["valid"]:
+            end_total = time.perf_counter()
+            print("TOTAL_EXTRACTION_SECONDS:", round(end_total - start_total, 3))
+            if debug_enabled:
+                print(
+                    f"[FINAL_EXTRACTION_RESULT] assessments={len(normalized['assessments'])} "
+                    f"deadlines={len(normalized['deadlines'])} structure_valid=False"
+                )
             return self._build_validation_failure_response(diagnostics=diagnostics)
 
+        end_total = time.perf_counter()
+        print("TOTAL_EXTRACTION_SECONDS:", round(end_total - start_total, 3))
+        if debug_enabled:
+            print(
+                f"[FINAL_EXTRACTION_RESULT] assessments={len(normalized['assessments'])} "
+                f"deadlines={len(normalized['deadlines'])} structure_valid=True"
+            )
         return ExtractionResponse(
             assessments=normalized["assessments"],
             deadlines=normalized["deadlines"],
@@ -278,6 +548,9 @@ class ExtractionService:
             message="Outline extraction is in stub mode",
         )
 
+    def map_extraction_to_course_create(self, extraction_result: Any) -> CourseCreate:
+        return map_extraction_to_course_create(extraction_result)
+
     def _normalize_llm_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise ValueError("LLM output must be a JSON object")
@@ -296,6 +569,11 @@ class ExtractionService:
         unit_kinds: list[str | None] = []
         for raw_item in raw_assessments:
             assessment, entry, warnings, unit_kind = self._normalize_assessment_item(raw_item)
+            self._maybe_generate_best_of_children(assessment)
+            entry["name"] = assessment.name
+            entry["normalized_name"] = self._normalize_assessment_name(assessment.name)
+            if entry.get("weight") is not None:
+                entry["weight"] = float(assessment.weight)
             assessments.append(assessment)
             assessment_entries.append(entry)
             parse_warnings.extend(warnings)
@@ -503,6 +781,111 @@ class ExtractionService:
 
         return ["weight_scaled_from_marks"]
 
+    def _maybe_generate_best_of_children(self, assessment: ExtractionAssessment) -> None:
+        # Always reset children so repeated normalization does not preserve stale data.
+        assessment.children = []
+        rule_text = (assessment.rule or "").strip()
+        if not rule_text:
+            return
+
+        total_count: int | None = None
+        counted = 0
+        best_match = BEST_OF_REGEX.search(rule_text)
+        if best_match is not None:
+            try:
+                best_count = int(best_match.group(1))
+                total_count = int(best_match.group(2))
+            except (TypeError, ValueError):
+                return
+            if total_count <= 0 or best_count <= 0 or best_count > total_count:
+                return
+            counted = best_count
+        else:
+            drop_count: int | None = None
+            drop_match = DROP_LOWEST_RULE_REGEX.search(rule_text)
+            if drop_match is not None:
+                if drop_match.group(1):
+                    try:
+                        drop_count = int(drop_match.group(1))
+                    except ValueError:
+                        drop_count = 1
+                else:
+                    drop_count = 1
+            else:
+                alt_drop_match = DROP_LOWEST_ALT_RULE_REGEX.search(rule_text)
+                if alt_drop_match is not None:
+                    try:
+                        drop_count = int(alt_drop_match.group(1))
+                    except ValueError:
+                        drop_count = 1
+            if drop_count is None or drop_count < 0:
+                return
+            total_count = _parse_total_count_from_rule(rule_text)
+            if total_count is None:
+                total_count = _parse_total_count_from_name(assessment.name)
+            if total_count is None or total_count <= 0:
+                return
+            counted = total_count - drop_count
+            if counted <= 0:
+                return
+
+        parent_weight = self._quantize_weight(Decimal(str(assessment.weight)))
+        if parent_weight <= Decimal("0"):
+            return
+
+        syllabus_each = _parse_optional_syllabus_each(rule_text)
+        normalization_applied = False
+        if syllabus_each is not None:
+            candidate_each = self._quantize_weight(syllabus_each)
+            expected_parent_weight = self._quantize_weight(candidate_each * Decimal(counted))
+            if abs(expected_parent_weight - parent_weight) <= RULE_WEIGHT_TOLERANCE:
+                effective_each = candidate_each
+            else:
+                effective_each = self._quantize_weight(parent_weight / Decimal(counted))
+                normalization_applied = True
+        else:
+            effective_each = self._quantize_weight(parent_weight / Decimal(counted))
+            normalization_applied = True
+        if effective_each <= Decimal("0"):
+            return
+
+        sanitized_parent_name = assessment.name.strip()
+        base_name = sanitized_parent_name
+        leading_count_match = LEADING_COUNT_REGEX.match(sanitized_parent_name)
+        if leading_count_match is not None:
+            total_from_name = int(leading_count_match.group(1))
+            if total_from_name == total_count:
+                base_name = leading_count_match.group(2).strip()
+                sanitized_parent_name = base_name
+
+        singular_base = base_name
+        lowered_base = base_name.lower()
+        if lowered_base.endswith("quizzes"):
+            singular_base = base_name[:-3]
+        elif lowered_base.endswith("ies") and len(base_name) > 3:
+            singular_base = base_name[:-3] + "y"
+        elif lowered_base.endswith("s") and len(base_name) > 1:
+            singular_base = base_name[:-1]
+
+        assessment.children = [
+            ExtractionAssessment(
+                name=f"{singular_base} {idx}",
+                weight=float(effective_each),
+                is_bonus=False,
+                children=[],
+                rule=None,
+                notes=None,
+            )
+            for idx in range(1, total_count + 1)
+        ]
+        assessment.name = sanitized_parent_name
+        if normalization_applied:
+            if assessment.notes:
+                if RULE_WEIGHT_NORMALIZATION_NOTE not in assessment.notes:
+                    assessment.notes = f"{assessment.notes.rstrip()} {RULE_WEIGHT_NORMALIZATION_NOTE}"
+            else:
+                assessment.notes = RULE_WEIGHT_NORMALIZATION_NOTE
+
     def _coerce_bool(self, value: Any, *, default: bool = False) -> bool:
         if value is None:
             return default
@@ -640,6 +1023,7 @@ class ExtractionService:
 
     def _extract_text_pdf(self, file_bytes: bytes) -> dict[str, Any]:
         primary_text = ""
+        pdfplumber_failed = False
         parse_warnings: list[str] = []
         try:
             import pdfplumber
@@ -648,16 +1032,10 @@ class ExtractionService:
                 page_texts = [(page.extract_text() or "").strip() for page in pdf.pages]
             primary_text = "\n".join(part for part in page_texts if part)
         except Exception as exc:
+            pdfplumber_failed = True
             parse_warnings.append(self._format_warning("pdf_parse_error", str(exc)))
-            return {
-                "text": "",
-                "ocr_used": False,
-                "ocr_available": False,
-                "ocr_error": self._truncate_error(f"Failed to read PDF text: {exc}"),
-                "parse_warnings": parse_warnings,
-            }
 
-        if not self._should_trigger_ocr(primary_text):
+        if not self._should_trigger_ocr(primary_text, pdfplumber_failed=pdfplumber_failed):
             return {
                 "text": primary_text,
                 "ocr_used": False,
@@ -676,6 +1054,20 @@ class ExtractionService:
                 "ocr_error": ocr_result["error"],
                 "parse_warnings": parse_warnings,
             }
+
+        if not primary_text.strip():
+            parse_warnings = self._merge_parse_warnings(
+                parse_warnings,
+                ["text_extraction_failed"],
+            )
+            return {
+                "text": "",
+                "ocr_used": False,
+                "ocr_available": ocr_result["available"],
+                "ocr_error": ocr_result["error"],
+                "parse_warnings": parse_warnings,
+            }
+
         return {
             "text": primary_text,
             "ocr_used": False,
@@ -684,11 +1076,11 @@ class ExtractionService:
             "parse_warnings": parse_warnings,
         }
 
-    def _should_trigger_ocr(self, text: str) -> bool:
-        normalized = text.strip()
-        if len(normalized) < PDF_SUSPICIOUS_TEXT_THRESHOLD:
+    def _should_trigger_ocr(self, text: str, *, pdfplumber_failed: bool = False) -> bool:
+        if pdfplumber_failed:
             return True
-        return PERCENTAGE_REGEX.search(normalized) is None
+        normalized = text.strip()
+        return len(normalized) < PDF_SUSPICIOUS_TEXT_THRESHOLD
 
     def _extract_text_ocr(self, file_bytes: bytes) -> dict[str, Any]:
         parse_warnings: list[str] = []

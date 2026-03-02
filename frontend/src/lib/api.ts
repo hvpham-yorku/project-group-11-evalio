@@ -6,6 +6,10 @@ export type CourseAssessment = {
   weight: number;
   raw_score?: number | null;
   total_score?: number | null;
+  children?: CourseAssessment[] | null;
+  rule_type?: string | null;
+  rule_config?: Record<string, unknown> | null;
+  is_bonus?: boolean;
 };
 
 export type Course = {
@@ -180,6 +184,17 @@ export function createCourse(payload: {
   }>;
 }) {
   return request("/courses/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }) as Promise<CreateCourseResponse>;
+}
+
+export function confirmExtraction(payload: {
+  course_name: string;
+  term?: string | null;
+  extraction_result: any;
+}) {
+  return request("/extraction/confirm", {
     method: "POST",
     body: JSON.stringify(payload),
   }) as Promise<CreateCourseResponse>;

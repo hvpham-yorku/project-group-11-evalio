@@ -18,16 +18,110 @@ def calculate_assessment_percent(raw_score: float, total_score: float) -> float:
     return (raw_score / total_score) * 100
 
 
-def calculate_current_standing(course: CourseCreate) -> float:
-    standing = 0.0
-    for assessment in course.assessments:
-        if assessment.raw_score is not None and assessment.total_score is not None:
-            percent = calculate_assessment_percent(
-                assessment.raw_score,
-                assessment.total_score
+def _resolve_percent(raw_score: float | None, total_score: float | None, *, missing_percent: float) -> float:
+    if raw_score is None or total_score is None:
+        return missing_percent
+    return calculate_assessment_percent(raw_score, total_score)
+
+
+def _get_best_count(assessment) -> int:
+    if assessment.rule_type != "best_of":
+        return len(assessment.children or [])
+    config = assessment.rule_config or {}
+    try:
+        best_count = int(config.get("best_count"))
+    except (TypeError, ValueError):
+        return len(assessment.children or [])
+    if best_count <= 0:
+        return len(assessment.children or [])
+    return min(best_count, len(assessment.children or []))
+
+
+def _get_drop_count(assessment) -> int:
+    if assessment.rule_type != "drop_lowest":
+        return 0
+    config = assessment.rule_config or {}
+    try:
+        drop_count = int(config.get("drop_count", 1))
+    except (TypeError, ValueError):
+        drop_count = 1
+    if drop_count < 0:
+        drop_count = 1
+    return drop_count
+
+
+def _is_assessment_fully_graded(assessment) -> bool:
+    if assessment.children:
+        return all(child.raw_score is not None and child.total_score is not None for child in assessment.children)
+    return assessment.raw_score is not None and assessment.total_score is not None
+
+
+def compute_assessment_contribution(assessment, *, missing_percent: float = 0.0) -> float:
+    if assessment.children:
+        child_percentages: list[tuple[float, float]] = []
+        for child in assessment.children:
+            percent = _resolve_percent(
+                child.raw_score,
+                child.total_score,
+                missing_percent=missing_percent,
             )
-            standing += (percent * assessment.weight) / 100
-    return round(float(standing), 2)
+            child_percentages.append((percent, child.weight))
+
+        if assessment.rule_type == "best_of":
+            best_count = _get_best_count(assessment)
+            child_percentages.sort(key=lambda item: item[0], reverse=True)
+            child_percentages = child_percentages[:best_count]
+        elif assessment.rule_type == "drop_lowest":
+            drop_count = _get_drop_count(assessment)
+            best_count = len(child_percentages) - drop_count
+            if best_count <= 0:
+                return 0.0
+            child_percentages.sort(key=lambda item: item[0], reverse=True)
+            child_percentages = child_percentages[:best_count]
+
+        contribution = sum((percent * weight) / 100 for percent, weight in child_percentages)
+        return float(contribution)
+
+    percent = _resolve_percent(
+        assessment.raw_score,
+        assessment.total_score,
+        missing_percent=missing_percent,
+    )
+    return float((percent * assessment.weight) / 100)
+
+
+def _compute_assessment_max_contribution(assessment) -> float:
+    return compute_assessment_contribution(assessment, missing_percent=100.0)
+
+
+def _compute_remaining_potential(assessment) -> float:
+    current = compute_assessment_contribution(assessment)
+    maximum = _compute_assessment_max_contribution(assessment)
+    return max(0.0, maximum - current)
+
+
+def calculate_course_totals(course: CourseCreate, *, missing_percent: float = 0.0) -> dict[str, float]:
+    core_total = 0.0
+    bonus_total = 0.0
+
+    for assessment in course.assessments:
+        contribution = compute_assessment_contribution(assessment, missing_percent=missing_percent)
+        if getattr(assessment, "is_bonus", False):
+            bonus_total += contribution
+        else:
+            core_total += contribution
+
+    final_total = core_total + bonus_total
+    return {
+        "core_total": round(core_total, 2),
+        "bonus_total": round(bonus_total, 2),
+        "final_total": round(final_total, 2),
+    }
+
+
+def calculate_current_standing(course: CourseCreate) -> float:
+    totals = calculate_course_totals(course)
+    return totals["final_total"]
 
 
 def get_york_grade(percent: float) -> dict[str, float | str]:
@@ -121,10 +215,7 @@ def calculate_minimum_required_score(
     if target_assessment is None:
         raise ValueError(f"Assessment '{assessment_name}' not found")
 
-    if (
-        target_assessment.raw_score is not None
-        and target_assessment.total_score is not None
-    ):
+    if _is_assessment_fully_graded(target_assessment):
         raise ValueError(f"Assessment '{assessment_name}' is already graded")
 
     current_standing = calculate_current_standing(course)
@@ -133,17 +224,20 @@ def calculate_minimum_required_score(
     for assessment in course.assessments:
         if assessment.name == assessment_name:
             continue
-        if assessment.raw_score is None or assessment.total_score is None:
-            other_remaining_max += assessment.weight
+        other_remaining_max += _compute_remaining_potential(assessment)
 
     points_after_others = current_standing + other_remaining_max
     points_needed = target - points_after_others
+    target_remaining_capacity = _compute_remaining_potential(target_assessment)
 
     if points_needed <= 0:
         minimum_required = 0.0
         is_achievable = True
+    elif target_remaining_capacity <= 0:
+        minimum_required = float("inf")
+        is_achievable = False
     else:
-        minimum_required = (points_needed / target_assessment.weight) * 100
+        minimum_required = (points_needed / target_remaining_capacity) * 100
         is_achievable = minimum_required <= 100
 
     return {
@@ -186,22 +280,24 @@ def calculate_whatif_scenario(
     if target_assessment is None:
         raise ValueError(f"Assessment '{assessment_name}' not found")
 
-    if target_assessment.raw_score is not None and target_assessment.total_score is not None:
+    if _is_assessment_fully_graded(target_assessment):
         raise ValueError(f"Assessment '{assessment_name}' is already graded")
 
     current_standing = calculate_current_standing(course)
-    hypothetical_contribution = (hypothetical_score * target_assessment.weight) / 100
+    current_target_contribution = compute_assessment_contribution(target_assessment)
+    hypothetical_target_contribution = compute_assessment_contribution(
+        target_assessment,
+        missing_percent=hypothetical_score,
+    )
+    hypothetical_contribution = hypothetical_target_contribution
 
     remaining_potential = sum(
-        assessment.weight
+        _compute_remaining_potential(assessment)
         for assessment in course.assessments
-        if (
-            assessment.name != assessment_name
-            and (assessment.raw_score is None or assessment.total_score is None)
-        )
+        if assessment.name != assessment_name
     )
 
-    projected_grade = current_standing + hypothetical_contribution
+    projected_grade = current_standing - current_target_contribution + hypothetical_target_contribution
     maximum_possible = projected_grade + remaining_potential
 
     return {

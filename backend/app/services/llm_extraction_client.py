@@ -9,11 +9,27 @@ class _CompatResponsesAPI:
     def __init__(self, client: Any):
         self._client = client
 
-    def create(self, *, model: str, input: list[dict[str, Any]]) -> Any:
+    def create(
+        self,
+        *,
+        model: str,
+        input: list[dict[str, Any]],
+        temperature: float | None = None,
+        response_format: dict[str, Any] | None = None,
+        max_output_tokens: int | None = None,
+    ) -> Any:
         messages = _convert_responses_input_to_chat_messages(input)
+        kwargs: dict[str, Any] = {}
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+        if max_output_tokens is not None:
+            kwargs["max_completion_tokens"] = max_output_tokens
         completion = self._client.chat.completions.create(
             model=model,
             messages=messages,
+            **kwargs,
         )
         content = _extract_chat_completion_content(completion)
         return _CompatResponse(content)
@@ -74,6 +90,49 @@ class LlmExtractionError(RuntimeError):
         self.message = message
 
 
+FLAT_EXTRACTION_RESPONSE_FORMAT: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "course_outline_flat_extraction",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["assessments", "deadlines"],
+            "properties": {
+                "assessments": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["name", "weight", "is_bonus", "rule"],
+                        "properties": {
+                            "name": {"type": "string"},
+                            "weight": {"anyOf": [{"type": "number"}, {"type": "string"}]},
+                            "is_bonus": {"type": "boolean"},
+                            "rule": {"type": ["string", "null"]},
+                        },
+                    },
+                },
+                "deadlines": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["title"],
+                        "properties": {
+                            "title": {"type": "string"},
+                            "due_date": {"type": ["string", "null"]},
+                            "due_time": {"type": ["string", "null"]},
+                        },
+                    },
+                },
+            },
+        },
+    },
+}
+
+
 class LlmExtractionClient:
     def __init__(
         self,
@@ -112,13 +171,30 @@ class LlmExtractionClient:
             raise LlmExtractionError("llm_empty_input", "LLM extraction input text is empty")
 
         client = self._get_client()
+        if os.getenv("FILTER_DEBUG"):
+            print(
+                f"[GPT_CALL_START] model={self.model} "
+                f"filtered_text_len={len(text)} approx_tokens={int(len(text) / 4)}"
+            )
         system_prompt = (
-            "Extract ONLY grading components that contribute to the final grade.\n"
+            "Extract ONLY grading components that contribute to the final grade as a FLAT list.\n"
+            "Inclusion rule:\n"
+            "Include only components that explicitly show a numeric weight or percentage in the text.\n"
+            "Do NOT include items without an explicit numeric weight.\n"
+            "Do NOT infer or assume missing weights.\n"
+            "If a category is split into numeric ranges with different weights (e.g., 'Labs 2–6' and 'Labs 7–9'), output each range as a separate assessment item using the numeric range in the name.\n"
+            "If a grading table already lists a parent category with a total percentage,\n"
+            "and later notes break that category into numeric ranges with weights,\n"
+            "do NOT output the ranges as separate top-level assessments.\n"
+            "Keep only the parent category.\n"
+            "Range details will be handled later.\n"
+            "Every assessment must be a top-level item in assessments.\n"
+            "Do NOT create child assessments.\n"
+            "Do NOT group assessments.\n"
+            "Do NOT infer equal splits.\n"
+            "Do NOT invent components.\n"
             "Ignore these items entirely: attendance, review sessions, exam setup, scheduling, "
             "academic integrity, late penalties, formatting instructions, administrative notes.\n"
-            "Nested grading rule:\n"
-            "- If a parent has 40% and children sum to 40%, return parent only.\n"
-            "- If children are independent weighted components, return children.\n"
             'If the syllabus specifies grading conditions (e.g., “best X of Y”, “drop lowest”, “must pass”, minimum score requirements, or bonus caps), include a short description in the "rule" field of that assessment. Otherwise set "rule" to null. Keep rule concise (one short sentence).\n'
             "Do NOT invent or infer weights.\n"
             'If grading structure is unclear, return {"assessments": [], "deadlines": []}.\n'
@@ -126,8 +202,7 @@ class LlmExtractionClient:
             "No markdown.\n"
             "No commentary.\n"
             "Output schema:\n"
-            '{"assessments":[{"name":"string","weight":number_or_percent_string,"is_bonus":bool,"rule":string_or_null}],'
-            '"deadlines":[]}'
+            '{"assessments":[{"name":"string","weight":number_or_percent_string,"is_bonus":bool,"rule":string_or_null}],"deadlines":[{"title":"string","due_date":"string_or_null","due_time":"string_or_null"}]}'
         )
         user_prompt = f"Course outline text:\n{text}"
 
@@ -138,19 +213,52 @@ class LlmExtractionClient:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
+                temperature=0,
+                max_output_tokens=1000,
             )
         except Exception as exc:
-            if self._is_timeout_exception(exc):
-                raise LlmExtractionError(
-                    "llm_timeout",
-                    f"LLM request timed out after {self.timeout_seconds:.0f}s",
-                ) from exc
-            raise LlmExtractionError("llm_call_failed", f"LLM request failed: {exc}") from exc
+            if os.getenv("FILTER_DEBUG"):
+                print(f"[GPT_CALL_ERROR] attempt=1 error={exc!r}")
+            if self._is_unsupported_temperature_exception(exc):
+                if os.getenv("FILTER_DEBUG"):
+                    print("[GPT_CALL_RETRY] attempt=1 mode=without_temperature")
+                try:
+                    response = client.responses.create(
+                        model=self.model,
+                        input=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        max_output_tokens=1000,
+                    )
+                except Exception as fallback_exc:
+                    if os.getenv("FILTER_DEBUG"):
+                        print(f"[GPT_CALL_ERROR] attempt=1_fallback error={fallback_exc!r}")
+                    if self._is_timeout_exception(fallback_exc):
+                        raise LlmExtractionError(
+                            "llm_timeout",
+                            f"LLM request timed out after {self.timeout_seconds:.0f}s",
+                        ) from fallback_exc
+                    raise LlmExtractionError("llm_call_failed", f"LLM request failed: {fallback_exc}") from fallback_exc
+            else:
+                if self._is_timeout_exception(exc):
+                    raise LlmExtractionError(
+                        "llm_timeout",
+                        f"LLM request timed out after {self.timeout_seconds:.0f}s",
+                    ) from exc
+                raise LlmExtractionError("llm_call_failed", f"LLM request failed: {exc}") from exc
 
         raw_text = self._extract_output_text(response)
+        if os.getenv("FILTER_DEBUG"):
+            print(f"[GPT_RAW_RESPONSE] attempt=1 raw={raw_text[:1000]!r}")
         try:
             payload = json.loads(raw_text)
+            if os.getenv("FILTER_DEBUG"):
+                print("[GPT_RAW_RESPONSE] attempt=1 json_parse=success")
         except json.JSONDecodeError:
+            if os.getenv("FILTER_DEBUG"):
+                print("[GPT_RAW_RESPONSE] attempt=1 json_parse=failure")
+                print("[GPT_JSON_PARSE_ERROR] attempt=1")
             retry_system_prompt = (
                 system_prompt
                 + "\nYour previous response was not valid JSON. Return ONLY valid JSON. "
@@ -163,22 +271,60 @@ class LlmExtractionClient:
                         {"role": "system", "content": retry_system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
+                    temperature=0,
+                    max_output_tokens=1000,
                 )
             except Exception as retry_exc:
-                if self._is_timeout_exception(retry_exc):
+                if os.getenv("FILTER_DEBUG"):
+                    print(f"[GPT_CALL_ERROR] attempt=2 error={retry_exc!r}")
+                if self._is_unsupported_temperature_exception(retry_exc):
+                    if os.getenv("FILTER_DEBUG"):
+                        print("[GPT_CALL_RETRY] attempt=2 mode=without_temperature")
+                    try:
+                        retry_response = client.responses.create(
+                            model=self.model,
+                            input=[
+                                {"role": "system", "content": retry_system_prompt},
+                                {"role": "user", "content": user_prompt},
+                            ],
+                            max_output_tokens=1000,
+                        )
+                    except Exception as retry_fallback_exc:
+                        if os.getenv("FILTER_DEBUG"):
+                            print(
+                                f"[GPT_CALL_ERROR] attempt=2_fallback error={retry_fallback_exc!r}"
+                            )
+                        if self._is_timeout_exception(retry_fallback_exc):
+                            raise LlmExtractionError(
+                                "llm_timeout",
+                                f"LLM request timed out after {self.timeout_seconds:.0f}s",
+                            ) from retry_fallback_exc
+                        raise LlmExtractionError(
+                            "llm_call_failed",
+                            f"LLM request failed: {retry_fallback_exc}",
+                        ) from retry_fallback_exc
+                else:
+                    if self._is_timeout_exception(retry_exc):
+                        raise LlmExtractionError(
+                            "llm_timeout",
+                            f"LLM request timed out after {self.timeout_seconds:.0f}s",
+                        ) from retry_exc
                     raise LlmExtractionError(
-                        "llm_timeout",
-                        f"LLM request timed out after {self.timeout_seconds:.0f}s",
+                        "llm_call_failed",
+                        f"LLM request failed: {retry_exc}",
                     ) from retry_exc
-                raise LlmExtractionError(
-                    "llm_call_failed",
-                    f"LLM request failed: {retry_exc}",
-                ) from retry_exc
 
             retry_raw_text = self._extract_output_text(retry_response)
+            if os.getenv("FILTER_DEBUG"):
+                print(f"[GPT_RAW_RESPONSE] attempt=2 raw={retry_raw_text[:1000]!r}")
             try:
                 payload = json.loads(retry_raw_text)
+                if os.getenv("FILTER_DEBUG"):
+                    print("[GPT_RAW_RESPONSE] attempt=2 json_parse=success")
             except json.JSONDecodeError as retry_parse_exc:
+                if os.getenv("FILTER_DEBUG"):
+                    print("[GPT_RAW_RESPONSE] attempt=2 json_parse=failure")
+                    print("[GPT_JSON_PARSE_ERROR] attempt=2")
                 raise LlmExtractionError(
                     "llm_invalid_json",
                     f"LLM returned invalid JSON: {retry_parse_exc}",
@@ -198,6 +344,12 @@ class LlmExtractionClient:
                 return True
             current = current.__cause__ or current.__context__
         return False
+
+    def _is_unsupported_temperature_exception(self, exc: Exception) -> bool:
+        message = str(exc).lower()
+        return "temperature" in message and (
+            "unsupported value" in message or "not supported" in message
+        )
 
     def _extract_output_text(self, response: Any) -> str:
         output_text = getattr(response, "output_text", None)

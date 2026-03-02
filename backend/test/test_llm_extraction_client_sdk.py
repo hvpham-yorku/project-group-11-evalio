@@ -19,10 +19,12 @@ class _FakeChatCompletion:
 class _FakeChatCompletions:
     def __init__(self):
         self.call_count = 0
+        self.last_kwargs = None
 
-    def create(self, *, model: str, messages: list[dict[str, str]]):
+    def create(self, *, model: str, messages: list[dict[str, str]], **kwargs):
         _ = model
         _ = messages
+        self.last_kwargs = kwargs
         self.call_count += 1
         return _FakeChatCompletion('{"assessments":[],"deadlines":[]}')
 
@@ -53,3 +55,6 @@ def test_llm_client_responses_compat_smoke_extract():
     payload = llm_client.extract("Course outline text")
     assert payload == {"assessments": [], "deadlines": []}
     assert raw_client.chat.completions.call_count == 1
+    assert raw_client.chat.completions.last_kwargs["temperature"] == 0
+    assert raw_client.chat.completions.last_kwargs["max_completion_tokens"] == 1000
+    assert "response_format" not in raw_client.chat.completions.last_kwargs

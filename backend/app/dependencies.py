@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Depends, HTTPException, Request, status
 
 from app.config import AUTH_COOKIE_NAME
@@ -8,7 +10,22 @@ from app.services.auth_service import AuthService, AuthenticatedUser, Authentica
 from app.services.course_service import CourseService
 from app.services.extraction_service import ExtractionService
 
-_course_repo = InMemoryCourseRepository()
+
+def _is_truthy_env(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _build_course_repo() -> CourseRepository:
+    if _is_truthy_env(os.getenv("USE_POSTGRES")):
+        from app.repositories.postgres_course_repo import PostgresCourseRepository
+
+        return PostgresCourseRepository()
+    return InMemoryCourseRepository()
+
+
+_course_repo = _build_course_repo()
 _user_repo = InMemoryUserRepository()
 _course_service = CourseService(_course_repo)
 _auth_service = AuthService(_user_repo)

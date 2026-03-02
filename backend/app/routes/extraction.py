@@ -1,15 +1,24 @@
+from typing import Any
+
 from json import JSONDecodeError
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
-from app.dependencies import get_current_user, get_extraction_service
+from app.dependencies import get_course_service, get_current_user, get_extraction_service
 from app.models_extraction import ExtractionResponse, OutlineExtractionRequest
 from app.services.auth_service import AuthenticatedUser
+from app.services.course_service import CourseService, CourseValidationError
 from app.services.extraction_service import ExtractionService
 
 router = APIRouter(prefix="/extraction", tags=["Extraction"])
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
+class ExtractionConfirmRequest(BaseModel):
+    course_name: str = Field(..., min_length=1)
+    term: str | None = None
+    extraction_result: dict[str, Any]
 
 
 @router.post("/outline", response_model=ExtractionResponse)
@@ -56,3 +65,28 @@ async def extract_outline(
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail="invalid legacy payload") from exc
     return service.extract_legacy(payload)
+
+
+@router.post("/confirm")
+def confirm_extraction(
+    payload: ExtractionConfirmRequest,
+    extraction_service: ExtractionService = Depends(get_extraction_service),
+    course_service: CourseService = Depends(get_course_service),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
+    try:
+        mapped_course = extraction_service.map_extraction_to_course_create(
+            {
+                "course_name": payload.course_name,
+                "term": payload.term,
+                "assessments": payload.extraction_result.get("assessments", []),
+            }
+        )
+        return course_service.create_course(
+            user_id=current_user.user_id,
+            course=mapped_course,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except CourseValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

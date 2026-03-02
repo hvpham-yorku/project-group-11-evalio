@@ -10,12 +10,15 @@ type SetupCourseContextValue = {
   courseId: string | null;
   setCourseId: (id: string | null) => void;
   ensureCourseIdFromList: (courses: Course[]) => string | null;
+  extractionResult: any | null;
+  setExtractionResult: (data: any | null) => void;
 };
 
 const SetupCourseContext = createContext<SetupCourseContextValue | null>(null);
 
 export function SetupCourseProvider({ children }: { children: React.ReactNode }) {
   const [courseId, setCourseIdState] = useState<string | null>(null);
+  const [extractionResult, setExtractionResult] = useState<any | null>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(ACTIVE_COURSE_STORAGE_KEY);
@@ -50,8 +53,8 @@ export function SetupCourseProvider({ children }: { children: React.ReactNode })
   );
 
   const value = useMemo(
-    () => ({ courseId, setCourseId, ensureCourseIdFromList }),
-    [courseId, setCourseId, ensureCourseIdFromList]
+    () => ({ courseId, setCourseId, ensureCourseIdFromList, extractionResult, setExtractionResult }),
+    [courseId, setCourseId, ensureCourseIdFromList, extractionResult]
   );
 
   return <SetupCourseContext.Provider value={value}>{children}</SetupCourseContext.Provider>;

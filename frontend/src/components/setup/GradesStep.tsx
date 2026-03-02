@@ -2,10 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Circle, RotateCcw, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, RotateCcw, X } from "lucide-react";
 import { listCourses, updateCourseGrades } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
+
+type ChildAssessment = {
+  id: string;
+  name: string;
+  weight: number;
+  raw_score?: string;
+  total_score?: string;
+};
 
 type Assessment = {
   id: number;
@@ -13,6 +21,7 @@ type Assessment = {
   weight: number;
   raw_score?: string;
   total_score?: string;
+  children?: ChildAssessment[];
 };
 
 const PARTIAL_SCORES_ERROR = "Please enter both received and total score.";
@@ -30,6 +39,7 @@ function isPartial(raw: number | null, total: number | null): boolean {
 export function GradesStep() {
   const router = useRouter();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const { courseId, ensureCourseIdFromList } = useSetupCourse();
 
@@ -56,6 +66,17 @@ export function GradesStep() {
               typeof a.raw_score === "number" ? String(a.raw_score) : "",
             total_score:
               typeof a.total_score === "number" ? String(a.total_score) : "",
+            children: Array.isArray(a.children)
+              ? a.children.map((child, index) => ({
+                  id: `${i + 1}-${index + 1}`,
+                  name: child.name,
+                  weight: child.weight,
+                  raw_score:
+                    typeof child.raw_score === "number" ? String(child.raw_score) : "",
+                  total_score:
+                    typeof child.total_score === "number" ? String(child.total_score) : "",
+                }))
+              : [],
           }))
         );
       } catch (e) {
@@ -221,6 +242,8 @@ export function GradesStep() {
             const hasGrade = raw !== null && total !== null && total > 0;
             const percent = hasGrade ? (raw / total) * 100 : 0;
             const contribution = hasGrade ? (percent * a.weight) / 100 : 0;
+            const hasChildren = Array.isArray(a.children) && a.children.length > 0;
+            const isExpanded = !!expandedByKey[String(a.id)];
 
             return (
               <div
@@ -241,9 +264,27 @@ export function GradesStep() {
                   <div className="flex-1">
                     <div className="flex items-start justify-between gap-4 mb-3">
                       <div>
-                        <h4 className="font-semibold text-gray-800">
-                          {a.name}
-                        </h4>
+                        <div className="flex items-center gap-2">
+                          {hasChildren ? (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedByKey((prev) => ({
+                                  ...prev,
+                                  [String(a.id)]: !prev[String(a.id)],
+                                }))
+                              }
+                              className="inline-flex items-center text-gray-500"
+                              aria-label={isExpanded ? "Collapse children" : "Expand children"}
+                            >
+                              <ChevronDown
+                                size={16}
+                                className={`transition-transform ${isExpanded ? "rotate-180" : "rotate-0"}`}
+                              />
+                            </button>
+                          ) : null}
+                          <h4 className="font-semibold text-gray-800">{a.name}</h4>
+                        </div>
                         <p className="text-sm text-gray-500">
                           {a.weight}% of final grade
                         </p>
@@ -303,6 +344,32 @@ export function GradesStep() {
                         </p>
                       </div>
                     )}
+                    {hasChildren && isExpanded ? (
+                      <div className="mt-4 space-y-2">
+                        {a.children?.map((child) => {
+                          const childRaw = parseNumberOrNull(child.raw_score);
+                          const childTotal = parseNumberOrNull(child.total_score);
+                          const childHasGrade =
+                            childRaw !== null && childTotal !== null && childTotal > 0;
+                          return (
+                            <div
+                              key={child.id}
+                              className="ml-4 rounded-xl border border-gray-200 bg-white px-4 py-3"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm text-gray-700">{child.name}</p>
+                                <p className="text-xs text-gray-500">{child.weight}%</p>
+                              </div>
+                              <p className="mt-1 text-xs text-gray-500">
+                                {childHasGrade
+                                  ? `Received ${child.raw_score}/${child.total_score}`
+                                  : "No score entered yet"}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </div>

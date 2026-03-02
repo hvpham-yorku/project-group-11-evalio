@@ -4,11 +4,15 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, FileText, Loader2 } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/errors";
+import { useSetupCourse } from "@/app/setup/course-context";
 
 type ExtractedAssessment = {
   name: string;
   weight: number;
   is_bonus?: boolean;
+  rule_type?: string | null;
+  rule_config?: Record<string, unknown> | null;
+  children?: ExtractedAssessment[];
 };
 
 type ExtractionResponse = {
@@ -30,12 +34,12 @@ type ExtractionResponse = {
 
 export function UploadStep() {
   const router = useRouter();
+  const { setExtractionResult } = useSetupCourse();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failClosedMessage, setFailClosedMessage] = useState<string | null>(null);
-  const [extractedAssessments, setExtractedAssessments] = useState<ExtractedAssessment[]>([]);
   const [diagnostics, setDiagnostics] = useState<ExtractionResponse["diagnostics"] | null>(null);
 
   const handleChooseFile = () => {
@@ -48,7 +52,7 @@ export function UploadStep() {
     setSelectedFile(file);
     setError(null);
     setFailClosedMessage(null);
-    setExtractedAssessments([]);
+    setExtractionResult(null);
     setDiagnostics(null);
   };
 
@@ -91,15 +95,16 @@ export function UploadStep() {
 
       setDiagnostics(body.diagnostics ?? null);
       if (body.structure_valid === false) {
-        setExtractedAssessments([]);
+        setExtractionResult(null);
         setFailClosedMessage("Could not extract grading structure from this outline.");
         return;
       }
 
-      setExtractedAssessments(Array.isArray(body.assessments) ? body.assessments : []);
+      setExtractionResult(body);
+      router.push("/setup/structure");
     } catch (err) {
       setError(getApiErrorMessage(err, "Extraction failed. Please try again."));
-      setExtractedAssessments([]);
+      setExtractionResult(null);
       setDiagnostics(null);
     } finally {
       setLoading(false);
@@ -172,22 +177,11 @@ export function UploadStep() {
           <p className="mt-4 text-sm text-amber-700">{failClosedMessage}</p>
         ) : null}
 
-        {extractedAssessments.length > 0 ? (
+        {diagnostics ? (
           <div className="mt-6 text-left bg-[#F9F8F6] border border-gray-200 rounded-2xl p-4">
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Extracted Assessments</h4>
-            <ul className="space-y-2">
-              {extractedAssessments.map((assessment, index) => (
-                <li key={`${assessment.name}-${index}`} className="text-sm text-gray-700">
-                  {assessment.name} — {assessment.weight}%
-                  {assessment.is_bonus ? " (Bonus)" : ""}
-                </li>
-              ))}
-            </ul>
-            {diagnostics ? (
-              <p className="mt-3 text-xs text-gray-500">
-                Confidence: {diagnostics.confidence_score} ({diagnostics.confidence_level})
-              </p>
-            ) : null}
+            <p className="text-xs text-gray-500">
+              Confidence: {diagnostics.confidence_score} ({diagnostics.confidence_level})
+            </p>
           </div>
         ) : null}
 
