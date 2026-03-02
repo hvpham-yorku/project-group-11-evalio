@@ -2,6 +2,13 @@
 
 FastAPI-based backend for Evalio course grading rules and simulation.
 
+## Prerequisites
+
+- Python 3.10+
+- System OCR tools (required for PDF OCR fallback):
+  - `tesseract`
+  - `pdftoppm` (Poppler)
+
 ## Setup
 
 1. Create virtual environment:
@@ -15,12 +22,17 @@ FastAPI-based backend for Evalio course grading rules and simulation.
    pip install -r requirements.txt
    ```
 
-3. Run server:
+3. Create env file:
+   ```bash
+   cp .env.example .env
+   ```
+
+4. Run server:
    ```bash
    uvicorn app.main:app --reload --port 8000
    ```
 
-Optional `.env` values:
+Example `.env` contents:
 
 ```bash
 AUTH_SECRET_KEY=change-this-in-real-env
@@ -33,11 +45,6 @@ OPENAI_API_KEY=your-openai-key
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_TIMEOUT_SECONDS=20
 ```
-
-OCR prerequisites (system packages, not pip):
-
-- `tesseract`
-- `pdftoppm` (Poppler)
 
 ## API Endpoints
 

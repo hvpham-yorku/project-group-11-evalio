@@ -59,6 +59,8 @@ project-group-11-evalio/
 - Node.js 18+ (20+ recommended)
 - npm
 - Python 3.10+
+- `tesseract` (system package)
+- `pdftoppm` from Poppler (system package)
 
 ### 1. Clone
 
@@ -74,6 +76,7 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate            # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -96,18 +99,18 @@ Frontend URL:
 
 - App: `http://localhost:3000`
 
-### 4. Optional Frontend Env Variable
+### 4. Frontend Env Variable
 
-The frontend defaults to `http://127.0.0.1:8000`.  
-To override, create `frontend/.env.local`:
+Create `frontend/.env.local` from example:
 
 ```bash
+cp frontend/.env.local.example frontend/.env.local
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-### 5. Optional Backend Auth/CORS Env Variables
+### 5. Backend Env Variables
 
-Create `backend/.env` (optional):
+`backend/.env` should include:
 
 ```bash
 AUTH_SECRET_KEY=change-this-in-real-env
@@ -116,6 +119,9 @@ AUTH_ACCESS_TOKEN_EXPIRE_MINUTES=480
 AUTH_COOKIE_NAME=evalio_access_token
 AUTH_COOKIE_SECURE=false
 FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_TIMEOUT_SECONDS=20
 ```
 
 ## API Endpoints
