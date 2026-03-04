@@ -4,7 +4,7 @@ FastAPI-based backend for Evalio course grading rules and simulation.
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.12.12
 - System OCR tools (required for PDF OCR fallback):
   - `tesseract`
   - `pdftoppm` (Poppler)
@@ -21,6 +21,10 @@ FastAPI-based backend for Evalio course grading rules and simulation.
    ```bash
    pip install -r requirements.txt
    ```
+
+   Required pinned versions in `requirements.txt`:
+   - `openai==1.46.0`
+   - `httpx==0.27.2`
 
 3. Create env file:
    ```bash

@@ -43,6 +43,27 @@ export function UploadStep() {
   const [failClosedMessage, setFailClosedMessage] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<ExtractionResponse["diagnostics"] | null>(null);
 
+  const handleManualSetup = () => {
+    setError(null);
+    setFailClosedMessage(null);
+    setDiagnostics(null);
+    setSelectedFile(null);
+    setExtractionResult({
+      course_code: null,
+      structure_valid: true,
+      assessments: [],
+      deadlines: [],
+      diagnostics: {
+        confidence_score: 0,
+        confidence_level: "Manual",
+        trigger_gpt: false,
+        trigger_reasons: [],
+        failure_reason: null,
+      },
+    });
+    router.push("/setup/structure");
+  };
+
   const handleChooseFile = () => {
     if (loading) return;
     fileInputRef.current?.click();
@@ -193,7 +214,7 @@ export function UploadStep() {
         <div className="my-10 h-[1px] bg-gray-100 w-full" />
 
         <button
-          onClick={() => router.push("/setup/structure")}
+          onClick={handleManualSetup}
           className="border border-gray-200 text-gray-600 px-8 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 transition"
         >
           Set up course manually

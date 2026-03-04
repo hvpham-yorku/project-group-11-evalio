@@ -58,7 +58,7 @@ project-group-11-evalio/
 
 - Node.js 18+ (20+ recommended)
 - npm
-- Python 3.10+
+- Python 3.12.12
 - `tesseract` (system package)
 - `pdftoppm` from Poppler (system package)
 
@@ -69,14 +69,25 @@ git clone <repository-url>
 cd project-group-11-evalio
 ```
 
-### 2. Run Backend (FastAPI)
+### 2. One-Command Setup (Recommended)
+
+```bash
+bash setup.sh
+```
+
+This script will:
+
+- Copy missing env files (`backend/.env`, `frontend/.env.local`)
+- Create backend virtual environment (`backend/.venv`) if needed
+- Install backend and frontend dependencies
+- Verify required backend versions (`openai==1.46.0`, `httpx==0.27.2`)
+- Print the exact backend/frontend run commands
+
+### 3. Run Backend (FastAPI)
 
 ```bash
 cd backend
-python3 -m venv venv
-source venv/bin/activate            # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -85,7 +96,7 @@ Backend URLs:
 - API root: `http://127.0.0.1:8000`
 - Swagger docs: `http://127.0.0.1:8000/docs`
 
-### 3. Run Frontend (Next.js)
+### 4. Run Frontend (Next.js)
 
 In a second terminal:
 
@@ -99,7 +110,7 @@ Frontend URL:
 
 - App: `http://localhost:3000`
 
-### 4. Frontend Env Variable
+### 5. Frontend Env Variable
 
 Create `frontend/.env.local` from example:
 
@@ -108,7 +119,7 @@ cp frontend/.env.local.example frontend/.env.local
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
-### 5. Backend Env Variables
+### 6. Backend Env Variables
 
 `backend/.env` should include:
 
@@ -203,7 +214,7 @@ Backend tests:
 
 ```bash
 cd backend
-source venv/bin/activate
+source .venv/bin/activate
 python -m pytest -q
 ```
 

@@ -12,6 +12,17 @@ type SetupCourseContextValue = {
   ensureCourseIdFromList: (courses: Course[]) => string | null;
   extractionResult: any | null;
   setExtractionResult: (data: any | null) => void;
+  institutionalGradingRules: {
+    institution: string;
+    scale: string;
+    grade_boundaries: Array<{
+      letter: string;
+      minLabel: string;
+      points: string;
+      descriptor: string;
+    }>;
+  } | null;
+  setInstitutionalGradingRules: (rules: SetupCourseContextValue["institutionalGradingRules"]) => void;
 };
 
 const SetupCourseContext = createContext<SetupCourseContextValue | null>(null);
@@ -19,6 +30,8 @@ const SetupCourseContext = createContext<SetupCourseContextValue | null>(null);
 export function SetupCourseProvider({ children }: { children: React.ReactNode }) {
   const [courseId, setCourseIdState] = useState<string | null>(null);
   const [extractionResult, setExtractionResult] = useState<any | null>(null);
+  const [institutionalGradingRules, setInstitutionalGradingRules] =
+    useState<SetupCourseContextValue["institutionalGradingRules"]>(null);
 
   useEffect(() => {
     const stored = window.localStorage.getItem(ACTIVE_COURSE_STORAGE_KEY);
@@ -53,8 +66,16 @@ export function SetupCourseProvider({ children }: { children: React.ReactNode })
   );
 
   const value = useMemo(
-    () => ({ courseId, setCourseId, ensureCourseIdFromList, extractionResult, setExtractionResult }),
-    [courseId, setCourseId, ensureCourseIdFromList, extractionResult]
+    () => ({
+      courseId,
+      setCourseId,
+      ensureCourseIdFromList,
+      extractionResult,
+      setExtractionResult,
+      institutionalGradingRules,
+      setInstitutionalGradingRules,
+    }),
+    [courseId, setCourseId, ensureCourseIdFromList, extractionResult, institutionalGradingRules]
   );
 
   return <SetupCourseContext.Provider value={value}>{children}</SetupCourseContext.Provider>;

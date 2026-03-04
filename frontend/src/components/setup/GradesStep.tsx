@@ -29,6 +29,13 @@ type Assessment = {
   is_bonus?: boolean;
 };
 
+type InstitutionalBoundary = {
+  letter: string;
+  minLabel: string;
+  points: string;
+  descriptor: string;
+};
+
 const PARTIAL_SCORES_ERROR = "Please enter both received and total score.";
 const CHILD_WEIGHT_TOLERANCE = 0.5;
 
@@ -180,12 +187,52 @@ function getEffectiveAssessmentWeight(assessment: Assessment): number {
   return Math.min(parentWeight, topWeightSum);
 }
 
+const DEFAULT_BOUNDARIES: InstitutionalBoundary[] = [
+  { letter: "A+", minLabel: "90-100", points: "9.0", descriptor: "Excellent" },
+  { letter: "A", minLabel: "80-89", points: "8.0", descriptor: "Excellent" },
+  { letter: "B+", minLabel: "75-79", points: "7.0", descriptor: "Very Good" },
+  { letter: "B", minLabel: "70-74", points: "6.0", descriptor: "Good" },
+  { letter: "C+", minLabel: "65-69", points: "5.0", descriptor: "Competent" },
+  { letter: "C", minLabel: "60-64", points: "4.0", descriptor: "Fair" },
+  { letter: "D+", minLabel: "55-59", points: "3.0", descriptor: "Pass" },
+  { letter: "D", minLabel: "50-54", points: "2.0", descriptor: "Pass" },
+  { letter: "F", minLabel: "below 50", points: "0.0", descriptor: "Fail" },
+];
+
+function parseBoundaryLowerBound(minLabel: string): number {
+  const normalized = minLabel.trim().toLowerCase();
+  if (normalized.includes("below")) return 0;
+  const firstNumber = normalized.match(/\d+(\.\d+)?/);
+  if (!firstNumber) return Number.NEGATIVE_INFINITY;
+  const parsed = Number.parseFloat(firstNumber[0]);
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
+function getInstitutionalEvaluation(
+  percentage: number,
+  boundaries: InstitutionalBoundary[]
+): { letter: string; points: number; descriptor: string } {
+  const ordered = [...boundaries].sort(
+    (left, right) => parseBoundaryLowerBound(right.minLabel) - parseBoundaryLowerBound(left.minLabel)
+  );
+  const match =
+    ordered.find((entry) => percentage >= parseBoundaryLowerBound(entry.minLabel)) ??
+    ordered[ordered.length - 1] ??
+    { letter: "F", points: "0.0", descriptor: "Fail", minLabel: "below 50" };
+  const points = Number.parseFloat(match.points);
+  return {
+    letter: match.letter,
+    points: Number.isFinite(points) ? points : 0,
+    descriptor: match.descriptor,
+  };
+}
+
 export function GradesStep() {
   const router = useRouter();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
-  const { courseId, ensureCourseIdFromList } = useSetupCourse();
+  const { courseId, ensureCourseIdFromList, institutionalGradingRules } = useSetupCourse();
 
   useEffect(() => {
     const loadCourse = async () => {
@@ -257,6 +304,19 @@ export function GradesStep() {
       }, 0),
     [assessments]
   );
+
+  const institutionalMeta = useMemo(() => {
+    const boundaries =
+      institutionalGradingRules?.grade_boundaries?.length
+        ? institutionalGradingRules.grade_boundaries
+        : DEFAULT_BOUNDARIES;
+    const evaluation = getInstitutionalEvaluation(currentGrade, boundaries);
+    return {
+      institutionName: institutionalGradingRules?.institution || "YorkU",
+      scale: institutionalGradingRules?.scale || "9.0",
+      ...evaluation,
+    };
+  }, [currentGrade, institutionalGradingRules]);
 
   const handleParentScoreChange = (
     id: number,
@@ -550,6 +610,55 @@ export function GradesStep() {
           </p>
           <p className="mt-2 text-xs text-[#B8A89A]">Still to be graded</p>
         </div>
+      </div>
+
+      <div className="mt-6 bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
+        <h3 className="mt-2 text leading-tight font-medium text-[#3B3735]">
+          Institutional Evaluation ({institutionalMeta.institutionName})
+        </h3>
+        <p className="mt-2 text-base text-[#6A6561]">
+          Your current standing expressed using YorkU grading rules.
+        </p>
+
+        {gradedWeight > 0 ? (
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center justify-between rounded-xl bg-[#EAE6E0] px-4 py-3">
+              <span className="text-sm text-[#6A6561]">Current Percentage</span>
+              <span className="mt-2 text-[#3B3735]">{currentGrade.toFixed(1)}%</span>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl bg-[#EAE6E0] px-4 py-3">
+              <span className="text-sm text-[#6A6561]">Letter Grade</span>
+              <span className="mt-2 text-[#3B3735]">{institutionalMeta.letter}</span>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl bg-[#EAE6E0] px-4 py-3">
+              <span className="text-sm text-[#6A6561]">Grade Point</span>
+              <span className="mt-2 text-[#597183]">
+                {institutionalMeta.points.toFixed(1)} / {institutionalMeta.scale}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl bg-[#EAE6E0] px-4 py-3">
+              <span className="text-sm text-[#6A6561]">Descriptor</span>
+              <span className="mt-2 text-[#B5A897]">
+                {institutionalMeta.descriptor}
+              </span>
+            </div>
+
+            <div className="pt-4 border-t border-[#D5D1CC]">
+              <p className="text-xs text-[#6A6561]">
+                Based on graded assessments only. This does not modify your stored grades.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-6 rounded-xl border border-dashed border-[#95A0A9] bg-[#EAE6E0] py-8 text-center">
+            <p className="text-sm text-[#6A6561]">
+              No graded work yet — enter a grade to see your YorkU evaluation.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="mt-8 bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
