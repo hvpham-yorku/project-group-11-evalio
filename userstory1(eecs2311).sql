@@ -1,16 +1,40 @@
 -- Enable UUID generation (so PostgreSQL can create IDs)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
-
 -- COURSES TABLE
 -- Stores each course that user creates or extracts
+-- Updated for GPA Converter (User Story 3)
 
 CREATE TABLE courses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),  -- Unique course ID
+
     name VARCHAR(255) NOT NULL,                      -- Course name
+
+	-- Semester/term the course belongs to
+    term VARCHAR(20) NOT NULL,                       -- Example: Fall2025, Winter2026
+
+    -- Credit value for weighted GPA calculations
+    credits DECIMAL(3,1) NOT NULL DEFAULT 3.0,
+
+    -- Final percentage grade for the course
+    -- Used by GPA converter (percentage → GPA)
+    final_percentage DECIMAL(5,2)
+    CHECK (final_percentage >= 0 AND final_percentage <= 100),
+
+    -- Handles non-numeric grades
+    -- Example: pass / withdrawn courses
+    grade_type VARCHAR(20) DEFAULT 'numeric'
+    CHECK (grade_type IN ('numeric','pass','fail','withdrawn')),
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP   -- When it was created
 );
 
+CREATE TABLE users (
+    id UUID PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- ASSESSMENTS TABLE
 -- Stores assessments (midterm, quiz, etc.)
@@ -119,4 +143,53 @@ ON scores(assessment_id);
 
 CREATE INDEX idx_scenarios_course_id
 ON scenarios(course_id);
+
+-- GPA converter indexes
+
+CREATE INDEX idx_courses_term
+ON courses(term);
+
+CREATE INDEX idx_courses_grade_type
+ON courses(grade_type);
+
+-- just to test (ignore)
+
+--DROP TABLE IF EXISTS scenario_scores CASCADE;
+--DROP TABLE IF EXISTS scenarios CASCADE;
+--DROP TABLE IF EXISTS scores CASCADE;
+--DROP TABLE IF EXISTS assessments CASCADE;
+--DROP TABLE IF EXISTS rules CASCADE;
+--DROP TABLE IF EXISTS courses CASCADE;
+
+--SELECT column_name
+--FROM information_schema.columns
+--WHERE table_name = 'courses'
+--ORDER BY ordinal_position;
+
+--SELECT table_name
+--FROM information_schema.tables
+--WHERE table_schema = 'public';
+
+--INSERT INTO courses (name, term, credits, final_percentage)
+--VALUES ('EECS2311', 'Fall2025', 3.0, 82);
+
+--SELECT * FROM courses;
+
+--INSERT INTO courses (name, term, final_percentage)
+--VALUES ('BadCourse', 'Fall2025', 150);
+
+--INSERT INTO courses (name, term, credits, final_percentage)
+--VALUES ('EECS2311', 'Fall2025', 3.0, 82);
+
+--INSERT INTO courses (name, term, grade_type)
+--VALUES ('Internship', 'Winter2026', 'pass');
+
+--TRUNCATE TABLE 
+--scenario_scores,
+--scenarios,
+--scores,
+--assessments,
+--rules,
+--courses
+--RESTART IDENTITY CASCADE;
 
