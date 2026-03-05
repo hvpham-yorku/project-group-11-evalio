@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronDown, Circle, Plus, RotateCcw, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, RotateCcw, X } from "lucide-react";
 import { listCourses, updateCourseGrades } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -347,77 +347,6 @@ export function GradesStep() {
     setError((curr) => (curr === PARTIAL_SCORES_ERROR ? "" : curr));
   };
 
-  const handleChildWeightChange = (parentId: number, childId: string, value: string) => {
-    const parsed = Number.parseFloat(value);
-    const nextWeight = Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-    setAssessments((prev) =>
-      prev.map((assessment) =>
-        assessment.id !== parentId
-          ? assessment
-          : {
-              ...assessment,
-              children: assessment.children.map((child) =>
-                child.id === childId
-                  ? { ...child, weight: nextWeight }
-                  : child
-              ),
-            }
-      )
-    );
-  };
-
-  const handleAddChild = (parentId: number) => {
-    setAssessments((prev) =>
-      prev.map((assessment) => {
-        if (assessment.id !== parentId) return assessment;
-        const nextIndex = assessment.children.length + 1;
-        const baseName = assessment.name.endsWith("s")
-          ? assessment.name.slice(0, -1)
-          : assessment.name;
-        const defaultWeight =
-          assessment.children.length === 0
-            ? Math.round(assessment.weight * 100) / 100
-            : 0;
-        const nextChild: ChildAssessment = {
-          id: `${assessment.id}-${Date.now()}-${nextIndex}`,
-          name: `${baseName} ${nextIndex}`,
-          weight: defaultWeight,
-          raw_score: "",
-          total_score: "",
-        };
-        return {
-          ...assessment,
-          children: [...assessment.children, nextChild],
-        };
-      })
-    );
-    setExpandedByKey((prev) => ({ ...prev, [String(parentId)]: true }));
-  };
-
-  const handleDeleteChild = (parentId: number, childId: string) => {
-    setAssessments((prev) =>
-      prev.map((assessment) => {
-        if (assessment.id !== parentId) return assessment;
-        const nextChildren = assessment.children.filter((child) => child.id !== childId);
-        if (nextChildren.length === assessment.children.length) return assessment;
-        if (nextChildren.length === 0) {
-          return { ...assessment, children: [] };
-        }
-        return syncParentFromChildren({ ...assessment, children: nextChildren });
-      })
-    );
-    setExpandedByKey((prev) => {
-      const key = String(parentId);
-      if (!prev[key]) return prev;
-      const parent = assessments.find((item) => item.id === parentId);
-      if (!parent) return prev;
-      const remaining = parent.children.filter((child) => child.id !== childId);
-      if (remaining.length > 0) return prev;
-      return { ...prev, [key]: false };
-    });
-    setError((curr) => (curr === PARTIAL_SCORES_ERROR ? "" : curr));
-  };
-
   const persistParentGrade = async (assessmentName: string, raw: number | null, total: number | null) => {
     if (!courseId) return;
     await updateCourseGrades(courseId, {
@@ -739,7 +668,7 @@ export function GradesStep() {
                           placeholder="Received"
                           min={0}
                           step={0.1}
-                          className="w-24 h-10 px-3 bg-white rounded-xl text-right text-sm leading-5 border border-gray-200 shadow-sm focus:outline-none"
+                          className="w-28 h-10 px-3 bg-white rounded-xl text-center text-sm leading-5 border border-gray-200 shadow-sm focus:outline-none"
                         />
                         <span className="text-sm text-gray-500">/</span>
                         <input
@@ -752,7 +681,7 @@ export function GradesStep() {
                           placeholder="Total"
                           min={0}
                           step={0.1}
-                          className="w-24 h-10 px-3 bg-white rounded-xl text-right text-sm leading-5 border border-gray-200 shadow-sm focus:outline-none"
+                          className="w-28 h-10 px-3 bg-white rounded-xl text-center text-sm leading-5 border border-gray-200 shadow-sm focus:outline-none"
                         />
                         {hasGrade && (
                           <button
@@ -781,18 +710,6 @@ export function GradesStep() {
                       </div>
                     )}
 
-                    {!hasChildren ? (
-                      <div className="mt-4">
-                        <button
-                          type="button"
-                          onClick={() => handleAddChild(a.id)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
-                        >
-                          <Plus size={14} /> Add item
-                        </button>
-                      </div>
-                    ) : null}
-
                     {hasChildren && isExpanded ? (
                       <div className="mt-4 space-y-2">
                         {a.children.map((child) => {
@@ -808,26 +725,10 @@ export function GradesStep() {
                               <div className="flex items-center justify-between gap-3 mb-2">
                                 <p className="text-sm text-gray-700">{child.name}</p>
                                 <div className="flex items-center gap-2">
-                                  <input
-                                    type="number"
-                                    value={child.weight}
-                                    onChange={(e) =>
-                                      handleChildWeightChange(a.id, child.id, e.target.value)
-                                    }
-                                    min={0}
-                                    step={0.1}
-                                    className="w-20 h-9 px-2 bg-white rounded-lg text-right text-xs leading-5 border border-gray-200 shadow-sm focus:outline-none"
-                                  />
-                                  <p className="text-xs text-gray-500">%</p>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteChild(a.id, child.id)}
-                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 transition"
-                                    title="Delete item"
-                                    aria-label={`Delete ${child.name}`}
-                                  >
-                                    <X size={14} />
-                                  </button>
+                                  <span className="text-sm font-medium text-gray-700">
+                                    {formatScore(child.weight)}
+                                  </span>
+                                  <p className="text-sm text-gray-500">%</p>
                                 </div>
                               </div>
 
@@ -842,7 +743,7 @@ export function GradesStep() {
                                   placeholder="Received"
                                   min={0}
                                   step={0.1}
-                                  className="w-24 h-9 px-3 bg-white rounded-lg text-right text-xs leading-5 border border-gray-200 shadow-sm focus:outline-none"
+                                  className="w-28 h-9 px-3 bg-white rounded-lg text-center text-xs leading-5 border border-gray-200 shadow-sm focus:outline-none"
                                 />
                                 <span className="text-xs text-gray-500">/</span>
                                 <input
@@ -855,7 +756,7 @@ export function GradesStep() {
                                   placeholder="Total"
                                   min={0}
                                   step={0.1}
-                                  className="w-24 h-9 px-3 bg-white rounded-lg text-right text-xs leading-5 border border-gray-200 shadow-sm focus:outline-none"
+                                  className="w-28 h-9 px-3 bg-white rounded-lg text-center text-xs leading-5 border border-gray-200 shadow-sm focus:outline-none"
                                 />
                               </div>
 
@@ -867,15 +768,6 @@ export function GradesStep() {
                             </div>
                           );
                         })}
-                        <div className="ml-4 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => handleAddChild(a.id)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
-                          >
-                            <Plus size={14} /> Add item
-                          </button>
-                        </div>
                         {childWeightMismatch ? (
                           <p className="ml-4 text-xs text-amber-700">
                             {a.rule_type === "best_of"

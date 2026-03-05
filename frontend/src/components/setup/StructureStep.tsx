@@ -83,6 +83,7 @@ export default function StructureStep() {
   const [saving, setSaving] = useState(false);
 
   const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>({});
+  const [rulesOpenById, setRulesOpenById] = useState<Record<string, boolean>>({});
 
   // Local editable copy of extracted assessments
   const [assessments, setAssessments] = useState<EditableAssessment[]>([]);
@@ -224,6 +225,10 @@ export default function StructureStep() {
     setExpandedByKey((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const toggleRulesOpen = (id: string) => {
+    setRulesOpenById((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   const bestOfLabel = (a: EditableAssessment) => {
     if (a.rule_type !== "best_of") return null;
     const effectiveCount = Number(a.effective_count);
@@ -317,6 +322,8 @@ export default function StructureStep() {
     const hasChildren = children.length > 0;
     const expanded = !!expandedByKey[a.id];
     const bestLabel = bestOfLabel(a);
+    const rulesOpenByDefault = Boolean((a.rule ?? "").trim() || bestLabel);
+    const rulesOpen = rulesOpenById[a.id] ?? rulesOpenByDefault;
 
     return (
       <div key={nodeKey} className="space-y-3" style={{ marginLeft: `${depth * 16}px` }}>
@@ -347,19 +354,26 @@ export default function StructureStep() {
                 </div>
 
                 <div className="w-24">
-                  <input
-                    type="number"
-                    value={Number.isFinite(a.weight) ? a.weight : ""}
-                    onChange={(e) =>
-                      updateAssessment(a.id, {
-                        weight: e.target.value === "" ? Number.NaN : Number(e.target.value),
-                      })
-                    }
-                    className="w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700 text-center"
-                    min={0}
-                    max={100}
-                    step={1}
-                  />
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={Number.isFinite(a.weight) ? a.weight : ""}
+                      onChange={(e) =>
+                        updateAssessment(a.id, {
+                          weight: e.target.value === "" ? Number.NaN : Number(e.target.value),
+                        })
+                      }
+                      className="w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700 text-center"
+                      min={0}
+                      max={100}
+                      step={1}
+                    />
+                    {!Number.isFinite(a.weight) ? (
+                      <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-gray-400">
+                        -
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="mt-1 text-[11px] text-center text-gray-500">% of grade</p>
                 </div>
               </div>
@@ -372,22 +386,36 @@ export default function StructureStep() {
                 />
               </div>
 
-              {/* rule input */}
+              {/* rules dropdown */}
               <div className="rounded-xl bg-[#E8E3DC] border border-[#DDD6CC] px-3 py-3">
-                <p className="text-[11px] font-semibold text-gray-500">Rule</p>
-                <input
-                  value={a.rule ?? ""}
-                  onChange={(e) => updateAssessment(a.id, { rule: e.target.value })}
-                  placeholder="e.g., Best 10 of 11 quizzes count"
-                  className="mt-2 w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
-                />
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-500">
-                  {bestLabel ? (
-                    <span className="px-2 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200">
-                      {bestLabel}
-                    </span>
-                  ) : null}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleRulesOpen(a.id)}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <p className="text-[11px] font-semibold text-gray-500">Rules</p>
+                  <span className="text-gray-500">
+                    {rulesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </span>
+                </button>
+
+                {rulesOpen ? (
+                  <>
+                    <input
+                      value={a.rule ?? ""}
+                      onChange={(e) => updateAssessment(a.id, { rule: e.target.value })}
+                      placeholder="e.g., Best 10 of 11 quizzes count"
+                      className="mt-2 w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-500">
+                      {bestLabel ? (
+                        <span className="px-2 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200">
+                          {bestLabel}
+                        </span>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
               </div>
 
               {!hasChildren ? (
@@ -427,19 +455,26 @@ export default function StructureStep() {
                         </button>
                       </div>
                       <div className="flex items-center justify-end gap-2">
-                        <input
-                          type="number"
-                          value={Number.isFinite(c.weight) ? c.weight : ""}
-                          onChange={(e) =>
-                            updateAssessment(c.id, {
-                              weight: e.target.value === "" ? Number.NaN : Number(e.target.value),
-                            })
-                          }
-                          min={0}
-                          max={100}
-                          step={1}
-                          className="w-20 h-9 px-2 bg-[#F9F9F7] rounded-lg text-right text-xs leading-5 border border-[#CAC6C0] shadow-sm focus:outline-none"
-                        />
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={Number.isFinite(c.weight) ? c.weight : ""}
+                            onChange={(e) =>
+                              updateAssessment(c.id, {
+                                weight: e.target.value === "" ? Number.NaN : Number(e.target.value),
+                              })
+                            }
+                            min={0}
+                            max={100}
+                            step={1}
+                            className="w-20 h-9 px-2 bg-[#F9F9F7] rounded-lg text-right text-xs leading-5 border border-[#CAC6C0] shadow-sm focus:outline-none"
+                          />
+                          {!Number.isFinite(c.weight) ? (
+                            <span className="pointer-events-none absolute inset-0 flex items-center justify-end px-2 text-xs text-gray-400">
+                              -
+                            </span>
+                          ) : null}
+                        </div>
                         <p className="text-xs text-gray-500">% of grade</p>
                       </div>
                     </div>
