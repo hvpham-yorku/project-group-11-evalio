@@ -1,79 +1,112 @@
 # Evalio Frontend
 
-Modern Next.js 14+ frontend for Evalio with dark glass UI.
+Next.js App Router frontend for Evalio.
 
 ## Tech Stack
 
-- **Framework:** Next.js 14+ (App Router)
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS
-- **Components:** Shadcn/UI (Radix Primitives)
-- **Animation:** Framer Motion
-- **State Management:** TanStack Query (React Query)
-- **Icons:** Lucide React
+- Next.js 15 (App Router)
+- React 18
+- TypeScript
+- Tailwind CSS
+- Radix UI primitives
+- Framer Motion
+- Lucide icons
 
 ## Setup
 
-### 1. Install Node Modules
+1. Install dependencies:
 
 ```bash
 npm install
 ```
 
-### 2. Environment Variables
+2. Configure env:
 
-Already set in `.env.local`:
+```bash
+cp .env.local.example .env.local
 ```
+
+`.env.local`:
+
+```bash
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
-### 3. Run Development Server
+3. Run dev server:
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+App URL: `http://localhost:3000`
+
+## Current App Routes
+
+- `/` landing page
+- `/login` auth page
+- `/setup/upload`
+- `/setup/structure`
+- `/setup/grades`
+- `/setup/goals`
+- `/setup/deadlines`
+- `/setup/dashboard`
+- `/setup/explore`
+- `/setup/plan` (placeholder)
+- `/explore` (placeholder)
+
+## Setup Flow Behavior
+
+- The setup flow is authenticated; unauthenticated users are redirected to `/login`.
+- A shared setup context stores:
+  - active `course_id` in localStorage
+  - latest extraction result
+  - institutional grading rules from the structure step
+- If no active course is selected, the frontend falls back to the most recently created course in API results.
+
+## Extraction Integration
+
+- Upload step sends multipart form data to `POST /extraction/outline`.
+- Structure step lets users edit extracted assessments and confirm via `POST /extraction/confirm`.
+- If extraction returns `structure_valid=false`, UI shows a fail-closed message and does not continue with extracted structure.
 
 ## Project Structure
 
-```
+```text
 src/
-├── app/                    # Pages and layouts
-│   ├── layout.tsx         # Root layout
-│   ├── globals.css        # Global styles
-│   ├── page.tsx           # Landing page
-│   └── dashboard/         # Dashboard route
+├── app/
+│   ├── layout.tsx
+│   ├── page.tsx
+│   ├── login/page.tsx
+│   ├── setup/
+│   │   ├── layout.tsx
+│   │   ├── course-context.tsx
+│   │   ├── upload/page.tsx
+│   │   ├── structure/page.tsx
+│   │   ├── grades/page.tsx
+│   │   ├── goals/page.tsx
+│   │   ├── deadlines/page.tsx
+│   │   ├── dashboard/page.tsx
+│   │   ├── explore/page.tsx
+│   │   └── plan/page.tsx
+│   └── explore/page.tsx
 ├── components/
-│   ├── landing/           # Landing page components
-│   │   ├── landing.tsx
-│   │   ├── navbar.tsx
-│   │   ├── hero.tsx
-│   │   └── bento.tsx
-│   └── dashboard/         # Dashboard components
-│       └── shell.tsx
+│   ├── landing/
+│   └── setup/
 └── lib/
-    └── api/               # API client and types
-        ├── client.ts
-        └── models.ts
+    ├── api.ts
+    └── errors.ts
 ```
 
-## Styling
-
-All components use CSS variables defined in `globals.css`:
-- Dark glass aesthetic with backdrop blur
-- Radial gradients for ambient background
-- Shimmer animations for interactive elements
-- Responsive Tailwind utilities
-
-## Build
+## Scripts
 
 ```bash
+npm run dev
 npm run build
+npm run start
+npm run lint
 ```
 
-## Learn More
+## Notes / Limitations
 
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Tailwind CSS](https://tailwindcss.com)
-- [Framer Motion](https://www.framer.com/motion)
+- Upload input UI currently accepts `.pdf`, `.doc`, `.docx`, `.txt`.
+- Deadlines page currently uses localStorage for pending/confirmed UI state while the backend also exposes deadline APIs.

@@ -3,51 +3,67 @@
 EECS 2311 - Group 11  
 Winter 2026
 
-Evalio helps students model course assessments, track current standing, test target-grade feasibility, and run what-if grade scenarios.
+Evalio is a course-planning web app for tracking weighted assessments, calculating current standing, testing target feasibility, and running what-if scenarios from either manual setup or extracted course-outline data.
 
-## What Is Implemented Right Now
+## Current Feature Set
 
-- Manual course setup with weighted assessments (must total 100%)
-- Grade entry with validation (`raw_score <= total_score`, non-negative values)
-- Current standing calculation from graded assessments only
-- Target feasibility analysis with YorkU letter/point mapping
-- Minimum required score for a specific remaining assessment
-- What-if scenario analysis for ungraded assessments
-- Planning dashboard and scenario explorer UI
+- Cookie-based authentication (`/auth/register`, `/auth/login`, `/auth/me`, `/auth/logout`)
+- Manual course setup with weighted assessments (validation on create/update)
+- Grade entry and standing calculation
+- Target grade feasibility and minimum-required score analysis
+- What-if analysis (single assessment and multi-assessment dashboard what-if)
+- GPA conversion endpoints (4.0 / 9.0 / 10.0) plus CGPA calculator
+- Outline extraction pipeline:
+  - accepts `pdf`, `docx`, `txt`, `png`, `jpg`, `jpeg`
+  - text extraction + OCR fallback for PDFs and direct OCR for images
+  - grading-section filter + LLM extraction + normalization/validation
+- Deadlines workflow:
+  - extract from uploaded outline
+  - CRUD endpoints
+  - ICS export
+  - optional Google Calendar export
 
-## Current Architecture
+## Architecture
 
-- `frontend/`: Next.js App Router app (TypeScript + Tailwind)
-- `backend/`: FastAPI app with in-memory repository storage
-- `backend/test/`: pytest suite for grading logic and endpoint behavior
+- `frontend/`: Next.js App Router (TypeScript + Tailwind)
+- `backend/`: FastAPI app
+  - route modules under `backend/app/routes/`
+  - service layer under `backend/app/services/`
+  - extraction package under `backend/app/services/extraction/`
+- `backend/test/`: pytest suite (service and API behavior)
 
-Important behavior today:
+Storage behavior today:
 
-- Data is not persisted. Restarting the backend clears all courses.
-- The frontend works with the most recently created course (`courses[courses.length - 1]`).
-- Upload UI exists, but automatic syllabus parsing is not wired yet.
+- Default is in-memory repositories.
+- Optional PostgreSQL course repository can be enabled via `USE_POSTGRES=true`.
+- User and deadline repositories are currently in-memory.
 
 ## Repository Layout
 
 ```text
 project-group-11-evalio/
 ├── README.md
-├── log.md
-├── docs/architecture/itr1-architecture.png
+├── setup.sh
+├── docs/
+│   ├── api/GPA_ENDPOINTS.md
+│   └── architecture/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                # FastAPI app + CORS + /health
-│   │   ├── models.py              # Pydantic course/assessment schemas
-│   │   ├── repositories/          # Repository interface + in-memory implementation
-│   │   ├── services/              # Grading and course orchestration services
-│   │   └── routes/courses.py      # Thin API endpoints
-│   ├── test/                      # pytest coverage for ITR1 logic
+│   │   ├── main.py
+│   │   ├── routes/               # auth, courses, extraction, gpa, dashboard, deadlines
+│   │   ├── services/
+│   │   │   ├── extraction/       # orchestrator + modular extraction helpers
+│   │   │   └── extraction_service.py  # compatibility wrapper
+│   │   ├── repositories/         # in-memory + postgres course repo
+│   │   ├── models*.py
+│   │   └── db.py
+│   ├── test/
 │   ├── requirements.txt
 │   └── README.md
 └── frontend/
-    ├── src/app/setup/             # 5-step workflow routes
-    ├── src/components/setup/       # Setup, goals, dashboard, scenario UI
-    ├── src/lib/api.ts              # API client + shared types
+    ├── src/app/                  # app routes (landing, login, setup flow)
+    ├── src/components/setup/     # upload/structure/grades/goals/deadlines/dashboard
+    ├── src/lib/api.ts            # API client
     ├── package.json
     └── README.md
 ```
@@ -58,9 +74,10 @@ project-group-11-evalio/
 
 - Node.js 18+ (20+ recommended)
 - npm
-- Python 3.12.12
-- `tesseract` (system package)
-- `pdftoppm` from Poppler (system package)
+- Python 3.12.12 (required by `setup.sh`)
+- System OCR tools:
+  - `tesseract`
+  - `pdftoppm` (Poppler)
 
 ### 1. Clone
 
@@ -69,36 +86,31 @@ git clone <repository-url>
 cd project-group-11-evalio
 ```
 
-### 2. One-Command Setup (Recommended)
+### 2. One-command setup (recommended)
 
 ```bash
 bash setup.sh
 ```
 
-This script will:
+The script:
 
-- Copy missing env files (`backend/.env`, `frontend/.env.local`)
-- Create backend virtual environment (`backend/.venv`) if needed
-- Install backend and frontend dependencies
-- Verify required backend versions (`openai==1.46.0`, `httpx==0.27.2`)
-- Print the exact backend/frontend run commands
+- creates missing env files from examples
+- creates `backend/.venv` if needed
+- installs backend/frontend dependencies
+- verifies `openai==1.46.0` and `httpx==0.27.2`
+- prints run commands
 
-### 3. Run Backend (FastAPI)
+### 3. Run backend
 
 ```bash
 cd backend
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 uvicorn app.main:app --reload --port 8000
 ```
 
-Backend URLs:
+Backend docs: `http://127.0.0.1:8000/docs`
 
-- API root: `http://127.0.0.1:8000`
-- Swagger docs: `http://127.0.0.1:8000/docs`
-
-### 4. Run Frontend (Next.js)
-
-In a second terminal:
+### 4. Run frontend
 
 ```bash
 cd frontend
@@ -106,22 +118,11 @@ npm install
 npm run dev
 ```
 
-Frontend URL:
+Frontend app: `http://localhost:3000`
 
-- App: `http://localhost:3000`
+## Environment Variables
 
-### 5. Frontend Env Variable
-
-Create `frontend/.env.local` from example:
-
-```bash
-cp frontend/.env.local.example frontend/.env.local
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-```
-
-### 6. Backend Env Variables
-
-`backend/.env` should include:
+### Required (`backend/.env`)
 
 ```bash
 AUTH_SECRET_KEY=change-this-in-real-env
@@ -135,80 +136,79 @@ OPENAI_MODEL=gpt-4o-mini
 OPENAI_TIMEOUT_SECONDS=20
 ```
 
-## API Endpoints
+### Optional backend flags
+
+```bash
+USE_POSTGRES=true
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/evalio
+FILTER_DEBUG=1
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=http://localhost:8000/deadlines/google/callback
+```
+
+### Frontend (`frontend/.env.local`)
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+```
+
+## API Surface (High Level)
 
 Base URL: `http://127.0.0.1:8000`
 
-- `GET /health`
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /auth/logout`
-- `GET /auth/me`
-- `GET /courses/`
-- `POST /courses/`
-- `PUT /courses/{course_id}/weights`
-- `PUT /courses/{course_id}/grades`
-- `POST /courses/{course_id}/target`
-- `POST /courses/{course_id}/minimum-required`
-- `POST /courses/{course_id}/whatif`
+- Health:
+  - `GET /health`
+- Auth:
+  - `POST /auth/register`
+  - `POST /auth/login`
+  - `POST /auth/logout`
+  - `GET /auth/me`
+- Courses & grading:
+  - `GET /courses/`
+  - `POST /courses/`
+  - `PUT /courses/{course_id}/weights`
+  - `PUT /courses/{course_id}/grades`
+  - `POST /courses/{course_id}/target`
+  - `POST /courses/{course_id}/minimum-required`
+  - `POST /courses/{course_id}/whatif`
+- Extraction:
+  - `POST /extraction/outline`
+  - `POST /extraction/confirm`
+- Dashboard:
+  - `GET /courses/{course_id}/dashboard`
+  - `POST /courses/{course_id}/dashboard/whatif`
+  - `GET /courses/{course_id}/dashboard/strategies`
+- GPA:
+  - `GET /gpa/scales`
+  - `GET /courses/{course_id}/gpa`
+  - `POST /courses/{course_id}/gpa/whatif`
+  - `POST /gpa/cgpa`
+- Deadlines:
+  - `POST /courses/{course_id}/deadlines/extract`
+  - `GET /courses/{course_id}/deadlines`
+  - `POST /courses/{course_id}/deadlines`
+  - `PUT /courses/{course_id}/deadlines/{deadline_id}`
+  - `DELETE /courses/{course_id}/deadlines/{deadline_id}`
+  - `POST /courses/{course_id}/deadlines/export/ics`
+  - `GET /deadlines/google/authorize`
+  - `GET /deadlines/google/callback`
+  - `POST /courses/{course_id}/deadlines/export/gcal`
 
-Example create-course payload:
+## Frontend Flow
 
-```json
-{
-  "name": "EECS2311",
-  "term": "W26",
-  "assessments": [
-    { "name": "A1", "weight": 20, "raw_score": null, "total_score": null },
-    { "name": "Midterm", "weight": 30, "raw_score": null, "total_score": null },
-    { "name": "Final", "weight": 50, "raw_score": null, "total_score": null }
-  ]
-}
-```
+Primary setup workflow under `/setup/*`:
 
-Create/list course responses now include a `course_id` UUID used by all
-`/courses/{course_id}/...` operations.
-All `/courses/*` endpoints require authentication via HttpOnly cookie session.
+1. `/setup/upload`
+2. `/setup/structure`
+3. `/setup/grades`
+4. `/setup/goals`
+5. `/setup/deadlines`
+6. `/setup/dashboard`
 
-## Frontend Workflow
+Scenario exploration route: `/setup/explore`
 
-The setup flow under `/setup/*` is:
-
-1. Upload (`/setup/upload`)
-2. Structure (`/setup/structure`)
-3. Grades (`/setup/grades`)
-4. Goals (`/setup/goals`)
-5. Dashboard (`/setup/dashboard`)
-
-Scenario exploration is at `/setup/explore`.
-
-## Scripts
-
-Frontend:
-
-```bash
-cd frontend
-npm run dev
-npm run build
-npm run start
-npm run lint
-```
-
-Backend:
-
-```bash
-cd backend
-uvicorn app.main:app --reload --port 8000
-```
-
-## Testing and Validation
-
-Frontend lint:
-
-```bash
-cd frontend
-npm run lint
-```
+## Testing
 
 Backend tests:
 
@@ -218,17 +218,24 @@ source .venv/bin/activate
 python -m pytest -q
 ```
 
-`pytest` is included in `backend/requirements.txt`.
+Frontend lint:
+
+```bash
+cd frontend
+npm run lint
+```
 
 ## Known Limitations
 
-- In-memory backend storage only (no DB persistence yet)
-- No persistent user/course data across backend restarts
-- Upload page does not perform real file parsing yet
-- Frontend route `/explore` exists but is currently empty; main explorer is `/setup/explore`
+- Default runtime storage is still mostly in-memory.
+- PostgreSQL integration currently applies to course repository only.
+- Extraction quality depends on outline formatting and OCR quality.
+- Frontend upload picker currently lists `.pdf/.doc/.docx/.txt`; backend extraction endpoint also supports image uploads.
+- `/setup/plan` and `/explore` are placeholder routes.
 
 ## Iteration Artifacts
 
-- Architecture sketch: `docs/architecture/itr1-architecture.png`
-- Team process and sprint log: `log.md`
-- Planning/design PDFs in project root (ITR0/ITR1 artifacts)
+- `docs/architecture/itr1-architecture.png`
+- `docs/architecture/class diagram.png`
+- `docs/api/GPA_ENDPOINTS.md`
+- `log.md`
