@@ -218,35 +218,11 @@ ON courses(grade_type);
 --courses
 --RESTART IDENTITY CASCADE;
 
-SELECT table_name
-FROM information_schema.tables
-WHERE table_schema = 'public';
+--SELECT table_name
+--FROM information_schema.tables
+--WHERE table_schema = 'public';
 
-SELECT column_name
-FROM information_schema.columns
-WHERE table_name = 'rules';
-
-INSERT INTO users (email, password_hash)
-VALUES ('test@test.com', '123456');
-
-INSERT INTO courses (user_id, name, term)
-VALUES (
-    (SELECT id FROM users LIMIT 1),
-    'EECS2311',
-    'Fall2025'
-);
-
-INSERT INTO assessments (course_id, name, weight)
-VALUES (
-    (SELECT id FROM courses LIMIT 1),
-    'Midterm',
-    30
-);
-
-INSERT INTO rules (assessment_id, rule_type, rule_config)
-VALUES (
-    (SELECT id FROM assessments LIMIT 1),
-    'DROP_LOWEST',
-    '{"drop_count":1}'
-);
+--SELECT column_name
+--FROM information_schema.columns
+--WHERE table_name = 'rules';
 
