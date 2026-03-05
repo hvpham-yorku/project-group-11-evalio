@@ -61,13 +61,18 @@ CREATE TABLE assessments (
         -- If a course is deleted, its assessments are deleted automatically
 );
 
+-- Prevent duplicate assessment names within the same course
+ALTER TABLE assessments
+ADD CONSTRAINT unique_assessment_per_course
+UNIQUE (course_id, name);
+
 -- SCORES TABLE
 -- Stores actual grades entered by student
 
 CREATE TABLE scores (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
-    assessment_id UUID NOT NULL,
+    assessment_id UUID UNIQUE NOT NULL,
 
     score DECIMAL(5,2) CHECK (score >= 0 AND score <= 100),
 
@@ -109,6 +114,60 @@ CHECK (rule_type IN (
     'MANDATORY_PASS',
     'BONUS'
 ));
+
+-- CATEGORY TABLE
+-- Stores weighted assessment groups (Assignments, Quizzes, etc.)
+
+CREATE TABLE assessment_categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    course_id UUID NOT NULL,              -- Course the category belongs to
+
+    name VARCHAR(100) NOT NULL,           -- Category name
+
+    weight DECIMAL(5,2)
+        CHECK (weight >= 0 AND weight <= 100),
+
+    FOREIGN KEY (course_id)
+        REFERENCES courses(id)
+        ON DELETE CASCADE
+);
+
+-- Prevent duplicate category names within the same course
+ALTER TABLE assessment_categories
+ADD CONSTRAINT unique_course_category  
+UNIQUE (course_id, name);
+
+ALTER TABLE assessments
+ADD COLUMN category_id UUID;
+
+ALTER TABLE assessments
+ADD CONSTRAINT fk_assessment_category
+FOREIGN KEY (category_id)
+REFERENCES assessment_categories(id)
+ON DELETE SET NULL;
+
+-- TARGET GRADES TABLE
+-- Stores the desired final grade for a course
+
+CREATE TABLE grade_targets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+
+    course_id UUID NOT NULL,              -- Course this target belongs to
+
+    target_percentage DECIMAL(5,2)
+        CHECK (target_percentage >= 0 AND target_percentage <= 100),
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (course_id)
+        REFERENCES courses(id)
+        ON DELETE CASCADE
+);
+-- Ensure each course can only have one target grade
+ALTER TABLE grade_targets
+ADD CONSTRAINT unique_course_target
+UNIQUE (course_id);
 
 -- SCENARIOS TABLE
 -- Stores What-If scenarios
@@ -173,7 +232,17 @@ ON courses(term);
 CREATE INDEX idx_courses_grade_type
 ON courses(grade_type);
 
---To test
+CREATE INDEX idx_grade_targets_course_id
+ON grade_targets(course_id);
+
+CREATE INDEX idx_assessment_categories_course_id
+ON assessment_categories(course_id);
+
+-- To speed up category queries
+CREATE INDEX idx_assessments_category_id
+ON assessments(category_id);
+
+--To test the database 
 
 -- Reset database (for development/testing)
 --DROP TABLE IF EXISTS scenario_scores CASCADE;
@@ -218,11 +287,35 @@ ON courses(grade_type);
 --courses
 --RESTART IDENTITY CASCADE;
 
---SELECT table_name
---FROM information_schema.tables
---WHERE table_schema = 'public';
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public';
 
---SELECT column_name
---FROM information_schema.columns
---WHERE table_name = 'rules';
+SELECT column_name
+FROM information_schema.columns
+WHERE table_name = 'rules';
+
+INSERT INTO users (email, password_hash)
+VALUES ('test@test.com', '123456');
+
+INSERT INTO courses (user_id, name, term)
+VALUES (
+    (SELECT id FROM users LIMIT 1),
+    'EECS2311',
+    'Fall2025'
+);
+
+INSERT INTO assessments (course_id, name, weight)
+VALUES (
+    (SELECT id FROM courses LIMIT 1),
+    'Midterm',
+    30
+);
+
+INSERT INTO rules (assessment_id, rule_type, rule_config)
+VALUES (
+    (SELECT id FROM assessments LIMIT 1),
+    'DROP_LOWEST',
+    '{"drop_count":1}'
+);
 
