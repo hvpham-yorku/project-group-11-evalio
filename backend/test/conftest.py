@@ -1,16 +1,18 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import get_course_repo, get_user_repo
+from app.dependencies import get_course_repo, get_deadline_repo, get_user_repo
 from app.main import app
 
 @pytest.fixture(autouse=True)
 def clear_inmemory_repositories():
     get_course_repo().clear()
     get_user_repo().clear()
+    get_deadline_repo().clear()
     yield
     get_course_repo().clear()
     get_user_repo().clear()
+    get_deadline_repo().clear()
 
 
 @pytest.fixture

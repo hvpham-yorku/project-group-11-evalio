@@ -9,12 +9,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes.auth import router as auth_router
 from app.routes.courses import router as courses_router
 from app.routes.extraction import router as extraction_router
+from app.routes.gpa import router as gpa_router
+from app.routes.dashboard import router as dashboard_router
+from app.routes.deadlines import router as deadlines_router
 
 app = FastAPI(title="Evalio API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -24,6 +32,9 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(courses_router)
 app.include_router(extraction_router)
+app.include_router(gpa_router)
+app.include_router(dashboard_router)
+app.include_router(deadlines_router)
 
 @app.get("/health")
 def health():

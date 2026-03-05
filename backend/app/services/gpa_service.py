@@ -1,0 +1,236 @@
+"""
+Universal GPA Converter — SCRUM-109
+
+Converts course percentages to 4.0 (OMSAS), 9.0 (YorkU), and 10.0 GPA scales.
+
+Design decisions
+────────────────
+- Boundary comparison uses `>=` consistently against inclusive lower bounds.
+  e.g. 79.5% < 80.0 threshold → B+ (3.3) on 4.0 scale, NOT A- (3.7).
+  e.g. 80.0% >= 80.0 threshold → A- (3.7).
+- No rounding of input percentages before lookup — raw float compared directly.
+- Non-numeric grades (P/F, W) are excluded from GPA and returned as structured metadata.
+- Conversion logic is fully decoupled from UI; adding a new scale requires only a new
+  SCALE entry (list of GpaBand).
+- When course weights don't sum to 100%, the caller (strategy_service) normalises;
+  this module works purely on final percentages.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+
+# ─── Band definition ───────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class GpaBand:
+    letter: str
+    min_percent: float   # inclusive lower bound (>=)
+    grade_point: float
+    description: str
+
+
+# ─── 4.0 OMSAS scale (Ontario Medical School Application Service) ──────────────
+
+SCALE_4_0: list[GpaBand] = [
+    GpaBand("A+", 90, 4.0, "Exceptional"),
+    GpaBand("A",  85, 3.9, "Excellent"),
+    GpaBand("A-", 80, 3.7, "Very Good"),
+    GpaBand("B+", 77, 3.3, "Good"),
+    GpaBand("B",  73, 3.0, "Good"),
+    GpaBand("B-", 70, 2.7, "Satisfactory"),
+    GpaBand("C+", 67, 2.3, "Adequate"),
+    GpaBand("C",  63, 2.0, "Adequate"),
+    GpaBand("C-", 60, 1.7, "Marginal"),
+    GpaBand("D+", 57, 1.3, "Marginal"),
+    GpaBand("D",  53, 1.0, "Minimum Pass"),
+    GpaBand("D-", 50, 0.7, "Minimum Pass"),
+    GpaBand("F",   0, 0.0, "Failing"),
+]
+
+# ─── 9.0 YorkU scale ──────────────────────────────────────────────────────────
+
+SCALE_9_0: list[GpaBand] = [
+    GpaBand("A+", 90, 9.0, "Exceptional"),
+    GpaBand("A",  80, 8.0, "Excellent"),
+    GpaBand("B+", 75, 7.0, "Very Good"),
+    GpaBand("B",  70, 6.0, "Good"),
+    GpaBand("C+", 65, 5.0, "Competent"),
+    GpaBand("C",  60, 4.0, "Fairly Competent"),
+    GpaBand("D+", 55, 3.0, "Passing"),
+    GpaBand("D",  50, 2.0, "Marginally Passing"),
+    GpaBand("E",  40, 1.0, "Marginally Failing"),
+    GpaBand("F",   0, 0.0, "Failing"),
+]
+
+# ─── 10.0 International scale ─────────────────────────────────────────────────
+
+SCALE_10_0: list[GpaBand] = [
+    GpaBand("A+", 95, 10.0, "Outstanding"),
+    GpaBand("A",  90,  9.0, "Excellent"),
+    GpaBand("A-", 85,  8.5, "Very Good"),
+    GpaBand("B+", 80,  8.0, "Good"),
+    GpaBand("B",  75,  7.5, "Good"),
+    GpaBand("B-", 70,  7.0, "Above Average"),
+    GpaBand("C+", 65,  6.5, "Average"),
+    GpaBand("C",  60,  6.0, "Satisfactory"),
+    GpaBand("C-", 55,  5.5, "Below Average"),
+    GpaBand("D",  50,  5.0, "Minimum Pass"),
+    GpaBand("D-", 40,  4.0, "Poor"),
+    GpaBand("F",   0,  0.0, "Failing"),
+]
+
+SCALES: dict[str, list[GpaBand]] = {
+    "4.0": SCALE_4_0,
+    "9.0": SCALE_9_0,
+    "10.0": SCALE_10_0,
+}
+
+SUPPORTED_SCALES: list[str] = list(SCALES.keys())
+
+
+# ─── Exceptions ────────────────────────────────────────────────────────────────
+
+class GpaConversionError(Exception):
+    pass
+
+
+# ─── Core conversion ──────────────────────────────────────────────────────────
+
+def get_scale(scale_name: str) -> list[GpaBand]:
+    """Return the band table for *scale_name* or raise ``GpaConversionError``."""
+    bands = SCALES.get(scale_name)
+    if bands is None:
+        raise GpaConversionError(
+            f"Unsupported GPA scale '{scale_name}'. "
+            f"Supported: {', '.join(SUPPORTED_SCALES)}"
+        )
+    return bands
+
+
+def convert_percentage(percent: float, scale_name: str) -> dict[str, Any]:
+    """
+    Map a percentage to a GPA band on the requested scale.
+
+    Boundary rule: ``percent >= band.min_percent`` (inclusive lower bound),
+    evaluated from the highest band downward.
+    """
+    bands = get_scale(scale_name)
+    for band in bands:
+        if percent >= band.min_percent:
+            return {
+                "letter": band.letter,
+                "grade_point": band.grade_point,
+                "description": band.description,
+                "scale": scale_name,
+                "percentage": round(percent, 2),
+            }
+    # Fallback — should never be reached because all scales end with min=0.
+    last = bands[-1]
+    return {
+        "letter": last.letter,
+        "grade_point": last.grade_point,
+        "description": last.description,
+        "scale": scale_name,
+        "percentage": round(percent, 2),
+    }
+
+
+def convert_percentage_all_scales(percent: float) -> dict[str, dict[str, Any]]:
+    """Convert a single percentage to every supported GPA scale."""
+    return {name: convert_percentage(percent, name) for name in SUPPORTED_SCALES}
+
+
+# ─── Weighted cGPA ─────────────────────────────────────────────────────────────
+
+def calculate_weighted_gpa(
+    courses: list[dict[str, Any]],
+    scale_name: str,
+) -> dict[str, Any]:
+    """
+    Calculate weighted cumulative GPA from a list of course entries.
+
+    Each *course* dict must contain:
+      - ``percentage``  : float | None  — final course grade (%).
+      - ``credits``     : float         — credit weight (e.g. 3.0, 6.0).
+      - ``name``        : str           — course display name.
+      - ``grade_type``  : str           — ``"numeric"`` (default), ``"pass_fail"``,
+                                          or ``"withdrawn"``.
+
+    Non-numeric entries are excluded from the GPA computation but still appear
+    in the *excluded* list so the frontend can render them.
+    """
+    get_scale(scale_name)  # validate early
+
+    total_weighted_points = 0.0
+    total_credits = 0.0
+    course_results: list[dict[str, Any]] = []
+    excluded: list[dict[str, Any]] = []
+
+    for entry in courses:
+        name = entry.get("name", "Unknown")
+        credits = float(entry.get("credits", 0))
+        percentage = entry.get("percentage")
+        grade_type = entry.get("grade_type", "numeric")
+
+        # ── Non-numeric grades: skip GPA, record metadata ──
+        if grade_type != "numeric" or percentage is None:
+            excluded.append({
+                "name": name,
+                "credits": credits,
+                "grade_type": grade_type,
+                "reason": "Non-numeric grade excluded from GPA calculation",
+            })
+            continue
+
+        pct = float(percentage)
+        conversion = convert_percentage(pct, scale_name)
+        gp = conversion["grade_point"]
+
+        total_weighted_points += gp * credits
+        total_credits += credits
+
+        course_results.append({
+            "name": name,
+            "credits": credits,
+            "percentage": round(pct, 2),
+            **conversion,
+            "weighted_contribution": round(gp * credits, 4),
+        })
+
+    cgpa = (total_weighted_points / total_credits) if total_credits > 0 else 0.0
+
+    return {
+        "scale": scale_name,
+        "cgpa": round(cgpa, 2),
+        "total_credits": total_credits,
+        "total_weighted_points": round(total_weighted_points, 4),
+        "courses": course_results,
+        "excluded": excluded,
+        "formula": (
+            f"cGPA = Σ(GP × credits) / Σ(credits) = "
+            f"{round(total_weighted_points, 2)} / {total_credits} = {round(cgpa, 2)}"
+        ),
+    }
+
+
+def get_scales_metadata() -> list[dict[str, Any]]:
+    """Return metadata about all supported scales (for frontend dropdowns)."""
+    result = []
+    for name, bands in SCALES.items():
+        result.append({
+            "scale": name,
+            "max_point": bands[0].grade_point,
+            "bands": [
+                {
+                    "letter": b.letter,
+                    "min_percent": b.min_percent,
+                    "grade_point": b.grade_point,
+                    "description": b.description,
+                }
+                for b in bands
+            ],
+        })
+    return result

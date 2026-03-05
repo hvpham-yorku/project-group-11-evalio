@@ -5,9 +5,11 @@ from fastapi import Depends, HTTPException, Request, status
 from app.config import AUTH_COOKIE_NAME
 from app.repositories.base import CourseRepository, UserRepository
 from app.repositories.inmemory_course_repo import InMemoryCourseRepository
+from app.repositories.inmemory_deadline_repo import InMemoryDeadlineRepository
 from app.repositories.inmemory_user_repo import InMemoryUserRepository
 from app.services.auth_service import AuthService, AuthenticatedUser, AuthenticationError
 from app.services.course_service import CourseService
+from app.services.deadline_service import DeadlineService
 from app.services.extraction_service import ExtractionService
 
 
@@ -27,9 +29,11 @@ def _build_course_repo() -> CourseRepository:
 
 _course_repo = _build_course_repo()
 _user_repo = InMemoryUserRepository()
+_deadline_repo = InMemoryDeadlineRepository()
 _course_service = CourseService(_course_repo)
 _auth_service = AuthService(_user_repo)
 _extraction_service = ExtractionService()
+_deadline_service = DeadlineService(_deadline_repo)
 
 
 def get_course_repo() -> CourseRepository:
@@ -50,6 +54,14 @@ def get_auth_service() -> AuthService:
 
 def get_extraction_service() -> ExtractionService:
     return _extraction_service
+
+
+def get_deadline_service() -> DeadlineService:
+    return _deadline_service
+
+
+def get_deadline_repo() -> InMemoryDeadlineRepository:
+    return _deadline_repo
 
 
 def get_current_user(
