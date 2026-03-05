@@ -14,7 +14,7 @@ Source files analyzed:
 
 The backend can be viewed as three major logical domains.
 
-### 15.1 Academic Planning Domain
+### 1.1 Academic Planning Domain
 
 Primary responsibility:
 
@@ -38,7 +38,7 @@ What this domain does:
 - minimum-required score analysis
 - read-only scenario projections
 
-### 15.2 Course Outline Extraction Domain
+### 1.2 Course Outline Extraction Domain
 
 Primary responsibility:
 
@@ -59,7 +59,7 @@ What this domain does:
 - attach parse diagnostics/confidence/trigger metadata
 - provide a structured response that can be mapped into course setup
 
-### 15.3 Deadline Management Domain
+### 1.3 Deadline Management Domain
 
 Primary responsibility:
 
