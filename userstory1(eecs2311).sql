@@ -1,12 +1,21 @@
 -- Enable UUID generation (so PostgreSQL can create IDs)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- COURSES TABLE
 -- Stores each course that user creates or extracts
 -- Updated for GPA Converter (User Story 3)
 
 CREATE TABLE courses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),  -- Unique course ID
+	user_id UUID NOT NULL,                           -- Owner of the course
 
     name VARCHAR(255) NOT NULL,                      -- Course name
 
@@ -26,15 +35,12 @@ CREATE TABLE courses (
     grade_type VARCHAR(20) DEFAULT 'numeric'
     CHECK (grade_type IN ('numeric','pass','fail','withdrawn')),
 
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP   -- When it was created
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,   -- When it was created
+	FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
 );
 
-CREATE TABLE users (
-    id UUID PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
 
 -- ASSESSMENTS TABLE
 -- Stores assessments (midterm, quiz, etc.)
@@ -61,7 +67,7 @@ CREATE TABLE assessments (
 CREATE TABLE scores (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
-    assessment_id UUID UNIQUE NOT NULL,
+    assessment_id UUID NOT NULL,
 
     score DECIMAL(5,2) CHECK (score >= 0 AND score <= 100),
 
@@ -74,20 +80,35 @@ CREATE TABLE scores (
 
 
 -- RULES TABLE
--- Stores grading rules (best-of, drop lowest, etc.)
--- Uses JSONB for flexible rule storage
+-- Stores grading rules (best-of, drop lowest, mandatory pass, bonus, etc.)
+-- Each rule belongs to a specific assessment
 CREATE TABLE rules (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),  -- Unique rule ID
-    
-    course_id UUID NOT NULL,                         -- Which course it belongs to
-    
-    rule_type VARCHAR(100) NOT NULL,                 -- Type of rule
-    rule_config JSONB NOT NULL,                      -- Rule details (stored as JSON)
-    
-    FOREIGN KEY (course_id)
-        REFERENCES courses(id)
+
+    assessment_id UUID NOT NULL,                     -- Assessment the rule applies to
+
+    rule_type VARCHAR(50) NOT NULL,                  -- Type of rule (BEST_OF, DROP_LOWEST, etc.)
+
+    rule_config JSONB NOT NULL,                      -- Flexible configuration data for the rule
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- When the rule was created
+
+    -- Foreign key ensures rule belongs to a valid assessment
+    FOREIGN KEY (assessment_id)
+        REFERENCES assessments(id)
         ON DELETE CASCADE
+        -- If an assessment is deleted, its rules are deleted automatically
 );
+
+-- Ensure rule_type only contains valid rule values
+ALTER TABLE rules
+ADD CONSTRAINT valid_rule_type
+CHECK (rule_type IN (
+    'BEST_OF',
+    'DROP_LOWEST',
+    'MANDATORY_PASS',
+    'BONUS'
+));
 
 -- SCENARIOS TABLE
 -- Stores What-If scenarios
@@ -133,8 +154,8 @@ CREATE TABLE scenario_scores (
 CREATE INDEX idx_assessments_course_id
 ON assessments(course_id);
 
-CREATE INDEX idx_rules_course_id
-ON rules(course_id);
+CREATE INDEX idx_rules_assessment_id
+ON rules(assessment_id);
 
 -- INDEXES FOR PERFORMANCE
 
@@ -152,14 +173,16 @@ ON courses(term);
 CREATE INDEX idx_courses_grade_type
 ON courses(grade_type);
 
--- just to test (ignore)
+--To test
 
+-- Reset database (for development/testing)
 --DROP TABLE IF EXISTS scenario_scores CASCADE;
 --DROP TABLE IF EXISTS scenarios CASCADE;
 --DROP TABLE IF EXISTS scores CASCADE;
 --DROP TABLE IF EXISTS assessments CASCADE;
 --DROP TABLE IF EXISTS rules CASCADE;
 --DROP TABLE IF EXISTS courses CASCADE;
+--DROP TABLE IF EXISTS users CASCADE;
 
 --SELECT column_name
 --FROM information_schema.columns
@@ -173,7 +196,9 @@ ON courses(grade_type);
 --INSERT INTO courses (name, term, credits, final_percentage)
 --VALUES ('EECS2311', 'Fall2025', 3.0, 82);
 
+--SELECT * FROM users;
 --SELECT * FROM courses;
+--SELECT * FROM rules;
 
 --INSERT INTO courses (name, term, final_percentage)
 --VALUES ('BadCourse', 'Fall2025', 150);
@@ -192,4 +217,36 @@ ON courses(grade_type);
 --rules,
 --courses
 --RESTART IDENTITY CASCADE;
+
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public';
+
+SELECT column_name
+FROM information_schema.columns
+WHERE table_name = 'rules';
+
+INSERT INTO users (email, password_hash)
+VALUES ('test@test.com', '123456');
+
+INSERT INTO courses (user_id, name, term)
+VALUES (
+    (SELECT id FROM users LIMIT 1),
+    'EECS2311',
+    'Fall2025'
+);
+
+INSERT INTO assessments (course_id, name, weight)
+VALUES (
+    (SELECT id FROM courses LIMIT 1),
+    'Midterm',
+    30
+);
+
+INSERT INTO rules (assessment_id, rule_type, rule_config)
+VALUES (
+    (SELECT id FROM assessments LIMIT 1),
+    'DROP_LOWEST',
+    '{"drop_count":1}'
+);
 
