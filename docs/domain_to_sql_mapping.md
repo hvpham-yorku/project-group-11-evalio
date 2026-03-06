@@ -1,6 +1,6 @@
 # Domain Model -> SQL Mapping (Audit)
 
-This document maps the current backend domain model to the SQL schema in `userstory1(eecs2311).sql`.
+This document maps the current backend domain model to the SQL schema in `database/schema/evalio_schema.sql`.
 
 ## Inputs Analyzed
 
@@ -8,7 +8,7 @@ This document maps the current backend domain model to the SQL schema in `userst
 - `backend/app/models_deadline.py`
 - `backend/app/models_extraction.py`
 - `docs/domain_model_spec.md`
-- `userstory1(eecs2311).sql`
+- `database/schema/evalio_schema.sql`
 
 ## Domain Hierarchy Diagram
 
@@ -285,7 +285,7 @@ No explicit backend model; scenario values are currently transient in what-if ca
 - `created_at`
 
 #### 3) SQL Table Used
-- None in `userstory1(eecs2311).sql`
+- None in `database/schema/evalio_schema.sql`
 
 #### 4) SQL Columns Used
 - Not applicable
@@ -313,7 +313,7 @@ Extraction models from `models_extraction.py`
 - `ExtractionResponse`: `course_code`, `assessments`, `deadlines`, `diagnostics`, `structure_valid`, `message`
 
 #### 3) SQL Table Used
-- None in `userstory1(eecs2311).sql`
+- None in `database/schema/evalio_schema.sql`
 
 #### 4) SQL Columns Used
 - Not applicable

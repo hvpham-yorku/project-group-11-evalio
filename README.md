@@ -30,7 +30,9 @@ Evalio is a course-planning web app for tracking weighted assessments, calculati
   - route modules under `backend/app/routes/`
   - service layer under `backend/app/services/`
   - extraction package under `backend/app/services/extraction/`
-- `backend/test/`: pytest suite (service and API behavior)
+- `database/`: submission-facing database artifacts (schema, setup notes, ER copy)
+- `submission/`: ITR deliverable PDFs grouped by iteration
+- `backend/test/`: pytest suite split into `unit/` and `integration/`
 
 Storage behavior today:
 
@@ -42,6 +44,14 @@ Storage behavior today:
 ```text
 project-group-11-evalio/
 ├── README.md
+├── database/
+│   ├── README.md
+│   └── schema/
+│       └── evalio_schema.sql
+├── submission/
+│   ├── itr0/
+│   ├── itr1/
+│   └── itr2/
 ├── setup.sh
 ├── docs/
 │   ├── api/GPA_ENDPOINTS.md
@@ -57,6 +67,8 @@ project-group-11-evalio/
 │   │   ├── models*.py
 │   │   └── db.py
 │   ├── test/
+│   │   ├── unit/
+│   │   └── integration/
 │   ├── requirements.txt
 │   └── README.md
 └── frontend/
@@ -66,6 +78,14 @@ project-group-11-evalio/
     ├── package.json
     └── README.md
 ```
+
+## Database Artifacts For Submission
+
+- Runtime database code stays in `backend/` (`app/db.py`, repositories, models, DI).
+- Submission-facing artifacts live in `database/`:
+  - `database/schema/evalio_schema.sql`
+  - `docs/ER diagram/erdiagram_evalio.png`
+  - `database/README.md`
 
 ## Quick Start
 

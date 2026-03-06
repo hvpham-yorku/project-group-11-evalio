@@ -2,6 +2,8 @@
 
 FastAPI backend for authentication, course management, extraction, grading analysis, GPA conversion, and deadline workflows.
 
+Note: submission-facing DB artifacts live in `../database/`; runtime DB code remains in this `backend/` package.
+
 ## Runtime Overview
 
 - Framework: FastAPI + Pydantic v2
@@ -207,4 +209,16 @@ Run backend tests:
 ```bash
 source .venv/bin/activate
 python -m pytest -q
+```
+
+Run only unit tests:
+
+```bash
+python -m pytest -q test/unit
+```
+
+Run only integration tests:
+
+```bash
+python -m pytest -q test/integration
 ```
