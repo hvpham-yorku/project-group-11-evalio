@@ -42,6 +42,7 @@ CREATE INDEX idx_calendar_connections_user
 ON calendar_connections(user_id);
 
 
+
 -- COURSES
 CREATE TABLE courses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -67,6 +68,11 @@ CREATE TABLE courses (
         ON DELETE CASCADE
 );
 
+CREATE INDEX idx_courses_term
+ON courses(term);
+
+CREATE INDEX idx_courses_grade_type
+ON courses(grade_type);
 
 
 -- DEADLINES
@@ -77,23 +83,21 @@ CREATE TABLE deadlines (
 
     title VARCHAR(255) NOT NULL,
 
-    due_at TIMESTAMPTZ NOT NULL,
-
-	assessment_name TEXT,
-
-    deadline_type VARCHAR(20) NOT NULL
-        CHECK (deadline_type IN ('assignment','test','exam','quiz','project','other')),
-
-    notes TEXT,
+    due_date DATE NOT NULL,
+    due_time TIME,
 
     source VARCHAR(20) NOT NULL
         CHECK (source IN ('manual','outline')),
 
-    outline_file_hash TEXT,
-    outline_raw_text_ref TEXT,
+    notes TEXT,
+
+    assessment_name TEXT,
+
+    exported_to_gcal BOOLEAN DEFAULT FALSE,
+
+    gcal_event_id TEXT,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (course_id)
         REFERENCES courses(id)
@@ -102,13 +106,15 @@ CREATE TABLE deadlines (
 
 ALTER TABLE deadlines
 ADD CONSTRAINT unique_deadline_per_course
-UNIQUE (course_id, title, due_at);
+UNIQUE (course_id, title, due_date);
 
 CREATE INDEX idx_deadlines_course_id
 ON deadlines(course_id);
 
-CREATE INDEX idx_deadlines_due_at
-ON deadlines(due_at);
+CREATE INDEX idx_deadlines_due_date
+ON deadlines(due_date);
+
+
 
 -- DEADLINE EXPORTS
 CREATE TABLE deadline_exports (
@@ -158,6 +164,9 @@ CREATE TABLE assessment_categories (
     UNIQUE (course_id, name)
 );
 
+CREATE INDEX idx_assessment_categories_course_id
+ON assessment_categories(course_id);
+
 
 
 -- ASSESSMENTS
@@ -180,7 +189,7 @@ CREATE TABLE assessments (
 
     is_bonus BOOLEAN NOT NULL DEFAULT FALSE,
 
-    position INTEGER,
+    position INTEGER NOT NULL,
 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
@@ -198,6 +207,19 @@ CREATE TABLE assessments (
 
     UNIQUE (course_id, name)
 );
+
+ALTER TABLE assessments
+ADD CONSTRAINT unique_assessment_order
+UNIQUE (course_id, parent_assessment_id, position);
+
+CREATE INDEX idx_assessments_course_id
+ON assessments(course_id);
+
+CREATE INDEX idx_assessments_parent
+ON assessments(parent_assessment_id);
+
+CREATE INDEX idx_assessments_category_id
+ON assessments(category_id);
 
 
 
@@ -226,6 +248,9 @@ CREATE TABLE rules (
     ))
 );
 
+CREATE INDEX idx_rules_assessment_id
+ON rules(assessment_id);
+
 
 
 -- TARGET GRADES
@@ -246,6 +271,9 @@ CREATE TABLE grade_targets (
     UNIQUE (course_id)
 );
 
+CREATE INDEX idx_grade_targets_course_id
+ON grade_targets(course_id);
+
 
 
 -- SCENARIOS
@@ -262,6 +290,9 @@ CREATE TABLE scenarios (
         REFERENCES courses(id)
         ON DELETE CASCADE
 );
+
+CREATE INDEX idx_scenarios_course_id
+ON scenarios(course_id);
 
 
 
@@ -284,39 +315,3 @@ CREATE TABLE scenario_scores (
 
     UNIQUE (scenario_id, assessment_id)
 );
-
-
-
--- INDEXES
-CREATE INDEX idx_assessments_course_id
-ON assessments(course_id);
-
-CREATE INDEX idx_assessments_parent
-ON assessments(parent_assessment_id);
-
-CREATE INDEX idx_rules_assessment_id
-ON rules(assessment_id);
-
-CREATE INDEX idx_scenarios_course_id
-ON scenarios(course_id);
-
-CREATE INDEX idx_courses_term
-ON courses(term);
-
-CREATE INDEX idx_courses_grade_type
-ON courses(grade_type);
-
-CREATE INDEX idx_grade_targets_course_id
-ON grade_targets(course_id);
-
-CREATE INDEX idx_assessment_categories_course_id
-ON assessment_categories(course_id);
-
-CREATE INDEX idx_assessments_category_id
-ON assessments(category_id);
-
-CREATE INDEX idx_deadlines_course_due_at
-ON deadlines(course_id, due_at);
-
-
-
