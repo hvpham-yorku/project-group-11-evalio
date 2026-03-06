@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, TrendingUp, GraduationCap, Calendar, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  TrendingUp,
+  GraduationCap,
+  Calendar,
+  Plus,
+  Lightbulb,
+  ChevronDown,
+} from "lucide-react";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
 import {
@@ -147,6 +155,9 @@ export function Dashboard() {
   const [deadlines, setDeadlines] = useState<DashboardDeadline[]>([]);
   const { ensureCourseIdFromList } = useSetupCourse();
 
+  // Local state for the What-If Planner inputs
+  const [whatIfGrades, setWhatIfGrades] = useState<Record<string, string>>({});
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -186,9 +197,10 @@ export function Dashboard() {
           (a) => !a.is_bonus && hasGrade(a)
         );
 
-        const confirmedMap = safeParse<Record<string, DashboardDeadline[]>>(
-          window.localStorage.getItem(CONFIRMED_DEADLINES_KEY)
-        ) ?? {};
+        const confirmedMap =
+          safeParse<Record<string, DashboardDeadline[]>>(
+            window.localStorage.getItem(CONFIRMED_DEADLINES_KEY)
+          ) ?? {};
         const allDeadlines = Object.entries(confirmedMap).flatMap(
           ([storedCourseId, courseDeadlines]) =>
             (courseDeadlines ?? []).map((deadline) => ({
@@ -364,6 +376,28 @@ export function Dashboard() {
       .slice(0, 3);
   }, [deadlines]);
 
+  // Data for Learning Strategies (Matching Screenshot)
+  const learningStrategies = [
+    {
+      name: "Final Exam",
+      weight: 40,
+      priority: "High",
+      tags: ["80/20 Rule", "Active Recall", "Spaced Repetition"],
+    },
+    {
+      name: "Assignments",
+      weight: 20,
+      priority: "Medium",
+      tags: ["Feynman Technique", "Time Blocking"],
+    },
+    {
+      name: "Participation",
+      weight: 10,
+      priority: "Low",
+      tags: ["Consistency Plan"],
+    },
+  ];
+
   return (
     <div className="mx-auto max-w-4xl space-y-10 px-4 pb-20">
       {/* 1. Header Section */}
@@ -398,7 +432,9 @@ export function Dashboard() {
       {/* 3. Upcoming Deadlines */}
       <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-800">Upcoming Deadlines</h3>
+          <h3 className="text-xl font-bold text-gray-800">
+            Upcoming Deadlines
+          </h3>
           <button
             onClick={() => router.push("/setup/deadlines")}
             className="rounded-lg bg-[#F6F1EA] px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:opacity-80"
@@ -410,7 +446,9 @@ export function Dashboard() {
         {upcomingDeadlines.length === 0 ? (
           <div className="rounded-2xl bg-[#F9F8F6] py-14 text-center">
             <Calendar className="mx-auto mb-3 h-10 w-10 text-[#C6B8A8]" />
-            <p className="mb-3 text-sm text-gray-500">No upcoming deadlines yet</p>
+            <p className="mb-3 text-sm text-gray-500">
+              No upcoming deadlines yet
+            </p>
             <button
               onClick={() => router.push("/setup/deadlines")}
               className="inline-flex items-center gap-2 rounded-lg bg-[#5D737E] px-4 py-2 text-sm text-white transition hover:bg-[#4A5D66]"
@@ -425,8 +463,9 @@ export function Dashboard() {
               const dueDate = new Date(deadline.due_date);
               const daysLeft = getDaysLeft(deadline.due_date);
               const courseName =
-                courses.find((course) => course.course_id === deadline.course_id)
-                  ?.course_name || "Unknown Course";
+                courses.find(
+                  (course) => course.course_id === deadline.course_id
+                )?.course_name || "Unknown Course";
 
               return (
                 <div
@@ -584,7 +623,108 @@ export function Dashboard() {
         ))}
       </div>
 
-      {/* GPA Overview Section (NOW AT THE BOTTOM) */}
+      {/* NEW: 7. What-If Planner & Learning Strategy */}
+      <div className="space-y-10">
+        {/* What-If Planner */}
+        <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+          <h3 className="text-xl font-bold text-gray-800 mb-6">
+            What-If Planner
+          </h3>
+          <div className="space-y-4">
+            {learningStrategies.map((item) => (
+              <div
+                key={item.name}
+                className="bg-[#FAF7F2] p-5 rounded-2xl flex flex-col gap-2"
+              >
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h4 className="font-bold text-gray-700">{item.name}</h4>
+                    <p className="text-xs text-gray-400">
+                      {item.weight}% of final grade
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button className="px-3 py-1.5 bg-[#E6E2DB] text-[10px] font-bold text-gray-600 rounded-lg hover:opacity-80 transition">
+                      Use 0
+                    </button>
+                    <button className="px-3 py-1.5 bg-[#E6E2DB] text-[10px] font-bold text-gray-600 rounded-lg hover:opacity-80 transition">
+                      Use 100
+                    </button>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        placeholder="NaN"
+                        className="w-16 p-1.5 border border-gray-200 rounded-lg text-right text-xs bg-white focus:outline-none focus:ring-1 focus:ring-slate-300"
+                        value={whatIfGrades[item.name] || ""}
+                        onChange={(e) =>
+                          setWhatIfGrades({
+                            ...whatIfGrades,
+                            [item.name]: e.target.value,
+                          })
+                        }
+                      />
+                      <span className="ml-1 text-xs text-gray-400">%</span>
+                    </div>
+                  </div>
+                </div>
+                <button className="flex items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-gray-600 uppercase tracking-tight">
+                  <ChevronDown size={12} /> Show Math
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 p-4 bg-blue-50/50 border border-blue-100 text-[#5D737E] text-[10px] rounded-xl font-medium">
+            What-if values are temporary and do not change your actual grades.
+          </div>
+        </div>
+
+        {/* Learning Strategy */}
+        <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+          <div className="flex items-center gap-2 mb-6">
+            <Lightbulb size={20} className="text-yellow-500" />
+            <h3 className="text-xl font-bold text-gray-800">
+              Learning Strategy
+            </h3>
+          </div>
+          <div className="space-y-4">
+            {learningStrategies.map((item) => (
+              <div key={item.name} className="bg-[#FAF7F2] p-5 rounded-2xl">
+                <h4 className="font-bold text-gray-700">{item.name}</h4>
+                <p className="text-xs text-gray-400 mb-4">
+                  {item.weight}% of final grade
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <span
+                    className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider
+                    ${
+                      item.priority === "High"
+                        ? "bg-red-100 text-red-600"
+                        : item.priority === "Medium"
+                        ? "bg-orange-100 text-orange-600"
+                        : "bg-green-100 text-green-600"
+                    }`}
+                  >
+                    {item.priority} Priority
+                  </span>
+                  {item.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-3 py-1 bg-blue-50 border border-blue-100 text-[#5D737E] rounded-lg text-[10px] font-medium"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+                <button className="mt-4 flex items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-gray-600 uppercase tracking-tight">
+                  <ChevronDown size={12} /> Why this strategy
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* GPA Overview Section */}
       <div className="space-y-4">
         <div>
           <h2 className="text-xl font-bold text-gray-800">GPA Overview</h2>
