@@ -554,6 +554,81 @@ This section records the planning, development process, task assignments, time t
 
 ## 3. Task Assignment & Work Breakdown (ITR2)
 
+### ITR2-2 — Persistent Multi-Course Planning System (DB + Multi-Course Support)
+SCRUM-96
+
+**Story Owner:** Himanshi Verma
+**Planned Effort:** 4–5 days
+**Actual Effort:** 5 days
+
+#### Story Description
+As a student, when I manage my courses, I want my courses, grades, and what-if scenarios to be saved permanently so that I can track and plan my academic performance across sessions without losing data between sessions.
+
+#### Scope (ITR2)
+- Course persistence:
+  - Courses and their structures are stored in a persistent database.
+  - The system saves course data including assessments, grading rules, and weights.
+  - Saved courses are automatically loaded when the application restarts.
+  - Students can edit and delete previously saved courses.
+  - Course data remains consistent when reloaded.
+- Score and scenario persistence:
+  - Entered grades for assessments are saved in the database.
+  - Students can update and delete stored scores.
+  - What-If scenarios can be saved and labeled.
+  - Saved scenarios can be reloaded without overwriting actual grades.
+  - The system recalculates grades and feasibility correctly after loading persisted data.
+- Multi-course planning:
+Students can create and manage multiple courses.
+The application provides a course overview page showing:
+ - Course name
+ - Current grade
+ - Target grade
+ - Feasibility status
+Students can switch between courses without losing data.
+Deleting a course removes all related data using cascading delete rules.
+- Dual database support:
+  - The system supports both an in-memory stub database and a PostgreSQL database.
+  - Repository abstraction allows switching between the two implementations.
+  - Database switching is controlled through configuration.
+  - PostgreSQL initialization scripts are included.
+  - Integration tests verify correct persistence behaviour.
+
+#### Development Tasks & Assignments
+Backend: Implement Repository Layer & Multi-Course CRUD Logic
+Assignee: Shivam (SCRUM-96)
+
+Database: Design Schema & PostgreSQL Integration
+Assignee: Himanshi (SCRUM-97)
+
+Frontend: Multi-Course Overview & Switching Interface
+Assignee: Rima (SCRUM-98)
+
+Frontend: UI/UX Design in Figma
+Assignee: Shadi (SCRUM-128)
+
+Tests: Unit & Integration Tests for Persistence
+Assignee: Bardiya (SCRUM-99)
+
+Docs: Update Class Diagram (Persistence Architecture)
+Assignee: Bardiya (SCRUM-100)
+
+Docs: Create Sequence Diagrams for Persistence Flows
+Assignee: Bardiya (SCRUM-120)
+
+Docs: Create ER Diagram (Database Schema)
+Assignee: Himanshi (SCRUM-121)
+
+Docs: Update log.md (Persistence Architecture)
+Assignee: Himanshi (SCRUM-122)
+
+#### Notes / Reflection
+- Implemented a repository abstraction layer to support both the stub database and PostgreSQL without changing business logic.
+- Designed a relational database schema to persist courses, assessments, scores, scenarios, and deadlines.
+- Added referential integrity constraints and cascading deletes to maintain consistent data relationships.
+- Implemented multi-course support allowing students to create and switch between multiple courses without data loss.
+- Integration tests verified that data persists after application restart and that switching between stub and PostgreSQL works correctly.
+- No major blockers were encountered during development.
+
 ### ITR2-4 — Course Evaluation & Rule Modeling  
 ([SCRUM-106](https://rimaaa.atlassian.net/browse/SCRUM-106))
 
