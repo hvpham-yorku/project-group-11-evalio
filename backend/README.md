@@ -74,11 +74,12 @@ OPENAI_TIMEOUT_SECONDS=20
 FILTER_DEBUG=1
 ```
 
-### Optional PostgreSQL course storage
+### Optional PostgreSQL storage
 
 ```bash
 USE_POSTGRES=true
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/evalio
+POSTGRES_FALLBACK_TO_MEMORY=true
 ```
 
 ### Optional Google Calendar integration
@@ -147,8 +148,7 @@ All `/courses/*`, `/gpa/*`, `/dashboard/*`, `/deadlines/*`, and extraction endpo
 ## Storage Notes
 
 - Default mode uses in-memory repositories.
-- If `USE_POSTGRES=true`, courses are stored via `PostgresCourseRepository`.
-- User and deadline repositories remain in-memory.
+- If `USE_POSTGRES=true`, courses/users/deadlines use PostgreSQL repositories.
 
 ## Testing
 

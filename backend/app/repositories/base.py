@@ -3,6 +3,7 @@ from typing import Protocol
 from uuid import UUID
 
 from app.models import CourseCreate
+from app.models_deadline import Deadline, DeadlineCreate, DeadlineUpdate
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,41 @@ class UserRepository(Protocol):
         ...
 
     def get_by_id(self, user_id: UUID) -> StoredUser | None:
+        ...
+
+    def clear(self) -> None:
+        ...
+
+
+class DeadlineRepository(Protocol):
+    def create(self, user_id: UUID, course_id: UUID, data: DeadlineCreate) -> Deadline:
+        ...
+
+    def list_all(self, user_id: UUID, course_id: UUID) -> list[Deadline]:
+        ...
+
+    def get_by_id(self, user_id: UUID, course_id: UUID, deadline_id: UUID) -> Deadline | None:
+        ...
+
+    def update(
+        self,
+        user_id: UUID,
+        course_id: UUID,
+        deadline_id: UUID,
+        data: DeadlineUpdate,
+    ) -> Deadline | None:
+        ...
+
+    def delete(self, user_id: UUID, course_id: UUID, deadline_id: UUID) -> bool:
+        ...
+
+    def mark_exported(
+        self,
+        user_id: UUID,
+        course_id: UUID,
+        deadline_id: UUID,
+        gcal_event_id: str,
+    ) -> Deadline | None:
         ...
 
     def clear(self) -> None:

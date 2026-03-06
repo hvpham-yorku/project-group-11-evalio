@@ -35,8 +35,7 @@ Evalio is a course-planning web app for tracking weighted assessments, calculati
 Storage behavior today:
 
 - Default is in-memory repositories.
-- Optional PostgreSQL course repository can be enabled via `USE_POSTGRES=true`.
-- User and deadline repositories are currently in-memory.
+- Optional PostgreSQL repositories can be enabled via `USE_POSTGRES=true` (courses, users, deadlines).
 
 ## Repository Layout
 
@@ -141,6 +140,7 @@ OPENAI_TIMEOUT_SECONDS=20
 ```bash
 USE_POSTGRES=true
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/evalio
+POSTGRES_FALLBACK_TO_MEMORY=true
 FILTER_DEBUG=1
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
@@ -228,7 +228,7 @@ npm run lint
 ## Known Limitations
 
 - Default runtime storage is still mostly in-memory.
-- PostgreSQL integration currently applies to course repository only.
+- PostgreSQL integration supports course, user, and deadline repositories when enabled.
 - Extraction quality depends on outline formatting and OCR quality.
 - Frontend upload picker currently lists `.pdf/.doc/.docx/.txt`; backend extraction endpoint also supports image uploads.
 - `/setup/plan` and `/explore` are placeholder routes.

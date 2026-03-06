@@ -34,7 +34,7 @@ from app.models_deadline import (
     Deadline,
     DeadlineCreate,
 )
-from app.repositories.inmemory_deadline_repo import InMemoryDeadlineRepository
+from app.repositories.base import DeadlineRepository
 
 # ─── Date-parsing regexes (shared with extraction_service) ────────────────────
 
@@ -424,7 +424,7 @@ class DeadlineService:
     Injected via FastAPI ``Depends()`` — see ``dependencies.py``.
     """
 
-    def __init__(self, repository: InMemoryDeadlineRepository) -> None:
+    def __init__(self, repository: DeadlineRepository) -> None:
         self._repo = repository
         # In-memory Google token storage per user_id (for dev).
         # TODO (SCRUM-85): move to DB when deadline schema lands.
