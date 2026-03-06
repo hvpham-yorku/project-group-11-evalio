@@ -36,6 +36,8 @@ def _course_payload():
             f"/courses/{uuid4()}/grades",
             {"assessments": [{"name": "A1", "raw_score": 80, "total_score": 100}]},
         ),
+        ("put", f"/courses/{uuid4()}", {"name": "EECS2311 Updated", "term": "W26"}),
+        ("delete", f"/courses/{uuid4()}", None),
         ("post", f"/courses/{uuid4()}/target", {"target": 80}),
         (
             "post",

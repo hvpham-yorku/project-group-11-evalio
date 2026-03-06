@@ -18,6 +18,7 @@ export type CourseAssessment = {
 export type Course = {
   course_id: string;
   name: string;
+  course_name?: string;
   term?: string | null;
   assessments: CourseAssessment[];
 };
@@ -38,6 +39,7 @@ export type YorkEquivalent = {
 export type TargetCheckResponse = {
   target: number;
   current_standing: number;
+  final_total?: number;
   maximum_possible: number;
   feasible: boolean;
   explanation: string;
@@ -60,6 +62,12 @@ export type UpdateCourseGradesResponse = {
     raw_score: number | null;
     total_score: number | null;
   }>;
+};
+
+export type UpdateCourseMetadataResponse = {
+  message: string;
+  course_id: string;
+  course: Omit<Course, "course_id">;
 };
 
 export type WhatIfResponse = {
@@ -270,6 +278,22 @@ export function updateCourseGrades(
     method: "PUT",
     body: JSON.stringify(payload),
   }) as Promise<UpdateCourseGradesResponse>;
+}
+
+export function updateCourseMetadata(
+  courseId: string,
+  payload: { name: string; term?: string | null }
+) {
+  return request(`/courses/${courseId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  }) as Promise<UpdateCourseMetadataResponse>;
+}
+
+export function deleteCourse(courseId: string) {
+  return request(`/courses/${courseId}`, {
+    method: "DELETE",
+  }) as Promise<{ message: string; course_id: string }>;
 }
 
 export function checkTarget(courseId: string, payload: { target: number }) {

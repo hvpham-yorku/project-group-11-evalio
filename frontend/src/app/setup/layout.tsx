@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { SetupCourseProvider } from "@/app/setup/course-context";
@@ -15,9 +15,11 @@ export default function SetupLayout({
   const pathname = usePathname() || "";
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
+  const isExploreView = pathname.startsWith("/setup/explore");
+  const isManageView = pathname.startsWith("/setup/manage");
 
-  // Only show the 6-step progress bar if we aren't in the "Explore" view
-  const showStepProgress = !pathname.startsWith("/setup/explore");
+  // Hide stepper on non-linear setup utility pages.
+  const showStepProgress = !isExploreView && !isManageView;
 
   useEffect(() => {
     let mounted = true;
@@ -51,6 +53,7 @@ export default function SetupLayout({
   const activeStep = (() => {
     if (pathname === "/setup" || pathname === "/setup/") return 1;
     if (pathname.startsWith("/setup/upload")) return 1;
+    if (pathname.startsWith("/setup/manage")) return 2;
     if (pathname.startsWith("/setup/structure")) return 2;
     if (pathname.startsWith("/setup/grades")) return 3;
     if (pathname.startsWith("/setup/goals")) return 4;
@@ -110,6 +113,9 @@ export default function SetupLayout({
           </div>
         </div>
 
+        {/* COURSE SELECTOR (Shows only after Step 1) */}
+        {showCourseSelector && <CourseSelector />}
+
         {/* 6-STEP PROGRESS BAR */}
         {showStepProgress ? (
           <div className="flex justify-between items-center max-w-6xl mx-auto mb-12 text-sm text-gray-400">
@@ -123,9 +129,8 @@ export default function SetupLayout({
                 "Dashboard",
               ];
               return (
-                <>
+                <Fragment key={step}>
                   <div
-                    key={step}
                     onClick={() => router.push(stepRoutes[step])}
                     className={`flex items-center gap-2 cursor-pointer ${
                       activeStep >= step ? "text-slate-600 font-semibold" : ""
@@ -145,14 +150,11 @@ export default function SetupLayout({
                   {step < 6 && (
                     <div className="h-[1px] bg-gray-200 flex-1 mx-4" />
                   )}
-                </>
+                </Fragment>
               );
             })}
           </div>
         ) : null}
-
-        {/* COURSE SELECTOR (Shows only after Step 1) */}
-        {showCourseSelector && <CourseSelector />}
 
         {/* PAGE CONTENT */}
         <main className="max-w-6xl mx-auto">{children}</main>

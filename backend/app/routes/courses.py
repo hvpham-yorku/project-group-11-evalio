@@ -36,6 +36,11 @@ class CourseGradesUpdateRequest(BaseModel):
     assessments: list[AssessmentGradeUpdate]
 
 
+class CourseMetadataUpdateRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    term: Optional[str] = None
+
+
 class TargetGradeRequest(BaseModel):
     target: float = Field(..., ge=0, le=100)
 
@@ -106,6 +111,41 @@ def update_course_grades(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except CourseValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.put("/{course_id}")
+def update_course_metadata(
+    course_id: UUID,
+    payload: CourseMetadataUpdateRequest,
+    service: CourseService = Depends(get_course_service),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
+    try:
+        return service.update_course_metadata(
+            user_id=current_user.user_id,
+            course_id=course_id,
+            name=payload.name,
+            term=payload.term,
+        )
+    except CourseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CourseValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/{course_id}")
+def delete_course(
+    course_id: UUID,
+    service: CourseService = Depends(get_course_service),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
+    try:
+        return service.delete_course(
+            user_id=current_user.user_id,
+            course_id=course_id,
+        )
+    except CourseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/{course_id}/target")

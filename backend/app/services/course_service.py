@@ -184,6 +184,37 @@ class CourseService:
             ]
         }
 
+    def update_course_metadata(
+        self,
+        user_id: UUID,
+        course_id: UUID,
+        name: str,
+        term: str | None,
+    ) -> dict:
+        cleaned_name = name.strip()
+        if not cleaned_name:
+            raise CourseValidationError("Course name cannot be empty")
+
+        stored = self._get_course_or_raise(user_id=user_id, course_id=course_id)
+        updated_course = stored.course.model_copy(deep=True)
+        updated_course.name = cleaned_name
+        updated_course.term = term
+
+        self._repository.update(user_id=user_id, course_id=course_id, course=updated_course)
+        return {
+            "message": "Course metadata updated successfully",
+            "course_id": course_id,
+            "course": updated_course,
+        }
+
+    def delete_course(self, user_id: UUID, course_id: UUID) -> dict:
+        self._get_course_or_raise(user_id=user_id, course_id=course_id)
+        self._repository.delete(user_id=user_id, course_id=course_id)
+        return {
+            "message": "Course deleted successfully",
+            "course_id": course_id,
+        }
+
     def check_target_feasibility(self, user_id: UUID, course_id: UUID, target: float) -> dict:
         stored = self._get_course_or_raise(user_id=user_id, course_id=course_id)
         current_core_contrib = sum(
