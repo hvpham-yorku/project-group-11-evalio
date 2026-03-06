@@ -56,6 +56,7 @@ export type UpdateCourseGradesResponse = {
   course_id: string;
   course_index?: number;
   current_standing: number;
+  final_total?: number;
   assessments: Array<{
     name: string;
     weight: number;
@@ -271,6 +272,11 @@ export function updateCourseGrades(
       name: string;
       raw_score: number | null;
       total_score: number | null;
+      children?: Array<{
+        name: string;
+        raw_score: number | null;
+        total_score: number | null;
+      }>;
     }>;
   }
 ) {

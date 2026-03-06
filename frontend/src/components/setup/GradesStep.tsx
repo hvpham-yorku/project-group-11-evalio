@@ -29,6 +29,17 @@ type Assessment = {
   is_bonus?: boolean;
 };
 
+type GradeUpdatePayloadAssessment = {
+  name: string;
+  raw_score: number | null;
+  total_score: number | null;
+  children?: Array<{
+    name: string;
+    raw_score: number | null;
+    total_score: number | null;
+  }>;
+};
+
 type InstitutionalBoundary = {
   letter: string;
   minLabel: string;
@@ -185,6 +196,36 @@ function getEffectiveAssessmentWeight(assessment: Assessment): number {
 
   if (!Number.isFinite(topWeightSum) || topWeightSum <= 0) return parentWeight;
   return Math.min(parentWeight, topWeightSum);
+}
+
+function buildGradeUpdatePayload(
+  assessment: Assessment,
+  overrides?: {
+    raw_score?: number | null;
+    total_score?: number | null;
+  }
+): GradeUpdatePayloadAssessment {
+  const payload: GradeUpdatePayloadAssessment = {
+    name: assessment.name,
+    raw_score:
+      overrides?.raw_score !== undefined
+        ? overrides.raw_score
+        : parseNumberOrNull(assessment.raw_score),
+    total_score:
+      overrides?.total_score !== undefined
+        ? overrides.total_score
+        : parseNumberOrNull(assessment.total_score),
+  };
+
+  if (assessment.children.length) {
+    payload.children = assessment.children.map((child) => ({
+      name: child.name,
+      raw_score: parseNumberOrNull(child.raw_score),
+      total_score: parseNumberOrNull(child.total_score),
+    }));
+  }
+
+  return payload;
 }
 
 const DEFAULT_BOUNDARIES: InstitutionalBoundary[] = [
@@ -347,10 +388,13 @@ export function GradesStep() {
     setError((curr) => (curr === PARTIAL_SCORES_ERROR ? "" : curr));
   };
 
-  const persistParentGrade = async (assessmentName: string, raw: number | null, total: number | null) => {
+  const persistAssessmentGrade = async (
+    assessment: Assessment,
+    overrides?: { raw_score?: number | null; total_score?: number | null }
+  ) => {
     if (!courseId) return;
     await updateCourseGrades(courseId, {
-      assessments: [{ name: assessmentName, raw_score: raw, total_score: total }],
+      assessments: [buildGradeUpdatePayload(assessment, overrides)],
     });
   };
 
@@ -360,7 +404,10 @@ export function GradesStep() {
 
     if (raw === null && total === null) {
       try {
-        await persistParentGrade(assessment.name, null, null);
+        await persistAssessmentGrade(assessment, {
+          raw_score: null,
+          total_score: null,
+        });
         setError("");
       } catch (e) {
         setError(getApiErrorMessage(e, "Failed to save grade."));
@@ -390,11 +437,10 @@ export function GradesStep() {
     const syncedTotal = parseNumberOrNull(syncedAssessment.total_score);
 
     try {
-      await persistParentGrade(
-        syncedAssessment.name,
-        syncedRaw,
-        syncedTotal
-      );
+      await persistAssessmentGrade(syncedAssessment, {
+        raw_score: syncedRaw,
+        total_score: syncedTotal,
+      });
       setError("");
     } catch (e) {
       setError(getApiErrorMessage(e, "Failed to save grade."));
@@ -434,7 +480,10 @@ export function GradesStep() {
     const total = parseNumberOrNull(resolvedParent.total_score);
 
     try {
-      await persistParentGrade(resolvedParent.name, raw, total);
+      await persistAssessmentGrade(resolvedParent, {
+        raw_score: raw,
+        total_score: total,
+      });
       setError("");
     } catch (e) {
       setError(getApiErrorMessage(e, "Failed to save grade."));
@@ -449,11 +498,12 @@ export function GradesStep() {
 
     try {
       await updateCourseGrades(courseId, {
-        assessments: assessments.map((assessment) => ({
-          name: assessment.name,
-          raw_score: null,
-          total_score: null,
-        })),
+        assessments: assessments.map((assessment) =>
+          buildGradeUpdatePayload(assessment, {
+            raw_score: null,
+            total_score: null,
+          })
+        ),
       });
       setAssessments((prev) =>
         prev.map((assessment) => ({
@@ -481,7 +531,12 @@ export function GradesStep() {
 
     try {
       await updateCourseGrades(courseId, {
-        assessments: [{ name: assessment.name, raw_score: null, total_score: null }],
+        assessments: [
+          buildGradeUpdatePayload(assessment, {
+            raw_score: null,
+            total_score: null,
+          }),
+        ],
       });
       setAssessments((prev) =>
         prev.map((a) =>

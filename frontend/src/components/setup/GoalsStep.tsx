@@ -3,11 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Target, TrendingUp } from "lucide-react";
-import { checkTarget, listCourses } from "@/lib/api";
+import { checkTarget, listCourses, type TargetCheckResponse } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
 
 const TARGET_STORAGE_KEY = "evalio_target_grade";
+
+function resolveCurrentGrade(result: { current_standing: number; final_total?: number }): number {
+  return Number.isFinite(result.final_total) ? Number(result.final_total) : result.current_standing;
+}
 
 function getBestOfEffectiveCount(assessment: {
   effective_count?: number | null;
@@ -151,18 +155,9 @@ export function GoalsStep() {
 
     const run = async () => {
       try {
-        const response = (await checkTarget(courseId, { target })) as {
-          current_standing: number;
-          explanation: string;
-          york_equivalent: { letter: string; grade_point: number; description: string };
-          required_points: number;
-          required_average: number;
-          required_average_display: string;
-          required_fraction_display: string;
-          classification: string;
-        };
+        const response = (await checkTarget(courseId, { target })) as TargetCheckResponse;
 
-        setCurrentStanding(response.current_standing);
+        setCurrentStanding(resolveCurrentGrade(response));
         setExplanation(response.explanation);
         setYorkEquivalent(response.york_equivalent);
 

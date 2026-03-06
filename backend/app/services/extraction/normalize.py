@@ -23,6 +23,8 @@ def get_child_base_label(parent_name: str) -> str:
         return "Quiz"
     if "lab" in name:
         return "Lab"
+    if "homework" in name:
+        return "Homework"
     if "assignment" in name:
         return "Assignment"
     if "test" in name:

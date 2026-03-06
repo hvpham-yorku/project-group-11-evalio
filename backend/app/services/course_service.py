@@ -116,11 +116,24 @@ class CourseService:
             assessment.name: assessment for assessment in stored.course.assessments
         }
 
+        def validate_score_pair(label: str, raw_score: float | None, total_score: float | None) -> None:
+            if (raw_score is None) != (total_score is None):
+                raise CourseValidationError(f"{label}: both scores must be provided or both null")
+            if raw_score is None and total_score is None:
+                return
+            if raw_score < 0:
+                raise CourseValidationError(f"{label}: raw_score must be non-negative")
+            if total_score <= 0:
+                raise CourseValidationError(f"{label}: total_score must be greater than 0")
+            if raw_score > total_score:
+                raise CourseValidationError(f"{label}: raw_score cannot exceed total_score")
+
         seen_names: set[str] = set()
         for assessment in assessments:
             name = assessment["name"]
             raw_score = assessment.get("raw_score")
             total_score = assessment.get("total_score")
+            child_updates = assessment.get("children")
 
             if name in seen_names:
                 raise CourseValidationError(
@@ -132,33 +145,66 @@ class CourseService:
                 raise CourseValidationError(
                     f"Assessment '{name}' does not exist in this course"
                 )
-            if (raw_score is None) != (total_score is None):
-                raise CourseValidationError("Both scores must be provided or both null")
-            if raw_score is None and total_score is None:
+            validate_score_pair(f"Assessment '{name}'", raw_score, total_score)
+
+            if child_updates is None:
                 continue
-            if raw_score < 0:
-                raise CourseValidationError(
-                    f"Assessment '{name}' raw_score must be non-negative"
-                )
-            if total_score <= 0:
-                raise CourseValidationError(
-                    f"Assessment '{name}' total_score must be greater than 0"
-                )
-            if raw_score > total_score:
-                raise CourseValidationError(
-                    f"Assessment '{name}' raw_score cannot exceed total_score"
+
+            existing_children = {
+                child.name: child for child in (existing_assessments[name].children or [])
+            }
+            seen_child_names: set[str] = set()
+            for child_update in child_updates:
+                child_name = child_update["name"]
+                child_raw_score = child_update.get("raw_score")
+                child_total_score = child_update.get("total_score")
+
+                if child_name in seen_child_names:
+                    raise CourseValidationError(
+                        f"Duplicate child assessment '{child_name}' under '{name}' in update payload"
+                    )
+                seen_child_names.add(child_name)
+
+                if child_name not in existing_children:
+                    raise CourseValidationError(
+                        f"Child assessment '{child_name}' does not exist under '{name}'"
+                    )
+
+                validate_score_pair(
+                    f"Child assessment '{child_name}' under '{name}'",
+                    child_raw_score,
+                    child_total_score,
                 )
 
         for assessment in assessments:
             existing = existing_assessments[assessment["name"]]
             raw_score = assessment.get("raw_score")
             total_score = assessment.get("total_score")
+            child_updates = assessment.get("children")
             if raw_score is None and total_score is None:
                 existing.raw_score = None
                 existing.total_score = None
             else:
                 existing.raw_score = raw_score
                 existing.total_score = total_score
+
+            if child_updates is None:
+                continue
+
+            existing_children = {
+                child.name: child for child in (existing.children or [])
+            }
+            for child_update in child_updates:
+                child_name = child_update["name"]
+                child_raw_score = child_update.get("raw_score")
+                child_total_score = child_update.get("total_score")
+                existing_child = existing_children[child_name]
+                if child_raw_score is None and child_total_score is None:
+                    existing_child.raw_score = None
+                    existing_child.total_score = None
+                else:
+                    existing_child.raw_score = child_raw_score
+                    existing_child.total_score = child_total_score
 
         self._repository.update(user_id=user_id, course_id=course_id, course=stored.course)
         totals = calculate_course_totals(stored.course)

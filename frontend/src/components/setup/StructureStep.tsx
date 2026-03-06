@@ -64,6 +64,32 @@ function addChildToParent(
   });
 }
 
+function findAssessmentById(
+  items: EditableAssessment[],
+  id: string
+): EditableAssessment | null {
+  for (const item of items) {
+    if (item.id === id) return item;
+    if (item.children?.length) {
+      const found = findAssessmentById(item.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function getChildBaseLabel(parentName: string): string {
+  const name = parentName.trim().toLowerCase();
+  if (name.includes("lab test")) return "Lab test";
+  if (name.includes("quiz")) return "Quiz";
+  if (name.includes("lab")) return "Lab";
+  if (name.includes("homework")) return "Homework";
+  if (name.includes("assignment")) return "Assignment";
+  if (name.includes("test")) return "Test";
+  if (name.includes("exam")) return "Exam";
+  return "Item";
+}
+
 type GradeBoundary = {
   letter: string;
   minLabel: string; // e.g., "90–100" or "below 50"
@@ -206,12 +232,13 @@ export default function StructureStep() {
 
   const handleAddChild = (parentId: string) => {
     setAssessments((prev) => {
-      const parent = prev.find((assessment) => assessment.id === parentId);
+      const parent = findAssessmentById(prev, parentId);
       const currentChildren = Array.isArray(parent?.children) ? parent.children : [];
       const nextIndex = currentChildren.length + 1;
+      const inferredName = `${getChildBaseLabel(parent?.name ?? "")} ${nextIndex}`;
       const newChild: EditableAssessment = {
         id: `${parentId}-child-${Date.now()}-${nextIndex}`,
-        name: "",
+        name: inferredName,
         weight: Number.NaN,
         rule: "",
         children: [],

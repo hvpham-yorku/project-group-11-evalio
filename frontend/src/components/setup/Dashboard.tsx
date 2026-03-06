@@ -43,6 +43,11 @@ type DashboardDeadline = {
   due_time?: string;
 };
 
+function resolveCurrentGrade(result: TargetCheckResponse | null): number {
+  if (!result) return 0;
+  return Number.isFinite(result.final_total) ? Number(result.final_total) : result.current_standing;
+}
+
 // --- Helper Components ---
 function StatItem({ label, value }: { label: string; value: string }) {
   return (
@@ -279,7 +284,7 @@ export function Dashboard() {
     load();
   }, [ensureCourseIdFromList]);
 
-  const currentGrade = targetResult?.current_standing ?? 0;
+  const currentGrade = resolveCurrentGrade(targetResult);
   const requiredAverage = targetResult?.required_average_display ?? "0.0%";
   const workCompleted = `${gradedWeight.toFixed(0)}%`;
   const remainingWeight = Math.max(0, Math.min(100, 100 - gradedWeight));

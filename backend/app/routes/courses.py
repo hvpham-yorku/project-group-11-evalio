@@ -26,10 +26,17 @@ class CourseWeightsUpdateRequest(BaseModel):
     assessments: list[AssessmentWeightUpdate]
 
 
+class ChildAssessmentGradeUpdate(BaseModel):
+    name: str = Field(..., min_length=1)
+    raw_score: Optional[float] = None
+    total_score: Optional[float] = None
+
+
 class AssessmentGradeUpdate(BaseModel):
     name: str = Field(..., min_length=1)
     raw_score: Optional[float] = None
     total_score: Optional[float] = None
+    children: Optional[list[ChildAssessmentGradeUpdate]] = None
 
 
 class CourseGradesUpdateRequest(BaseModel):
