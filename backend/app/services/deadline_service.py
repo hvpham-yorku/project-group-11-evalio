@@ -58,6 +58,8 @@ _ASSESSMENT_HINTS = {
     "exam", "lab", "project", "presentation", "report", "essay",
     "homework", "deliverable", "tutorial", "participation",
 }
+_DEADLINE_MARKERS = {"due", "deadline", "submission", "exam date", "test date", "due date"}
+_NON_ASSESSMENT_PREFIXES = ("from ", "starting ", "starts ", "available ", "between ")
 
 # ─── Google Calendar config ───────────────────────────────────────────────────
 
@@ -113,18 +115,32 @@ def _parse_date_str(raw: str) -> str | None:
             except ValueError:
                 return None
 
-    # MM/DD/YYYY or DD/MM/YYYY — assume MM/DD (North American)
-    slash = re.match(r"(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})", raw)
+    # Numeric format:
+    # - slash-delimited defaults to MM/DD (North American) unless impossible
+    # - hyphen-delimited defaults to DD-MM (common timetable format) when ambiguous
+    slash = re.match(r"(\d{1,2})([/-])(\d{1,2})\2(\d{2,4})", raw)
     if slash:
-        a, b, c = int(slash.group(1)), int(slash.group(2)), int(slash.group(3))
-        year = c if c > 99 else (2000 + c)
+        first = int(slash.group(1))
+        sep = slash.group(2)
+        second = int(slash.group(3))
+        year_raw = int(slash.group(4))
+        year = year_raw if year_raw > 99 else (2000 + year_raw)
+
+        month: int
+        day: int
+        if first > 12 and second <= 12:
+            day, month = first, second
+        elif second > 12 and first <= 12:
+            month, day = first, second
+        else:
+            if sep == "-":
+                day, month = first, second
+            else:
+                month, day = first, second
         try:
-            return date(year, a, b).isoformat()
+            return date(year, month, day).isoformat()
         except ValueError:
-            try:
-                return date(year, b, a).isoformat()
-            except ValueError:
-                return None
+            return None
 
     return None
 
@@ -167,9 +183,14 @@ def extract_deadlines_from_text(
     lines = text.splitlines()
 
     for idx, line in enumerate(lines):
+        stripped_line = line.strip()
+        if not stripped_line:
+            continue
         # Look for a date on this line
-        date_match = _MONTH_DATE_RE.search(line) or _NUMERIC_DATE_RE.search(line)
+        date_match = _MONTH_DATE_RE.search(stripped_line) or _NUMERIC_DATE_RE.search(stripped_line)
         if not date_match:
+            continue
+        if not _line_has_deadline_context(stripped_line):
             continue
 
         parsed_date = _parse_date_str(date_match.group(1))
@@ -177,20 +198,20 @@ def extract_deadlines_from_text(
             continue
 
         # Look for a time on the same line
-        time_match = _TIME_RE.search(line)
+        time_match = _TIME_RE.search(stripped_line)
         parsed_time = _parse_time_str(time_match.group(0)) if time_match else None
 
         # Try to extract an assessment title from this line or nearby lines
-        title = _extract_title_near(lines, idx, line)
+        title = _extract_title_near(lines, idx, stripped_line)
         if not title:
-            title = f"Deadline ({parsed_date})"
+            continue
 
         results.append({
             "title": title,
             "due_date": parsed_date,
             "due_time": parsed_time,
             "source": "outline",
-            "notes": f"Extracted from line: {line.strip()[:120]}",
+            "notes": f"Extracted from line: {stripped_line[:120]}",
             "assessment_name": _guess_assessment_name(title),
         })
 
@@ -218,12 +239,9 @@ def _extract_title_near(lines: list[str], idx: int, current_line: str) -> str | 
         lower = text.lower()
         for hint in _ASSESSMENT_HINTS:
             if hint in lower:
-                # Extract a clean title: take the text around the keyword
-                cleaned = re.sub(r"\s+", " ", text.strip())
-                # Limit length
-                if len(cleaned) > 80:
-                    cleaned = cleaned[:77] + "..."
-                return cleaned
+                cleaned = _extract_assessment_title(text)
+                if cleaned:
+                    return cleaned
     return None
 
 
@@ -234,6 +252,67 @@ def _guess_assessment_name(title: str) -> str | None:
         if hint in lower:
             return title
     return None
+
+
+def _line_has_deadline_context(line: str) -> bool:
+    lowered = line.lower().strip()
+    if not lowered:
+        return False
+    if any(lowered.startswith(prefix) for prefix in _NON_ASSESSMENT_PREFIXES):
+        return False
+    if any(hint in lowered for hint in _ASSESSMENT_HINTS):
+        return True
+    if any(marker in lowered for marker in _DEADLINE_MARKERS):
+        return True
+    return False
+
+
+def _extract_assessment_title(line: str) -> str | None:
+    cleaned_line = re.sub(r"\s+", " ", line.strip())
+    if not cleaned_line:
+        return None
+
+    lowered = cleaned_line.lower()
+    start_index = -1
+    for hint in _ASSESSMENT_HINTS:
+        idx = lowered.find(hint)
+        if idx == -1:
+            continue
+        if start_index == -1 or idx < start_index:
+            start_index = idx
+
+    if start_index < 0:
+        return None
+
+    title_segment = cleaned_line[start_index:]
+    title_segment = re.split(
+        r"(?:\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|"
+        r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+        r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b|"
+        r"\b\d{1,2}:\d{2}\b|,|;|\(|\b\d{1,3}%\b)",
+        title_segment,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    title_segment = re.sub(r"\s+", " ", title_segment).strip(" -:\t")
+    if not title_segment:
+        return None
+
+    tokens = title_segment.split()
+    if len(tokens) > 1 and re.fullmatch(r"\d{1,3}", tokens[-1]):
+        trailing_number = int(tokens[-1])
+        # Preserve identifiers like "Lab Test 1" but drop likely weight columns.
+        if trailing_number >= 10:
+            tokens.pop()
+    if not tokens:
+        return None
+
+    candidate = " ".join(tokens).strip()
+    if len(candidate) > 80:
+        candidate = candidate[:77] + "..."
+    if not any(hint in candidate.lower() for hint in _ASSESSMENT_HINTS):
+        return None
+    return candidate
 
 
 # ─── ICS Calendar Generation ─────────────────────────────────────────────────

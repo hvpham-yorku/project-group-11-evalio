@@ -85,6 +85,8 @@ class GradingSectionFilter:
                 filtered_used=True,
                 window_count=len(windows),
                 merged_window_count=len(merged_windows),
+                merged_windows_preview=merged_windows[:10],
+                filtered_line_count=sum(end - start for start, end in merged_windows),
                 filtered_length=len(merged_text),
             )
         return merged_text, True

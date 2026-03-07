@@ -84,6 +84,7 @@ def test_extraction_outline_multipart_deterministic_success(auth_client, monkeyp
     body = response.json()
     assert body["structure_valid"] is True
     assert len(body["assessments"]) == 3
+    assert len(body["deadlines"]) >= 1
     assert body["diagnostics"]["method"] == "llm"
     assert body["diagnostics"]["stub"] is False
     assert body["diagnostics"]["deterministic_failed_validation"] is False

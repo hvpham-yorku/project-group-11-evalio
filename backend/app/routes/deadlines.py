@@ -120,10 +120,20 @@ async def extract_deadlines(
                 "assessment_name": ed.title,
             })
 
-    # Step 3 — Additionally run our lightweight parser on raw text
-    #          (extraction_result may include a raw_text field; fall back to
-    #          concatenating assessment titles if not)
+    # Step 3 — Additionally run our lightweight parser on raw text.
+    # If the extraction response doesn't expose raw_text, re-run text ingest
+    # directly from uploaded bytes to keep deadline extraction robust.
     raw_text = getattr(extraction_result, "raw_text", "")
+    if not raw_text:
+        try:
+            text_result = extraction_service._extract_text(
+                filename=file.filename or "uploaded_file",
+                content_type=file.content_type or "application/octet-stream",
+                file_bytes=file_bytes,
+            )
+            raw_text = text_result.get("text", "")
+        except Exception:
+            raw_text = ""
     if raw_text:
         parsed = extract_deadlines_from_text(raw_text, stored.course.name)
         # Merge, avoiding duplicates by (title_lower, due_date)

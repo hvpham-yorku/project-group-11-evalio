@@ -307,7 +307,63 @@ class DeadlineExportDB(Base):
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    _ensure_deadlines_due_date_column()
     _ensure_rules_rule_type_constraint()
+
+
+def _ensure_deadlines_due_date_column() -> None:
+    # Backward compatibility for older DBs that still have deadlines.due_at.
+    if engine.dialect.name != "postgresql":
+        return
+
+    ddl = """
+DO $$
+DECLARE
+    due_at_exists BOOLEAN := FALSE;
+    due_date_exists BOOLEAN := FALSE;
+    due_date_type TEXT := NULL;
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'deadlines'
+    ) THEN
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'deadlines' AND column_name = 'due_at'
+        ) INTO due_at_exists;
+
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'deadlines' AND column_name = 'due_date'
+        ) INTO due_date_exists;
+
+        IF due_at_exists AND NOT due_date_exists THEN
+            ALTER TABLE deadlines RENAME COLUMN due_at TO due_date;
+            due_date_exists := TRUE;
+        END IF;
+
+        IF due_date_exists THEN
+            SELECT data_type
+            INTO due_date_type
+            FROM information_schema.columns
+            WHERE table_name = 'deadlines' AND column_name = 'due_date'
+            LIMIT 1;
+
+            IF due_date_type IS DISTINCT FROM 'date' THEN
+                ALTER TABLE deadlines
+                ALTER COLUMN due_date TYPE DATE
+                USING due_date::date;
+            END IF;
+        END IF;
+    END IF;
+END
+$$;
+"""
+    with engine.begin() as connection:
+        connection.execute(text(ddl))
 
 
 def _ensure_rules_rule_type_constraint() -> None:

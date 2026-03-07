@@ -239,6 +239,13 @@ class LlmExtractionClient:
             "INCLUSION RULE:\n"
             "- Include only items that explicitly display a numeric weight (percentage or marks).\n"
             "- Do not include items without an explicit numeric weight.\n\n"
+            "DEADLINES:\n"
+            "- Extract deadline entries for graded assessments when an explicit date is present.\n"
+            "- A deadline can come from words like due, due date, exam date, test date, submission date.\n"
+            "- Use the assessment label as title when possible.\n"
+            "- Set due_date to a normalized date string when present, else null.\n"
+            "- Set due_time only when an explicit time appears, else null.\n"
+            "- If a line has dates but no graded assessment context, do not create a deadline.\n\n"
             "STRUCTURE:\n"
             "- Maximum depth 2: top-level assessments and optional children.\n"
             "- Every object must include a 'children' field.\n"
@@ -256,8 +263,9 @@ class LlmExtractionClient:
             "- Do NOT compute, divide, infer, or derive values.\n"
             "- Only extract multiplicative metadata if the arithmetic explicitly matches the total weight written in the text.\n\n"
             "EXCLUSIONS:\n"
-            "- Ignore attendance policies, academic integrity, scheduling details, formatting instructions, "
-            "administrative notes, and non-graded activities.\n\n"
+            "- Ignore attendance policies, academic integrity, formatting instructions, "
+            "administrative notes, and non-graded activities.\n"
+            "- Ignore schedule text that has no specific date tied to a graded assessment.\n\n"
             "FAIL-SAFE:\n"
             "- If grading structure cannot be clearly determined, return "
             "{\"assessments\": [], \"deadlines\": []}.\n\n"
@@ -318,6 +326,7 @@ class LlmExtractionClient:
             payload = json.loads(raw_text)
             if os.getenv("FILTER_DEBUG"):
                 print("[GPT_RAW_RESPONSE] attempt=1 json_parse=success")
+                self._log_payload_counts(payload, attempt=1)
         except json.JSONDecodeError:
             if os.getenv("FILTER_DEBUG"):
                 print("[GPT_RAW_RESPONSE] attempt=1 json_parse=failure")
@@ -386,6 +395,7 @@ class LlmExtractionClient:
                 payload = json.loads(retry_raw_text)
                 if os.getenv("FILTER_DEBUG"):
                     print("[GPT_RAW_RESPONSE] attempt=2 json_parse=success")
+                    self._log_payload_counts(payload, attempt=2)
             except json.JSONDecodeError as retry_parse_exc:
                 if os.getenv("FILTER_DEBUG"):
                     print("[GPT_RAW_RESPONSE] attempt=2 json_parse=failure")
@@ -397,6 +407,23 @@ class LlmExtractionClient:
         if not isinstance(payload, dict):
             raise LlmExtractionError("llm_invalid_schema", "LLM JSON root must be an object")
         return payload
+
+    def _log_payload_counts(self, payload: Any, *, attempt: int) -> None:
+        if not isinstance(payload, dict):
+            print(f"[GPT_PARSED_COUNTS] attempt={attempt} root_type={type(payload).__name__}")
+            return
+
+        assessments = payload.get("assessments")
+        deadlines = payload.get("deadlines")
+        assessments_count = len(assessments) if isinstance(assessments, list) else "invalid"
+        deadlines_count = len(deadlines) if isinstance(deadlines, list) else "invalid"
+        print(
+            f"[GPT_PARSED_COUNTS] attempt={attempt} "
+            f"assessments_count={assessments_count} deadlines_count={deadlines_count}"
+        )
+        if isinstance(deadlines, list):
+            for idx, item in enumerate(deadlines[:10], start=1):
+                print(f"[GPT_PARSED_DEADLINE] attempt={attempt} index={idx} value={item}")
 
     def _is_timeout_exception(self, exc: Exception) -> bool:
         current: BaseException | None = exc

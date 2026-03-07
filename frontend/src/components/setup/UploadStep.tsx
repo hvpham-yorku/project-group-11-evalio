@@ -6,6 +6,8 @@ import { Upload, FileText, Loader2 } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/errors";
 import { useSetupCourse } from "@/app/setup/course-context";
 
+const PENDING_DEADLINES_KEY = "evalio_pending_deadlines_v1";
+
 type ExtractedAssessment = {
   name: string;
   weight: number;
@@ -33,6 +35,23 @@ type ExtractionResponse = {
   };
 };
 
+function inferDeadlineType(title: string): "Assignment" | "Test" | "Exam" | "Quiz" | "Other" {
+  const lowered = title.toLowerCase();
+  if (lowered.includes("assignment") || lowered.includes("homework") || lowered.includes("project")) {
+    return "Assignment";
+  }
+  if (lowered.includes("quiz")) {
+    return "Quiz";
+  }
+  if (lowered.includes("exam") || lowered.includes("final")) {
+    return "Exam";
+  }
+  if (lowered.includes("test") || lowered.includes("midterm")) {
+    return "Test";
+  }
+  return "Other";
+}
+
 export function UploadStep() {
   const router = useRouter();
   const { setExtractionResult } = useSetupCourse();
@@ -48,6 +67,7 @@ export function UploadStep() {
     setFailClosedMessage(null);
     setDiagnostics(null);
     setSelectedFile(null);
+    window.localStorage.removeItem(PENDING_DEADLINES_KEY);
     setExtractionResult({
       course_code: null,
       structure_valid: true,
@@ -115,6 +135,27 @@ export function UploadStep() {
         throw new Error("Invalid extraction response.");
       }
 
+      const pendingDeadlines = (Array.isArray(body.deadlines) ? body.deadlines : [])
+        .filter(
+          (deadline) =>
+            typeof deadline?.title === "string" &&
+            deadline.title.trim() &&
+            typeof deadline?.due_date === "string" &&
+            deadline.due_date.trim()
+        )
+        .map((deadline) => ({
+          title: deadline.title.trim(),
+          due_date: deadline.due_date!,
+          due_time: deadline.due_time ?? undefined,
+          type: inferDeadlineType(deadline.title),
+          notes: undefined,
+        }));
+      if (pendingDeadlines.length) {
+        window.localStorage.setItem(PENDING_DEADLINES_KEY, JSON.stringify(pendingDeadlines));
+      } else {
+        window.localStorage.removeItem(PENDING_DEADLINES_KEY);
+      }
+
       setDiagnostics(body.diagnostics ?? null);
       if (body.structure_valid === false) {
         setExtractionResult(null);
@@ -128,6 +169,7 @@ export function UploadStep() {
       setError(getApiErrorMessage(err, "Extraction failed. Please try again."));
       setExtractionResult(null);
       setDiagnostics(null);
+      window.localStorage.removeItem(PENDING_DEADLINES_KEY);
     } finally {
       setLoading(false);
     }

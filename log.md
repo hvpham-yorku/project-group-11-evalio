@@ -705,10 +705,10 @@ As a student, I want to upload my course outline (PDF or image) and automaticall
 
 ### ITR2-2 — Persistent Multi-Course Planning System (DB + Multi-Course Support)
 
-SCRUM-96
+([SCRUM-96](https://rimaaa.atlassian.net/browse/SCRUM-95))
 
-**Story Owner:** Himanshi Verma
-**Planned Effort:** 4–5 days
+**Story Owner:** Himanshi Verma  
+**Planned Effort:** 4–5 days  
 **Actual Effort:** 5 days
 
 #### Story Description
@@ -717,73 +717,99 @@ As a student, when I manage my courses, I want my courses, grades, and what-if s
 
 #### Scope (ITR2)
 
-- Course persistence:
-  - Courses and their structures are stored in a persistent database.
-  - The system saves course data including assessments, grading rules, and weights.
-  - Saved courses are automatically loaded when the application restarts.
-  - Students can edit and delete previously saved courses.
-  - Course data remains consistent when reloaded.
-- Score and scenario persistence:
-  - Entered grades for assessments are saved in the database.
-  - Students can update and delete stored scores.
-  - What-If scenarios can be saved and labeled.
-  - Saved scenarios can be reloaded without overwriting actual grades.
-  - The system recalculates grades and feasibility correctly after loading persisted data.
-- Multi-course planning:
-  Students can create and manage multiple courses.
-  The application provides a course overview page showing:
-- Course name
-- Current grade
-- Target grade
-- Feasibility status
-  Students can switch between courses without losing data.
-  Deleting a course removes all related data using cascading delete rules.
-- Dual database support:
-  - The system supports both an in-memory stub database and a PostgreSQL database.
-  - Repository abstraction allows switching between the two implementations.
-  - Database switching is controlled through configuration.
-  - PostgreSQL initialization scripts are included.
-  - Integration tests verify correct persistence behaviour.
+* Course persistence:
+  * Save extracted course structure, including assessments, weights, and grading rules.
+  * Load saved courses automatically when the application restarts.
+  * Allow students to edit and delete saved courses.
+  * Ensure course data remains consistent after reload.
 
-#### Development Tasks & Assignments
+* Score and scenario persistence:
+  * Save entered grades for assessments.
+  * Allow stored scores to be updated and deleted.
+  * Save and label what-if scenarios.
+  * Reload saved scenarios without overwriting actual grades.
+  * Recalculate grades and feasibility correctly after loading persisted data.
 
-Backend: Implement Repository Layer & Multi-Course CRUD Logic
-Assignee: Shivam (SCRUM-96)
+* Multi-course planning:
+  * Allow each student to create and manage multiple courses.
+  * Provide an overview page displaying:
+    * Course name
+    * Current grade
+    * Target grade
+    * Feasibility status
+  * Allow switching between courses without data loss.
+  * Support cascading deletion of course-related data.
 
-Database: Design Schema & PostgreSQL Integration
-Assignee: Himanshi (SCRUM-97)
+* Dual database support:
+  * Implement repository abstraction.
+  * Support both:
+    * Stub (in-memory) database
+    * PostgreSQL database
+  * Enable database switching through configuration.
+  * Include PostgreSQL initialization scripts.
+  * Provide integration tests for real database persistence behavior.
 
-Frontend: Multi-Course Overview & Switching Interface
-Assignee: Rima (SCRUM-98)
+#### Out of Scope (Future Iterations)
 
-Frontend: UI/UX Design in Figma
-Assignee: Shadi (SCRUM-128)
+* Cloud-hosted database deployment and scaling concerns.
+* Real-time collaboration or shared course editing between multiple users.
+* Cross-device sync beyond the configured persistence layer.
+* Automatic migration tools for future schema evolution.
 
-Tests: Unit & Integration Tests for Persistence
-Assignee: Bardiya (SCRUM-99)
+#### Development Subtasks & Assignments
 
-Docs: Update Class Diagram (Persistence Architecture)
-Assignee: Bardiya (SCRUM-100)
+1. Backend: Implement Repository Layer & Multi-Course CRUD Logic  
+   * Assignee: Shivam ([SCRUM-96](https://rimaaa.atlassian.net/browse/SCRUM-96))
 
-Docs: Create Sequence Diagrams for Persistence Flows
-Assignee: Bardiya (SCRUM-120)
+2. Frontend: Multi-Course Overview & Switching Interface  
+   * Assignee: Rima ([SCRUM-98](https://rimaaa.atlassian.net/browse/SCRUM-98))
 
-Docs: Create ER Diagram (Database Schema)
-Assignee: Himanshi (SCRUM-121)
+3. Frontend: UI/UX Design in Figma  
+   * Assignee: Shadi ([SCRUM-128](https://rimaaa.atlassian.net/browse/SCRUM-128))
 
-Docs: Update log.md (Persistence Architecture)
-Assignee: Himanshi (SCRUM-122)
+4. Frontend–Backend Integration for Multi-Course Planning  
+   * Assignee: Shivam ([SCRUM-135](https://rimaaa.atlassian.net/browse/SCRUM-135))
+
+5. Database: Relational Schema Design & Initialization Script  
+   * Assignee: Himanshi ([SCRUM-97](https://rimaaa.atlassian.net/browse/SCRUM-97))
+
+6. Docs: Create ER Diagram (Database Schema)  
+   * Assignee: Himanshi ([SCRUM-121](https://rimaaa.atlassian.net/browse/SCRUM-121))
+
+7. Backend–Database Integration for Persistent Multi-Course Support  
+   * Assignee: Shivam ([SCRUM-136](https://rimaaa.atlassian.net/browse/SCRUM-136))
+
+8. Testing: Unit & Integration Tests for Persistence  
+   * Assignee: Bardiya ([SCRUM-99](https://rimaaa.atlassian.net/browse/SCRUM-99))
+
+9. Docs: Update Class Diagram (Persistence Architecture)  
+   * Assignee: Bardiya ([SCRUM-100](https://rimaaa.atlassian.net/browse/SCRUM-100))
+
+10. Docs: Create Sequence Diagrams for Persistence Flows  
+   * Assignee: Bardiya ([SCRUM-120](https://rimaaa.atlassian.net/browse/SCRUM-120))
+
+11. Docs: Update `log.md` (Persistence Architecture)  
+   * Assignee: Himanshi ([SCRUM-122](https://rimaaa.atlassian.net/browse/SCRUM-122))
+
+#### Acceptance Criteria
+
+* Students can create, edit, delete, and load multiple courses.
+* Course, score, and what-if scenario data persists after restarting the application.
+* Persisted scores and scenarios reload accurately without corrupting actual grade data.
+* Switching between stub and PostgreSQL implementations works without errors.
+* The multi-course overview page displays accurate summaries.
+* Integration tests validate PostgreSQL persistence behavior.
 
 #### Notes / Reflection
 
-- Implemented a repository abstraction layer to support both the stub database and PostgreSQL without changing business logic.
-- Designed a relational database schema to persist courses, assessments, scores, scenarios, and deadlines.
-- Added referential integrity constraints and cascading deletes to maintain consistent data relationships.
-- Implemented multi-course support allowing students to create and switch between multiple courses without data loss.
-- Integration tests verified that data persists after application restart and that switching between stub and PostgreSQL works correctly.
-- No major blockers were encountered during development.
+* Implemented a repository abstraction layer so that business logic remains independent of the storage implementation.
+* Designed a relational schema to persist courses, assessments, scores, scenarios, and related course data in PostgreSQL.
+* Added support for multiple courses per user, including overview and course-switching functionality.
+* Ensured persistence logic works with both the stub database and PostgreSQL through configuration-based switching.
+* Added integration coverage to verify persistence behavior, reload consistency, and database-backed CRUD flows.
+* No major blockers were encountered, although coordinating persistence across multiple layers required careful backend and database alignment.
 
-### ITR2-3 — Universal GPA Converter
+### ITR2-3 — Universal GPA Converter (4.0, 9.0, & 10.0 Scales)
 
 ([SCRUM-109](https://rimaaa.atlassian.net/browse/SCRUM-109))
 
@@ -793,178 +819,175 @@ Assignee: Himanshi (SCRUM-122)
 
 #### Story Description
 
-As a student, I want to convert my course percentage into letter grades and grade-point values on multiple recognized GPA scales, so that I can understand my academic standing in the format required by graduate programs, professional schools, or international applications.
+As a student, I want to convert my course percentages and YorkU grade points into various standardized GPA scales (4.0, 9.0, and 10.0), so that I can assess my academic standing for graduate school applications, internships, and internal university requirements.
 
 #### Scope (ITR2)
 
-- Support three GPA scales:
-  - **4.0 Scale** (OMSAS / Ontario Medical School standard)
-  - **9.0 Scale** (York University)
-  - **10.0 Scale** (International / European)
-- Single-course GPA: derive GPA from a course's current graded assessments.
-- What-if GPA: project GPA under hypothetical score overrides (read-only, non-persisting).
-- Cumulative GPA (cGPA): compute a weighted cGPA across multiple manually supplied courses.
-- Scales metadata endpoint: expose all band tables for frontend dropdowns and legends.
-- Inclusive lower-bound conversion logic (e.g., 80.0% ≥ 80 threshold → A−).
-- Non-numeric course handling: pass/fail and withdrawn courses excluded from cGPA but reported.
-- Human-readable formula string returned with each cGPA response for calculation transparency.
+* Multi-scale GPA support:
+  * Implement conversion logic for the OMSAS 4.0 scale.
+  * Implement conversion logic for the YorkU 9.0 scale.
+  * Implement conversion logic for a standard 10.0 scale used in international conversions.
+
+* Weighted GPA calculation:
+  * Calculate cumulative GPA (cGPA) by weighting course grade points using course credit values.
+  * Support GPA calculations across multiple manually supplied courses.
+  * Distinguish between term GPA and cumulative GPA use cases.
+
+* Visual data representation:
+  * Provide a summary view comparing student standing across all three GPA scales.
+  * Show a clear conversion path such as percentage → letter grade → GPA value.
+
+* System agnosticism:
+  * Ensure the converter works for both actual grades and what-if scenarios.
+  * Keep GPA conversion logic decoupled from the UI so additional scales can be added in future iterations.
 
 #### Out of Scope (Future Iterations)
 
-- Institution-specific custom scale definitions.
-- Persisting GPA history or trend tracking over time.
-- Automatic GPA recalculation triggered by grade changes.
-- Transcript-style GPA reporting.
+* Institution-specific custom GPA scale definitions beyond the supported 4.0, 9.0, and 10.0 systems.
+* Transcript-style GPA exports or official reporting formats.
+* Persisting GPA history over time.
+* Automatic GPA recalculation triggers tied to all course updates across the system.
 
-#### Development Tasks & Assignments
+#### Development Subtasks & Assignments
 
-- Backend: GPA conversion engine and API endpoints
+1. Backend: Implement GPA Conversion Logic (4.0 / 9.0 / 10.0 scales)  
+   * Assignee: Kartik ([SCRUM-109](https://rimaaa.atlassian.net/browse/SCRUM-109))
 
-  - Assignee: Kartik
-  - Status: DONE (SCRUM-109)
+2. Frontend: GPA Summary Component & Scale Toggle  
+   * Assignee: Rima ([SCRUM-111](https://rimaaa.atlassian.net/browse/SCRUM-111))
 
-- Backend: GPA service — scale metadata, boundary logic, cGPA calculation
+3. Frontend: UI/UX Design in Figma  
+   * Assignee: Shadi ([SCRUM-129](https://rimaaa.atlassian.net/browse/SCRUM-129))
 
-  - Assignee: Kartik
-  - Status: DONE (SCRUM-114)
+4. Tests: Unit tests for boundary cases (e.g., 79.4% vs 79.5%)  
+   * Assignee: Bardiya ([SCRUM-113](https://rimaaa.atlassian.net/browse/SCRUM-113))
 
-- Docs: API documentation for GPA endpoints
+5. Docs: Update API documentation for GPA endpoints  
+   * Assignee: Kartik ([SCRUM-114](https://rimaaa.atlassian.net/browse/SCRUM-114))
 
-  - Assignee: Kartik
-  - Status: DONE (`docs/api/GPA_ENDPOINTS.md`)
+6. Database: Support GPA Conversion Data  
+   * Assignee: Himanshi ([SCRUM-119](https://rimaaa.atlassian.net/browse/SCRUM-119))
 
-- Testing: Unit tests for GPA conversion, boundary cases, cGPA math
+#### Acceptance Criteria
 
-  - Assignee: Kartik
-  - Status: DONE (17 tests passing)
-
-#### Supported GPA Scales (Summary)
-
-| Scale | Max Point | Bands | Use Case |
-|-------|-----------|-------|----------|
-| 4.0   | 4.0       | 13    | OMSAS / Ontario Medical School |
-| 9.0   | 9.0       | 10    | York University |
-| 10.0  | 10.0      | 12    | International / European |
-
-#### Implementation Details
-
-- `gpa_service.py` (236 lines): Conversion engine with `GpaBand` dataclass, three complete scale band tables, `convert_percentage()`, `convert_percentage_all_scales()`, `calculate_weighted_gpa()`, and `get_scales_metadata()`.
-- `routes/gpa.py` (177 lines): Four FastAPI endpoints — `GET /gpa/scales`, `GET /courses/{id}/gpa`, `POST /courses/{id}/gpa/whatif`, `POST /gpa/cgpa`.
-- `test_gpa_service.py` (241 lines): 17 integration tests covering boundary values, all three scales, cGPA calculation, non-numeric exclusion, and error handling.
-- `docs/api/GPA_ENDPOINTS.md` (386 lines): Full API documentation with request/response examples, error tables, and all three conversion band tables.
+* The system accurately converts a percentage to the correct grade point on the 4.0, 9.0, and 10.0 scales.
+* Users can include course credit weights so cumulative GPA calculations are weighted correctly.
+* The dashboard displays a side-by-side comparison of all three scales.
+* GPA calculations update correctly for what-if scenarios.
+* The system handles non-numeric grades such as Pass/Fail or Withdrawn without breaking the calculation engine.
 
 #### Notes / Reflection
 
-- Designed the GPA conversion engine as a UI-agnostic, stateless module so that any endpoint or service can convert percentages without front-end coupling.
-- Used inclusive lower-bound matching (evaluated highest band first) to avoid ambiguity at grade boundaries.
-- The cGPA endpoint accepts manual course entries rather than querying stored courses, keeping the conversion engine independent of the persistence layer.
-- Non-numeric courses (pass/fail, withdrawn) are excluded from GPA calculation but reported in an `excluded` array for transparency.
-- A human-readable `formula` string is returned with each cGPA response to support the calculation transparency requirement.
-- No major blockers were encountered during development.
+* Designed the GPA conversion engine as a stateless backend module so that conversion logic remains reusable and independent of the frontend.
+* Implemented support for three recognized GPA systems to make the feature useful for both York University requirements and external application contexts.
+* Added weighted GPA support so cumulative calculations reflect course credit differences correctly.
+* Ensured the same conversion logic can be reused for both actual grades and hypothetical what-if projections.
+* Boundary-value testing was important for preventing ambiguity around grade cutoffs such as 79.4% versus 79.5%.
+* No major blockers were encountered during implementation.
 
 ### ITR2-4 — Course Evaluation & Rule Modeling
 
 ([SCRUM-106](https://rimaaa.atlassian.net/browse/SCRUM-106))
 
 **Story Owner:** Bardiya Ameri  
-**Planned Effort:** 4 days  
-**Actual Effort:** 3 day
+**Planned Effort:** 1 day (6 hours)  
+**Actual Effort:** 8 hours
 
 #### Story Description
 
-As a student, I want the system to evaluate my course performance using York University’s specific grading rules,  
-so that I can understand my academic standing through letter grades, grade points, and realistic projections of what is required to hit my targets.
+As a student, I want the system to evaluate my course performance using York University’s specific grading rules, so that I can understand my academic standing through letter grades, grade points, and realistic projections of what is required to hit my targets.
 
 #### Scope (ITR2)
 
-- Institutional grading logic:
-  - Map calculated percentages to the YorkU 9-point scale (A+ = 9, A = 8, etc.)
-  - Return structured results including:
-    - Letter grade
-    - Grade point value
-    - Performance descriptor (e.g., Exceptional, Excellent, Good)
-- Target feasibility analysis:
-  - Calculate the exact average required on remaining coursework to achieve a user-defined target
-- Dynamic difficulty classification:
-  - Categorize the target as:
-    - Comfortable
-    - Achievable
-    - Challenging
-    - Very Challenging
-    - Not Possible
-    - Already Achieved
-    - Complete (when remaining weight is 0)
-- Engine integrity:
-  - Deterministic and read-only (evaluations must not mutate or overwrite stored grade data)
-  - Independent of AI components to ensure mathematical correctness
-- Stability & integration:
-  - Maintain compatibility with the in-memory stub database
-  - Ensure consistent rounding and stable output at boundary thresholds (e.g., 79.5% vs 80.0%)
+* Institutional grading logic:
+  * Map calculated percentages to the YorkU 9-point scale.
+  * Generate structured evaluation results including:
+    * Letter grade
+    * Grade point value
+    * Performance descriptor
 
-#### Development Tasks & Assignments (SCRUM-106)
+* Target feasibility analysis:
+  * Calculate the exact average required on remaining coursework to achieve a user-defined target.
 
-- Backend: Evaluation & rule modeling engine
+* Dynamic difficulty classification:
+  * Categorize the target as:
+    * Comfortable
+    * Achievable
+    * Challenging
+    * Very Challenging
+    * Not Possible
+    * Already Achieved
 
-  - Assignee: Kartik
-  - Status: DONE (SCRUM-112)
+* Engine integrity:
+  * Ensure the evaluation engine is deterministic and read-only.
+  * Prevent evaluation logic from mutating or overwriting stored course data.
+  * Keep the evaluation engine fully independent of AI components.
+  * Handle edge cases such as:
+    * 0% remaining weight
+    * target already met
+    * required averages above 100%
 
-- Frontend: Evaluation results UI
+* Stability and integration:
+  * Maintain compatibility with the ITR1 in-memory stub database.
+  * Ensure numerical stability and consistent rounding at boundary thresholds.
 
-  - Assignee: Shadi
-  - Status: DONE (SCRUM-115)
+#### Out of Scope (Future Iterations)
 
-- Frontend: UI/UX design support
+* Support for grading systems beyond York University’s 9-point scale.
+* Saving evaluation history or trend tracking over time.
+* Institution-specific grading customization by the user.
+* Advanced advisory recommendations beyond rule-based difficulty classification.
 
-  - Assignee: Shadi
-  - Status: DONE (SCRUM-130)
+#### Development Subtasks & Assignments
 
-- Database: Support evaluation data/model compatibility
+1. Backend: Evaluation & Rule Modeling Engine  
+   * Assignee: Shivam ([SCRUM-112](https://rimaaa.atlassian.net/browse/SCRUM-112))
 
-  - Assignee: Himanshi
-  - Status: DONE (SCRUM-116)
+2. Frontend: Evaluation Results Display  
+   * Assignee: Shadi ([SCRUM-115](https://rimaaa.atlassian.net/browse/SCRUM-115))
 
-- Testing: Unit & integration tests for evaluation logic
+3. Frontend: UI/UX Design in Figma  
+   * Assignee: Shadi ([SCRUM-130](https://rimaaa.atlassian.net/browse/SCRUM-130))
 
-  - Assignee: Bardiya
-  - Status: DONE (SCRUM-117)
+4. Frontend–Backend Integration for Course Evaluation & Rule Modeling  
+   * Assignee: Shivam ([SCRUM-137](https://rimaaa.atlassian.net/browse/SCRUM-137))
 
-- Docs: Update log.md & technical notes
-  - Assignee: Bardiya
-  - Status: TO DO (SCRUM-118)
+5. Database: Support Evaluation Data (Stub Compatible)  
+   * Assignee: Himanshi ([SCRUM-116](https://rimaaa.atlassian.net/browse/SCRUM-116))
 
-#### Key Design Decisions / Notes
+6. Backend–Database Integration for Evaluation Data Consistency  
+   * Assignee: Shivam ([SCRUM-138](https://rimaaa.atlassian.net/browse/SCRUM-138))
 
-- Deterministic + AI-independent engine: evaluation is purely mathematical for correctness and reproducibility.
-- Read-only analysis: evaluation outputs do not overwrite real grades; repeated calls produce consistent results.
-- Boundary handling: YorkU thresholds and rounding rules were designed to avoid drift at cutoffs (e.g., 79.5 vs 80.0).
-- Edge cases covered:
-  - Remaining weight = 0 → classification “Complete”
-  - Target already met → classification “Already Achieved”
-  - Required average > 100 → classification “Not Possible”
+7. Testing: Unit & Integration Tests for Evaluation Logic  
+   * Assignee: Bardiya ([SCRUM-117](https://rimaaa.atlassian.net/browse/SCRUM-117))
 
-#### Testing Summary (SCRUM-117)
+8. Docs: Update `log.md` & Technical Notes  
+   * Assignee: Bardiya ([SCRUM-118](https://rimaaa.atlassian.net/browse/SCRUM-118))
 
-Automated tests verify:
+#### Acceptance Criteria
 
-- YorkU boundary mappings and rounding thresholds.
-- Required remaining average math for partially graded courses.
-- Difficulty classification threshold correctness.
-- Non-mutation guarantees (analysis endpoints do not modify stored course data).
-- Repeat-call stability (same inputs yield the same results).
+* Percentages map correctly to YorkU grade boundaries.
+* The required remaining average is mathematically accurate for partially graded courses.
+* Difficulty labels trigger correctly based on the calculated remaining average.
+* Running an evaluation does not modify the underlying course or grade data.
+* The system handles 0–100% input constraints and provides clear explanations for impossible targets.
+* Calculations remain stable across repeated calls without rounding drift.
 
-#### Out of Scope / Future Work
+#### Notes / Reflection
 
-- Institution-specific grading scale configuration.
-- Saving evaluation history and trends over time.
-- Advanced strategy engine beyond rule-based difficulty labels.
-- Additional UI visualization for showing calculation steps (if prioritized).
+* Implemented a deterministic evaluation engine to keep academic standing calculations mathematically reliable and reproducible.
+* Added YorkU-specific rule modeling so users can view results in the grading format most relevant to their institution.
+* Designed the feature to remain read-only, ensuring that running evaluations or projections never changes stored grade data.
+* Covered important edge cases such as already-achieved targets, no remaining weight, and impossible score requirements.
+* Consistent rounding and threshold handling were important to avoid incorrect results near YorkU boundary cutoffs.
+* No major blockers were encountered, although ensuring stable rule behavior across repeated evaluations required careful testing.
 
 ### ITR2-5 — Interactive Strategy Dashboard (Grade Boundaries + Calculation Transparency + Learning Optimization)
 
-SCRUM-91
+([SCRUM-91](https://rimaaa.atlassian.net/browse/SCRUM-91))
 
-**Story Owner:** Rima Ramcharan
-**Planned Effort:** 5–6 days
+**Story Owner:** Rima Ramcharan  
+**Planned Effort:** 5–6 days  
 **Actual Effort:** 6 days
 
 #### Story Description
@@ -973,53 +996,74 @@ As a student, I want an interactive dashboard that models my best and worst-case
 
 #### Scope (ITR2)
 
-- Interactive Planning Dashboard:
-  - Central hub visualizing current progress, weighted contributions, and projected final grades.
-  - Integration of "What-If" sliders to adjust performance assumptions dynamically.
-- Grade Boundary Modeling:
-  - Calculation and display of "Worst-Case" (minimum needed to pass/hit target) and "Best-Case" (max possible grade) scenarios.
-- Calculation Transparency:
-  - "Show Calculations" toggle to reveal weighted average formulas and underlying math.
-  - Transparent breakdown of how each assessment contributes to the final standing.
-- Smart Learning Strategies:
-  - Integration of a recommendation engine suggesting specific techniques (80/20 Rule, Active Recall, Feynman Technique) based on assessment weight and remaining time.
-- Dynamic Updating:
-  - Projections and boundaries update immediately as the user explores "what-if" scores without overwriting actual saved grades.
-  - System handles incomplete syllabi where total weight may not yet sum to 100%.
+* Interactive planning dashboard:
+  * Create a central dashboard view showing current progress, remaining assessments, and projected outcomes.
+  * Present grade-related information in a clear, student-friendly format.
 
-#### Development Tasks & Assignments
+* Grade boundary modeling:
+  * Calculate and display worst-case scenarios, such as the minimum scores needed to pass or reach a target.
+  * Calculate and display best-case scenarios, such as the maximum possible final grade based on remaining assessments.
 
-Backend: Implement grade boundaries and projection logic
-Assignee: Kartik Sharma (SCRUM-90)
-Status: TO DO
+* Calculation transparency:
+  * Include a “Show Calculations” toggle or expandable section for each estimate.
+  * Display the underlying weighted-average math used to generate projections.
 
-Frontend: Build Interactive Strategy Dashboard & Boundary Visualization
-Assignee: Rima Ram... (SCRUM-91)
-Status: DONE
+* Smart learning strategies:
+  * Suggest study strategies based on assessment importance and remaining time.
+  * Include techniques such as:
+    * 80/20 Rule (Pareto Principle)
+    * Active Recall
+    * Spaced Repetition
+    * Feynman Technique
 
-Frontend: UI/UX Design in Figma
-Assignee: Shadi Kari... (SCRUM-131)
-Status: DONE
+* Dynamic updating:
+  * Update projections immediately when the user enters what-if scores.
+  * Ensure hypothetical inputs do not overwrite actual stored grades.
+  * Continue functioning even when course weights do not yet sum to 100%.
 
-Database: Update schema for learning strategies & projections
-Assignee: himanshi v... (SCRUM-92)
-Status: IN PROGRESS
+#### Out of Scope (Future Iterations)
 
-Tests: Add unit tests for weighted average & boundary math
-Assignee: Bardiya A... (SCRUM-93)
-Status: DONE
+* AI-personalized study recommendations based on learning history.
+* Automatic calendar-based study scheduling.
+* Advanced visual analytics such as heatmaps or long-term trend graphs.
+* Saving and comparing multiple dashboard strategy snapshots.
 
-Docs: Document grade projection logic & learning strategies
-Assignee: Rima Ram... (SCRUM-94)
-Status: IN PROGRESS
+#### Development Subtasks & Assignments
+
+1. Backend: Implement grade boundary algorithms (Min/Max), what-if scenario support, and projection logic  
+   * Assignee: Kartik ([SCRUM-90](https://rimaaa.atlassian.net/browse/SCRUM-90))
+
+2. Frontend: Build interactive dashboard UI including what-if inputs, expandable calculations, and strategy display  
+   * Assignee: Rima ([SCRUM-91](https://rimaaa.atlassian.net/browse/SCRUM-91))
+
+3. Frontend: UI/UX Design in Figma  
+   * Assignee: Shadi ([SCRUM-131](https://rimaaa.atlassian.net/browse/SCRUM-131))
+
+4. Database: Update schema to support grade targets, weighted category structure, and related dashboard data needs  
+   * Assignee: Himanshi ([SCRUM-92](https://rimaaa.atlassian.net/browse/SCRUM-92))
+
+5. Tests: Add unit tests for weighted grade math accuracy and integration tests for dashboard projection behavior  
+   * Assignee: Bardiya ([SCRUM-93](https://rimaaa.atlassian.net/browse/SCRUM-93))
+
+6. Docs: Document grade projection algorithms, 80/20 rule logic, and update relevant notes  
+   * Assignee: Rima ([SCRUM-94](https://rimaaa.atlassian.net/browse/SCRUM-94))
+
+#### Acceptance Criteria
+
+* The dashboard displays clear minimum and maximum grade boundaries for the final course result.
+* A “Show Math” or expandable view reveals the formulas used for the displayed projections.
+* The system suggests at least one specific learning technique for each major upcoming assessment or deadline.
+* What-if inputs do not overwrite actual saved grades.
+* Calculations remain accurate even when course weightings do not sum to 100%.
 
 #### Notes / Reflection
 
-- Completed the core frontend dashboard architecture, including the performance assumption slider and the multi-course selector interface.
-- Implemented "What-If" state management to allow real-time grade exploration without data loss or accidental overwrites of actual grades.
-- Integrated the learning strategy recommendation UI to help students prioritize high-weight assessments (80/20 rule).
-- Verified calculation transparency logic with unit tests to ensure mathematical accuracy in the weighted average displays.
-- Current focus is finalizing the documentation for the persistence architecture and helping the backend team sync the projection logic with the updated database schema.
+* Built the dashboard as a strategy-focused planning surface rather than just a static results page.
+* Combined projection logic with transparent formulas so users can verify how each estimate is calculated.
+* Added support for what-if exploration without mutating real course data, which improves safety and user trust.
+* Included lightweight study strategy recommendations so the feature supports decision-making as well as grade tracking.
+* Special handling was required for incomplete grading structures where total course weight had not yet reached 100%.
+* No major blockers were encountered, though syncing frontend dashboard behavior with backend projection logic required careful coordination.
 
 ### ITR2-6 — Smart Deadline Management (OCR + Manual Entry + Calendar Sync)
 
@@ -1067,7 +1111,6 @@ As a student, I want my assignment and test deadlines to be automatically extrac
 1. Backend: Deadline management, OCR parsing, and calendar integration
 
    * Assignee: Kartik ([SCRUM-83](https://rimaaa.atlassian.net/browse/SCRUM-83))
-   * Status: DONE
 
 2. Frontend: Deadline management UI, review flow, and countdown display
 
@@ -1089,13 +1132,6 @@ As a student, I want my assignment and test deadlines to be automatically extrac
 
    * Assignee: Shadi ([SCRUM-87](https://rimaaa.atlassian.net/browse/SCRUM-87))
 
-##### SCRUM-83 Implementation Summary (Backend — Kartik)
-
-- `models_deadline.py` (77 lines): Pydantic schemas — `Deadline`, `DeadlineCreate`, `DeadlineUpdate`, `DeadlineExportRequest`, `DeadlineExportResponse`, `GoogleAuthUrlResponse`.
-- `services/deadline_service.py` (573 lines): Deadline CRUD orchestration, OCR-based deadline extraction with lightweight date parser (regex for month-name, numeric, and time patterns), ICS calendar generation (RFC-5545 compliant, zero external dependencies), Google Calendar integration via stdlib `urllib` (OAuth2 flow, event creation with 1-week reminders, duplicate prevention via `gcal_event_id`). Graceful 501 fallback when Google credentials are not configured.
-- `routes/deadlines.py` (333 lines): 10 FastAPI endpoints — extract from outline, CRUD (list/create/update/delete), ICS download, Google Calendar export, Google OAuth2 authorize + callback.
-- `test_deadline_endpoints.py` (303 lines): Integration tests covering CRUD, extraction, export, and error handling.
-- Total: ~1,286 lines of backend code + tests.
 
 #### Notes / Reflection
 

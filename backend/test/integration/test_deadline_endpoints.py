@@ -10,7 +10,9 @@ Covers:
 """
 
 import pytest
+from types import SimpleNamespace
 
+from app.dependencies import get_extraction_service
 from app.models_deadline import DeadlineCreate
 from app.repositories.inmemory_deadline_repo import InMemoryDeadlineRepository
 from app.services.deadline_service import (
@@ -290,6 +292,36 @@ class TestDeadlineEndpoints:
         assert r.status_code == 200
         assert "BEGIN:VCALENDAR" in r.text
         assert r.headers["content-type"] == "text/calendar; charset=utf-8"
+
+    def test_extract_endpoint_uses_text_fallback_parser(self, auth_client, monkeypatch):
+        course_id = self._create_course(auth_client)
+        service = get_extraction_service()
+        monkeypatch.setattr(
+            service,
+            "extract",
+            lambda **_kwargs: SimpleNamespace(deadlines=[]),
+        )
+
+        outline_text = "\n".join(
+            [
+                "Important Dates",
+                "Assignment 1 due March 15, 2026 at 11:59 PM",
+                "Midterm Test on April 10, 2026",
+            ]
+        )
+        response = auth_client.post(
+            f"/courses/{course_id}/deadlines/extract",
+            files={"file": ("outline.txt", outline_text.encode("utf-8"), "text/plain")},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["count"] >= 1
+        assert any(item.get("title") for item in body["deadlines"])
+
+        listed = auth_client.get(f"/courses/{course_id}/deadlines")
+        assert listed.status_code == 200
+        assert listed.json()["count"] >= 1
 
     def test_nonexistent_course_returns_404(self, auth_client):
         fake_id = str(uuid4())

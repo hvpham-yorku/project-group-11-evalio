@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from decimal import ROUND_HALF_UP, Decimal
@@ -24,6 +25,7 @@ from app.services.extraction.mapping import map_extraction_to_course_create
 from app.services.extraction.normalize import NormalizeMixin
 from app.services.extraction.text_ingest import TextIngestMixin
 from app.services.extraction.validate import ValidateMixin
+from app.services.deadline_service import extract_deadlines_from_text
 from app.services.grading_section_filter import GradingSectionFilter
 from app.services.llm_extraction_client import LlmExtractionClient, LlmExtractionError
 
@@ -49,6 +51,54 @@ class ExtractionService(
         term: str | None = None,
     ) -> ExtractionResponse:
         debug_enabled = bool(os.getenv("FILTER_DEBUG"))
+        deadline_keywords = (
+            "due",
+            "deadline",
+            "deadlines",
+            "date",
+            "dates",
+            "exam",
+            "midterm",
+            "final",
+            "quiz",
+            "assignment",
+            "project",
+            "lab",
+            "tutorial",
+            "test",
+            "submission",
+        )
+        date_like_regex = (
+            re.compile(
+                r"\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+                r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|"
+                r"\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?)\b",
+                re.IGNORECASE,
+            )
+            if debug_enabled
+            else None
+        )
+
+        def _preview_text(text: str, *, max_chars: int = 1000) -> str:
+            return text[:max_chars].replace("\n", "\\n")
+
+        def _deadline_line_scan(text: str, *, max_samples: int = 15) -> tuple[int, list[str]]:
+            total_matches = 0
+            samples: list[str] = []
+            for raw_line in text.splitlines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+                lowered = line.lower()
+                keyword_hit = any(keyword in lowered for keyword in deadline_keywords)
+                date_hit = bool(date_like_regex.search(line)) if date_like_regex is not None else False
+                if not (keyword_hit or date_hit):
+                    continue
+                total_matches += 1
+                if len(samples) < max_samples:
+                    samples.append(line)
+            return total_matches, samples
+
         start_total = time.perf_counter()
         print("[UPLOAD_FILENAME]")
         print(f"filename={filename}")
@@ -60,6 +110,16 @@ class ExtractionService(
         full_text = text_result["text"]
         print("FULL_TEXT_LEN:", len(full_text))
         print("FULL_TEXT_APPROX_TOKENS:", len(full_text) / 4)
+        if debug_enabled:
+            full_matches_total, full_match_samples = _deadline_line_scan(full_text)
+            print("[FULL_TEXT_PREVIEW]")
+            print(f"chars_shown={min(len(full_text), 1000)}")
+            print(f"text={_preview_text(full_text)}")
+            print("[FULL_TEXT_DEADLINE_SCAN]")
+            print(f"matched_total={full_matches_total}")
+            print(f"sample_count={len(full_match_samples)}")
+            for idx, line in enumerate(full_match_samples, start=1):
+                print(f"sample_{idx}={line}")
         if not full_text.strip():
             end_total = time.perf_counter()
             print("TOTAL_EXTRACTION_SECONDS:", round(end_total - start_total, 3))
@@ -113,6 +173,16 @@ class ExtractionService(
         print("FILTERED_TEXT_LEN:", len(llm_input_text))
         print("FILTERED_TEXT_APPROX_TOKENS:", len(llm_input_text) / 4)
         print("FILTER_USED:", filtered_used)
+        if debug_enabled:
+            filtered_matches_total, filtered_match_samples = _deadline_line_scan(llm_input_text)
+            print("[FILTERED_TEXT_PREVIEW]")
+            print(f"chars_shown={min(len(llm_input_text), 1000)}")
+            print(f"text={_preview_text(llm_input_text)}")
+            print("[FILTERED_TEXT_DEADLINE_SCAN]")
+            print(f"matched_total={filtered_matches_total}")
+            print(f"sample_count={len(filtered_match_samples)}")
+            for idx, line in enumerate(filtered_match_samples, start=1):
+                print(f"sample_{idx}={line}")
         filtered_warning = f"filtered_text_used:{str(filtered_used).lower()}"
         retry_warning: str | None = None
 
@@ -126,9 +196,21 @@ class ExtractionService(
 
         try:
             start_llm = time.perf_counter()
+            if debug_enabled:
+                source = "filtered_text" if filtered_used else "full_text_fallback_no_filter_match"
+                print(f"[LLM_INPUT_SOURCE] source={source}")
             llm_payload = self._llm_client.extract(llm_input_text)
             end_llm = time.perf_counter()
             print("LLM_DURATION_SECONDS:", round(end_llm - start_llm, 3))
+            if debug_enabled:
+                raw_deadlines = llm_payload.get("deadlines") if isinstance(llm_payload, dict) else None
+                print("[LLM_RAW_DEADLINES]")
+                if isinstance(raw_deadlines, list):
+                    print(f"count={len(raw_deadlines)}")
+                    for idx, item in enumerate(raw_deadlines[:10], start=1):
+                        print(f"deadline_{idx}={item}")
+                else:
+                    print(f"type={type(raw_deadlines).__name__}")
         except LlmExtractionError as exc:
             end_total = time.perf_counter()
             print("TOTAL_EXTRACTION_SECONDS:", round(end_total - start_total, 3))
@@ -180,6 +262,40 @@ class ExtractionService(
                 course_code=_resolve_course_code(),
             )
 
+        if not normalized["deadlines"]:
+            if debug_enabled:
+                print("[DEADLINE_FALLBACK]")
+                print("ran=true")
+                print("reason=no_normalized_deadlines_from_llm")
+            fallback_deadlines = []
+            parsed_deadlines = extract_deadlines_from_text(
+                full_text,
+                _resolve_course_code() or filename,
+            )
+            if debug_enabled:
+                print(f"raw_parser_deadlines_count={len(parsed_deadlines)}")
+                for idx, item in enumerate(parsed_deadlines[:10], start=1):
+                    print(f"raw_parser_deadline_{idx}={item}")
+            for parsed_deadline in parsed_deadlines:
+                try:
+                    fallback_deadlines.append(self._normalize_deadline_item(parsed_deadline))
+                except ValueError:
+                    continue
+            if fallback_deadlines:
+                normalized["deadlines"] = fallback_deadlines
+                normalized["parse_warnings"] = self._merge_parse_warnings(
+                    normalized.get("parse_warnings", []),
+                    ["deadline_fallback_parser_used"],
+                )
+            if debug_enabled:
+                print(f"normalized_fallback_deadlines_count={len(fallback_deadlines)}")
+                for idx, item in enumerate(fallback_deadlines[:10], start=1):
+                    print(f"normalized_fallback_deadline_{idx}={item.model_dump()}")
+        elif debug_enabled:
+            print("[DEADLINE_FALLBACK]")
+            print("ran=false")
+            print("reason=normalized_deadlines_present")
+
         validation_result = self._validate_structure(
             assessment_entries=normalized["assessment_entries"]
         )
@@ -195,6 +311,8 @@ class ExtractionService(
                 )
             try:
                 retry_start = time.perf_counter()
+                if debug_enabled:
+                    print("[LLM_INPUT_SOURCE] source=full_text_retry")
                 retry_payload = self._llm_client.extract(full_text)
                 retry_end = time.perf_counter()
                 print("LLM_RETRY_DURATION_SECONDS:", round(retry_end - retry_start, 3))
@@ -259,6 +377,10 @@ class ExtractionService(
             )
             if trigger_result["trigger_gpt"]:
                 print(f"[GPT_TRIGGERED] trigger_reasons={trigger_result['trigger_reasons']}")
+            print("[FINAL_NORMALIZED_DEADLINES]")
+            print(f"count={len(normalized['deadlines'])}")
+            for idx, item in enumerate(normalized["deadlines"][:10], start=1):
+                print(f"deadline_{idx}={item.model_dump()}")
 
         diagnostics = ExtractionDiagnostics(
             method="llm",
