@@ -14,12 +14,16 @@ GET    /deadlines/google/callback              → Google OAuth2 callback
 
 from __future__ import annotations
 
+import os
 from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
+
+# Frontend URL for OAuth callback redirect
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 from app.dependencies import (
     get_course_service,
@@ -278,14 +282,23 @@ def google_callback(
     """
     Handle the Google OAuth2 callback.  Exchanges the authorization code
     for tokens and stores them (in-memory, per user).
+    Redirects back to frontend after success.
     """
     try:
         tokens = exchange_google_code(code)
     except GoogleCalendarError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        # Redirect to frontend with error
+        return RedirectResponse(
+            url=f"{FRONTEND_URL}/setup/deadlines?gcal_error={exc}",
+            status_code=302,
+        )
 
     dl_service.store_google_tokens(current_user.user_id, tokens)
-    return {"message": "Google Calendar connected successfully"}
+    # Redirect to frontend with success
+    return RedirectResponse(
+        url=f"{FRONTEND_URL}/setup/deadlines?gcal_connected=true",
+        status_code=302,
+    )
 
 
 @router.post(

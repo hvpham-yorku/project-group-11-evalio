@@ -351,3 +351,104 @@ export function getMinimumRequired(
     body: JSON.stringify(payload),
   }) as Promise<MinimumRequiredResponse>;
 }
+
+// ─── Deadline & Google Calendar Types ─────────────────────────────────────────
+
+export type Deadline = {
+  deadline_id: string;
+  course_id: string;
+  title: string;
+  due_date: string;
+  due_time?: string | null;
+  notes?: string | null;
+  source: string;
+  exported: boolean;
+  exported_at?: string | null;
+};
+
+export type DeadlineListResponse = {
+  deadlines: Deadline[];
+  count: number;
+};
+
+export type GoogleAuthUrlResponse = {
+  authorization_url: string;
+  state: string;
+};
+
+export type DeadlineExportResponse = {
+  exported_count: number;
+  skipped_duplicates: number;
+  events: Array<{ deadline_id: string; event_id?: string }>;
+};
+
+// ─── Deadline & Google Calendar API Functions ─────────────────────────────────
+
+export function listDeadlines(courseId: string) {
+  return request(`/courses/${courseId}/deadlines`) as Promise<DeadlineListResponse>;
+}
+
+export function createDeadline(
+  courseId: string,
+  payload: {
+    title: string;
+    due_date: string;
+    due_time?: string | null;
+    notes?: string | null;
+  }
+) {
+  return request(`/courses/${courseId}/deadlines`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }) as Promise<{ message: string; deadline: Deadline }>;
+}
+
+export function updateDeadline(
+  courseId: string,
+  deadlineId: string,
+  payload: {
+    title?: string;
+    due_date?: string;
+    due_time?: string | null;
+    notes?: string | null;
+  }
+) {
+  return request(`/courses/${courseId}/deadlines/${deadlineId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  }) as Promise<{ message: string; deadline: Deadline }>;
+}
+
+export function deleteDeadline(courseId: string, deadlineId: string) {
+  return request(`/courses/${courseId}/deadlines/${deadlineId}`, {
+    method: "DELETE",
+  }) as Promise<{ message: string }>;
+}
+
+export function getGoogleAuthUrl() {
+  return request("/deadlines/google/authorize") as Promise<GoogleAuthUrlResponse>;
+}
+
+export function exchangeGoogleCode(code: string, state: string) {
+  return request(`/deadlines/google/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`) as Promise<{ message: string }>;
+}
+
+export function exportToGoogleCalendar(
+  courseId: string,
+  deadlineIds?: string[]
+) {
+  return request(`/courses/${courseId}/deadlines/export/gcal`, {
+    method: "POST",
+    body: JSON.stringify({ deadline_ids: deadlineIds ?? null }),
+  }) as Promise<DeadlineExportResponse>;
+}
+
+export function exportToIcs(courseId: string, deadlineIds?: string[]) {
+  // ICS returns a file, handle differently
+  return fetch(`${API_BASE_URL}/courses/${courseId}/deadlines/export/ics`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deadline_ids: deadlineIds ?? null }),
+  });
+}

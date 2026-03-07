@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   Calendar,
@@ -9,11 +9,20 @@ import {
   Clock,
   Edit2,
   Link as LinkIcon,
+  Loader2,
   Plus,
   Trash2,
   X,
 } from "lucide-react";
-import { listCourses } from "@/lib/api";
+import {
+  listCourses,
+  getGoogleAuthUrl,
+  exportToGoogleCalendar,
+  listDeadlines as listDeadlinesApi,
+  createDeadline as createDeadlineApi,
+  updateDeadline as updateDeadlineApi,
+  deleteDeadline as deleteDeadlineApi,
+} from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
 
@@ -102,6 +111,7 @@ function normalizeDeadline(input: Partial<Deadline> & { title: string; due_date:
 
 export default function DeadlinesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { ensureCourseIdFromList } = useSetupCourse();
 
   const [courseId, setCourseId] = useState<string | null>(null);
@@ -120,11 +130,38 @@ export default function DeadlinesPage() {
 
   const [selectedDeadlines, setSelectedDeadlines] = useState<Set<string>>(new Set());
   const [isCalendarConnected, setIsCalendarConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [selectedCalendar, setSelectedCalendar] = useState("primary");
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportWithReminder, setExportWithReminder] = useState(true);
 
   const [error, setError] = useState<string>("");
+
+  // Check for Google Calendar OAuth callback
+  useEffect(() => {
+    const gcalConnected = searchParams.get("gcal_connected");
+    const gcalError = searchParams.get("gcal_error");
+
+    if (gcalConnected === "true") {
+      setIsCalendarConnected(true);
+      // Store in localStorage so it persists
+      window.localStorage.setItem("evalio_gcal_connected", "true");
+      // Clear the query param from URL
+      router.replace("/setup/deadlines", { scroll: false });
+    }
+
+    if (gcalError) {
+      setError(`Google Calendar connection failed: ${gcalError}`);
+      router.replace("/setup/deadlines", { scroll: false });
+    }
+
+    // Check localStorage for previous connection
+    const storedConnection = window.localStorage.getItem("evalio_gcal_connected");
+    if (storedConnection === "true") {
+      setIsCalendarConnected(true);
+    }
+  }, [searchParams, router]);
 
   // load course + initial data
   useEffect(() => {
@@ -280,30 +317,82 @@ export default function DeadlinesPage() {
     if (editingId === id) setEditingId(null);
   };
 
-  const handleExport = () => {
-    // mock idempotent export marking
-    const ids = new Set(selectedDeadlines);
-
-    const markExported = (d: Deadline) => {
-      if (!ids.has(d.id)) return d;
-      if (d.exported) return d; // idempotent
-      return {
-        ...d,
-        exported: true,
-        exported_at: new Date().toISOString(),
-      };
-    };
-
-    if (hasConfirmed) {
-      const next = deadlines.map(markExported);
-      setDeadlines(next);
-      persistConfirmed(next);
-    } else {
-      setExtractedDeadlines((prev) => prev.map(markExported));
+  const handleConnectCalendar = async () => {
+    setIsConnecting(true);
+    setError("");
+    try {
+      const { authorization_url } = await getGoogleAuthUrl();
+      // Redirect to Google OAuth - will come back to /setup/deadlines?gcal_connected=true
+      window.location.href = authorization_url;
+    } catch (e) {
+      const msg = getApiErrorMessage(e, "Failed to connect Google Calendar.");
+      // If backend returns 501, it means Google Calendar is not configured
+      if (msg.includes("not configured")) {
+        setError("Google Calendar integration is not configured on the server. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.");
+      } else {
+        setError(msg);
+      }
+      setIsConnecting(false);
     }
+  };
 
-    setSelectedDeadlines(new Set());
-    setShowExportModal(false);
+  const handleDisconnectCalendar = () => {
+    setIsCalendarConnected(false);
+    window.localStorage.removeItem("evalio_gcal_connected");
+  };
+
+  const handleExport = async () => {
+    if (!courseId) return;
+
+    setIsExporting(true);
+    setError("");
+
+    const ids = Array.from(selectedDeadlines);
+
+    try {
+      const result = await exportToGoogleCalendar(courseId, ids.length > 0 ? ids : undefined);
+
+      // Mark exported deadlines in local state
+      const exportedIds = new Set(result.events.map((e) => e.deadline_id));
+
+      const markExported = (d: Deadline) => {
+        if (!exportedIds.has(d.id)) return d;
+        return {
+          ...d,
+          exported: true,
+          exported_at: new Date().toISOString(),
+        };
+      };
+
+      if (hasConfirmed) {
+        const next = deadlines.map(markExported);
+        setDeadlines(next);
+        persistConfirmed(next);
+      } else {
+        setExtractedDeadlines((prev) => prev.map(markExported));
+      }
+
+      setSelectedDeadlines(new Set());
+      setShowExportModal(false);
+
+      // Show success message briefly
+      if (result.exported_count > 0) {
+        setError(""); // Clear any previous error
+      }
+    } catch (e) {
+      const msg = getApiErrorMessage(e, "Failed to export to Google Calendar.");
+      if (msg.includes("not configured")) {
+        setError("Google Calendar integration is not configured. Please ask an admin to set it up.");
+      } else if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
+        setError("Google Calendar authorization expired. Please reconnect.");
+        setIsCalendarConnected(false);
+        window.localStorage.removeItem("evalio_gcal_connected");
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   if (!courseId) {
@@ -327,6 +416,23 @@ export default function DeadlinesPage() {
         </p>
       </div>
 
+      {/* Error banner */}
+      {error && (
+        <div className="mt-4 rounded-2xl p-4 border border-red-200 bg-red-50">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-600" />
+            <p className="text-sm text-red-700">{error}</p>
+            <button
+              type="button"
+              onClick={() => setError("")}
+              className="ml-auto text-red-400 hover:text-red-600"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Status row */}
       <div className="mt-8 bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -339,11 +445,16 @@ export default function DeadlinesPage() {
             {!isCalendarConnected ? (
               <button
                 type="button"
-                onClick={() => setIsCalendarConnected(true)}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-xl bg-[#5D737E] text-white hover:bg-[#4A5D66] transition"
+                onClick={handleConnectCalendar}
+                disabled={isConnecting}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-xl bg-[#5D737E] text-white hover:bg-[#4A5D66] transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <LinkIcon size={14} />
-                Connect Google Calendar
+                {isConnecting ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <LinkIcon size={14} />
+                )}
+                {isConnecting ? "Connecting..." : "Connect Google Calendar"}
               </button>
             ) : (
               <>
@@ -366,7 +477,7 @@ export default function DeadlinesPage() {
 
                 <button
                   type="button"
-                  onClick={() => setIsCalendarConnected(false)}
+                  onClick={handleDisconnectCalendar}
                   className="text-xs px-3 py-2 rounded-xl text-gray-500 hover:text-gray-700 transition"
                 >
                   Disconnect
@@ -524,6 +635,7 @@ export default function DeadlinesPage() {
         exportWithReminder={exportWithReminder}
         setExportWithReminder={setExportWithReminder}
         selectedCalendar={selectedCalendar}
+        isLoading={isExporting}
         onClose={() => setShowExportModal(false)}
         onConfirm={handleExport}
       />
@@ -890,6 +1002,7 @@ function ExportModal({
   exportWithReminder,
   setExportWithReminder,
   selectedCalendar,
+  isLoading,
   onClose,
   onConfirm,
 }: {
@@ -899,6 +1012,7 @@ function ExportModal({
   exportWithReminder: boolean;
   setExportWithReminder: (value: boolean) => void;
   selectedCalendar: string;
+  isLoading?: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -939,16 +1053,25 @@ function ExportModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 px-4 py-3 text-sm rounded-xl bg-[#F6F1EA] border border-gray-100 text-gray-600 hover:border-gray-200 transition"
+            disabled={isLoading}
+            className="flex-1 px-4 py-3 text-sm rounded-xl bg-[#F6F1EA] border border-gray-100 text-gray-600 hover:border-gray-200 transition disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="flex-1 px-4 py-3 text-sm rounded-xl bg-[#5D737E] text-white hover:bg-[#4A5D66] transition"
+            disabled={isLoading}
+            className="flex-1 px-4 py-3 text-sm rounded-xl bg-[#5D737E] text-white hover:bg-[#4A5D66] transition disabled:opacity-50 inline-flex items-center justify-center gap-2"
           >
-            Confirm Export
+            {isLoading ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              "Confirm Export"
+            )}
           </button>
         </div>
       </div>
