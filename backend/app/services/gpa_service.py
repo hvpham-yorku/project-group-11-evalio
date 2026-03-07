@@ -147,7 +147,9 @@ def convert_percentage_all_scales(percent: float) -> dict[str, dict[str, Any]]:
 
 def calculate_weighted_gpa(
     courses: list[dict[str, Any]],
-    scale_name: str,
+    scale_name: str | None = None,
+    *,
+    scale: str | None = None,
 ) -> dict[str, Any]:
     """
     Calculate weighted cumulative GPA from a list of course entries.
@@ -162,7 +164,15 @@ def calculate_weighted_gpa(
     Non-numeric entries are excluded from the GPA computation but still appear
     in the *excluded* list so the frontend can render them.
     """
-    get_scale(scale_name)  # validate early
+    resolved_scale = scale if scale is not None else scale_name
+    if resolved_scale is None:
+        raise TypeError("calculate_weighted_gpa() missing required GPA scale")
+    if scale_name is not None and scale is not None and scale_name != scale:
+        raise GpaConversionError(
+            f"Conflicting GPA scales provided: '{scale_name}' and '{scale}'"
+        )
+
+    get_scale(resolved_scale)  # validate early
 
     total_weighted_points = 0.0
     total_credits = 0.0
@@ -186,7 +196,7 @@ def calculate_weighted_gpa(
             continue
 
         pct = float(percentage)
-        conversion = convert_percentage(pct, scale_name)
+        conversion = convert_percentage(pct, resolved_scale)
         gp = conversion["grade_point"]
 
         total_weighted_points += gp * credits
@@ -203,7 +213,7 @@ def calculate_weighted_gpa(
     cgpa = (total_weighted_points / total_credits) if total_credits > 0 else 0.0
 
     return {
-        "scale": scale_name,
+        "scale": resolved_scale,
         "cgpa": round(cgpa, 2),
         "total_credits": total_credits,
         "total_weighted_points": round(total_weighted_points, 4),

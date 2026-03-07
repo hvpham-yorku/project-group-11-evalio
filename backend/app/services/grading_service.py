@@ -29,7 +29,7 @@ def _get_best_count(assessment) -> int:
         return len(assessment.children or [])
     config = assessment.rule_config or {}
     try:
-        best_count = int(config.get("best_count"))
+        best_count = int(config.get("best_count", config.get("best")))
     except (TypeError, ValueError):
         return len(assessment.children or [])
     if best_count <= 0:
@@ -98,6 +98,71 @@ def _compute_remaining_potential(assessment) -> float:
     current = compute_assessment_contribution(assessment)
     maximum = _compute_assessment_max_contribution(assessment)
     return max(0.0, maximum - current)
+
+
+def _get_mandatory_pass_threshold(assessment) -> float:
+    config = assessment.rule_config or {}
+    try:
+        threshold = float(config.get("pass_threshold", 50))
+    except (TypeError, ValueError):
+        return 50.0
+    return threshold
+
+
+def _get_assessment_percent(assessment) -> float | None:
+    if assessment.children:
+        if not _is_assessment_fully_graded(assessment):
+            return None
+        contribution = compute_assessment_contribution(assessment)
+        if assessment.weight <= 0:
+            return 0.0
+        return float((contribution / assessment.weight) * 100)
+
+    if assessment.raw_score is None or assessment.total_score is None:
+        return None
+    return float(calculate_assessment_percent(assessment.raw_score, assessment.total_score))
+
+
+def evaluate_mandatory_pass_requirements(course: CourseCreate) -> dict[str, object]:
+    requirements: list[dict[str, object]] = []
+    pending_assessments: list[str] = []
+    failed_assessments: list[str] = []
+
+    for assessment in course.assessments:
+        if assessment.rule_type != "mandatory_pass":
+            continue
+
+        threshold = float(_get_mandatory_pass_threshold(assessment))
+        percent = _get_assessment_percent(assessment)
+
+        if percent is None:
+            status = "pending"
+            pending_assessments.append(assessment.name)
+        elif percent >= threshold:
+            status = "passed"
+        else:
+            status = "failed"
+            failed_assessments.append(assessment.name)
+
+        requirements.append(
+            {
+                "assessment_name": assessment.name,
+                "threshold": threshold,
+                "status": status,
+                "percent": None if percent is None else float(percent),
+            }
+        )
+
+    has_requirements = bool(requirements)
+    requirements_met = has_requirements and not pending_assessments and not failed_assessments
+
+    return {
+        "has_requirements": has_requirements,
+        "requirements_met": requirements_met,
+        "pending_assessments": pending_assessments,
+        "failed_assessments": failed_assessments,
+        "requirements": requirements,
+    }
 
 
 def calculate_course_totals(course: CourseCreate, *, missing_percent: float = 0.0) -> dict[str, float]:
