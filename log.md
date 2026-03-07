@@ -783,6 +783,85 @@ Assignee: Himanshi (SCRUM-122)
 - Integration tests verified that data persists after application restart and that switching between stub and PostgreSQL works correctly.
 - No major blockers were encountered during development.
 
+### ITR2-3 — Universal GPA Converter
+
+([SCRUM-109](https://rimaaa.atlassian.net/browse/SCRUM-109))
+
+**Story Owner:** Kartik Sharma  
+**Planned Effort:** 3–4 days  
+**Actual Effort:** 3 days
+
+#### Story Description
+
+As a student, I want to convert my course percentage into letter grades and grade-point values on multiple recognized GPA scales, so that I can understand my academic standing in the format required by graduate programs, professional schools, or international applications.
+
+#### Scope (ITR2)
+
+- Support three GPA scales:
+  - **4.0 Scale** (OMSAS / Ontario Medical School standard)
+  - **9.0 Scale** (York University)
+  - **10.0 Scale** (International / European)
+- Single-course GPA: derive GPA from a course's current graded assessments.
+- What-if GPA: project GPA under hypothetical score overrides (read-only, non-persisting).
+- Cumulative GPA (cGPA): compute a weighted cGPA across multiple manually supplied courses.
+- Scales metadata endpoint: expose all band tables for frontend dropdowns and legends.
+- Inclusive lower-bound conversion logic (e.g., 80.0% ≥ 80 threshold → A−).
+- Non-numeric course handling: pass/fail and withdrawn courses excluded from cGPA but reported.
+- Human-readable formula string returned with each cGPA response for calculation transparency.
+
+#### Out of Scope (Future Iterations)
+
+- Institution-specific custom scale definitions.
+- Persisting GPA history or trend tracking over time.
+- Automatic GPA recalculation triggered by grade changes.
+- Transcript-style GPA reporting.
+
+#### Development Tasks & Assignments
+
+- Backend: GPA conversion engine and API endpoints
+
+  - Assignee: Kartik
+  - Status: DONE (SCRUM-109)
+
+- Backend: GPA service — scale metadata, boundary logic, cGPA calculation
+
+  - Assignee: Kartik
+  - Status: DONE (SCRUM-114)
+
+- Docs: API documentation for GPA endpoints
+
+  - Assignee: Kartik
+  - Status: DONE (`docs/api/GPA_ENDPOINTS.md`)
+
+- Testing: Unit tests for GPA conversion, boundary cases, cGPA math
+
+  - Assignee: Kartik
+  - Status: DONE (17 tests passing)
+
+#### Supported GPA Scales (Summary)
+
+| Scale | Max Point | Bands | Use Case |
+|-------|-----------|-------|----------|
+| 4.0   | 4.0       | 13    | OMSAS / Ontario Medical School |
+| 9.0   | 9.0       | 10    | York University |
+| 10.0  | 10.0      | 12    | International / European |
+
+#### Implementation Details
+
+- `gpa_service.py` (236 lines): Conversion engine with `GpaBand` dataclass, three complete scale band tables, `convert_percentage()`, `convert_percentage_all_scales()`, `calculate_weighted_gpa()`, and `get_scales_metadata()`.
+- `routes/gpa.py` (177 lines): Four FastAPI endpoints — `GET /gpa/scales`, `GET /courses/{id}/gpa`, `POST /courses/{id}/gpa/whatif`, `POST /gpa/cgpa`.
+- `test_gpa_service.py` (241 lines): 17 integration tests covering boundary values, all three scales, cGPA calculation, non-numeric exclusion, and error handling.
+- `docs/api/GPA_ENDPOINTS.md` (386 lines): Full API documentation with request/response examples, error tables, and all three conversion band tables.
+
+#### Notes / Reflection
+
+- Designed the GPA conversion engine as a UI-agnostic, stateless module so that any endpoint or service can convert percentages without front-end coupling.
+- Used inclusive lower-bound matching (evaluated highest band first) to avoid ambiguity at grade boundaries.
+- The cGPA endpoint accepts manual course entries rather than querying stored courses, keeping the conversion engine independent of the persistence layer.
+- Non-numeric courses (pass/fail, withdrawn) are excluded from GPA calculation but reported in an `excluded` array for transparency.
+- A human-readable `formula` string is returned with each cGPA response to support the calculation transparency requirement.
+- No major blockers were encountered during development.
+
 ### ITR2-4 — Course Evaluation & Rule Modeling
 
 ([SCRUM-106](https://rimaaa.atlassian.net/browse/SCRUM-106))
@@ -988,6 +1067,7 @@ As a student, I want my assignment and test deadlines to be automatically extrac
 1. Backend: Deadline management, OCR parsing, and calendar integration
 
    * Assignee: Kartik ([SCRUM-83](https://rimaaa.atlassian.net/browse/SCRUM-83))
+   * Status: DONE
 
 2. Frontend: Deadline management UI, review flow, and countdown display
 
@@ -1008,6 +1088,14 @@ As a student, I want my assignment and test deadlines to be automatically extrac
 6. Docs: Update `log.md` for deadline feature architecture, API endpoints, and flow
 
    * Assignee: Shadi ([SCRUM-87](https://rimaaa.atlassian.net/browse/SCRUM-87))
+
+##### SCRUM-83 Implementation Summary (Backend — Kartik)
+
+- `models_deadline.py` (77 lines): Pydantic schemas — `Deadline`, `DeadlineCreate`, `DeadlineUpdate`, `DeadlineExportRequest`, `DeadlineExportResponse`, `GoogleAuthUrlResponse`.
+- `services/deadline_service.py` (573 lines): Deadline CRUD orchestration, OCR-based deadline extraction with lightweight date parser (regex for month-name, numeric, and time patterns), ICS calendar generation (RFC-5545 compliant, zero external dependencies), Google Calendar integration via stdlib `urllib` (OAuth2 flow, event creation with 1-week reminders, duplicate prevention via `gcal_event_id`). Graceful 501 fallback when Google credentials are not configured.
+- `routes/deadlines.py` (333 lines): 10 FastAPI endpoints — extract from outline, CRUD (list/create/update/delete), ICS download, Google Calendar export, Google OAuth2 authorize + callback.
+- `test_deadline_endpoints.py` (303 lines): Integration tests covering CRUD, extraction, export, and error handling.
+- Total: ~1,286 lines of backend code + tests.
 
 #### Notes / Reflection
 
@@ -1052,6 +1140,12 @@ The grading model was extended to support parent-child assessments, rule metadat
 
 This allowed the application to support more realistic course grading schemes and laid the foundation for future advanced rule handling.
 
+### 6. UI-Agnostic GPA Conversion Engine
+
+The GPA conversion module was designed as a stateless, UI-agnostic engine: the service accepts a raw percentage and returns structured grade data (letter, grade point, description) without any coupling to the frontend or persistence layer. Three internationally recognized scales (4.0 OMSAS, 9.0 York, 10.0 International) are defined as static band tables evaluated with inclusive lower-bound matching.
+
+This decision allows the conversion logic to be reused across single-course GPA, what-if projections, and cumulative GPA calculations without duplication, and makes it straightforward to add new scales in future iterations.
+
 ## 5. Concerns / Issues (ITR2)
 
 * No major group conflicts occurred during Iteration 2.
@@ -1062,7 +1156,7 @@ This allowed the application to support more realistic course grading schemes an
 
 ## 6. Iteration Summary (ITR2)
 
-Total number of user stories implemented: 6
+Total number of user stories implemented: 7
 
 During Iteration 2, the team expanded Evalio from a stub-based single-course prototype into a more complete planning system with persistence, extraction, multi-course support, evaluation modeling, and deadline management.
 
@@ -1070,9 +1164,10 @@ The team successfully delivered:
 
 * Persistent multi-course storage with repository abstraction and PostgreSQL support
 * Automatic course outline extraction with editable confirmation flow
+* Universal GPA Converter with three recognized scales (4.0 OMSAS, 9.0 York, 10.0 International), including single-course GPA, what-if GPA projections, and cumulative GPA calculation
 * YorkU-based evaluation and rule modeling
 * Interactive dashboard and multi-course management improvements
-* Smart deadline management with OCR/manual support and calendar export flow
+* Smart deadline management with OCR/manual support, ICS export, and Google Calendar integration
 * User-scoped authentication and protected course access
 * Expanded backend/frontend integration across newly added features
 * Improved test coverage with both unit and integration testing
