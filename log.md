@@ -1020,12 +1020,63 @@ As a student, I want my assignment and test deadlines to be automatically extrac
 
 ## 4. Major Design Decisions (ITR2)
 
-(To be updated)
+During Iteration 2, the team made the following major architectural and design decisions:
+
+### 1. Repository Abstraction with Runtime-Switchable Persistence
+
+A repository abstraction layer was introduced so that business logic remains independent of the storage implementation. The system can switch between the in-memory stub database and PostgreSQL through configuration.
+
+This decision allowed the team to support both fast development/testing and persistent runtime storage without duplicating service logic.
+
+### 2. User-Scoped Data Isolation
+
+Authentication and persistence were designed around user-scoped data access. Backend routes resolve the authenticated user through cookie-based JWT authentication, and repository operations for courses, deadlines, and scenarios are scoped by `user_id`.
+
+This ensures that users can only access and modify their own data and prevents cross-user access at the backend level.
+
+### 3. Shared Setup Flow with Central Course Context
+
+The setup pages were designed around a shared setup layout and a centralized course context provider. This layout handles common concerns such as authentication checks, the shared header, the course selector, and step navigation.
+
+This decision reduced duplication across pages and kept the setup flow consistent across multiple course-related screens.
+
+### 4. Modular AI-Assisted Extraction Pipeline with Confirm-Before-Save
+
+The automatic extraction feature was designed as a modular backend pipeline with separate stages for ingestion, normalization, validation, diagnostics, and orchestration. Extracted data is not saved automatically; users must explicitly review and confirm it before persistence.
+
+This improved maintainability and robustness while preventing incorrect OCR or AI-generated output from being stored directly.
+
+### 5. Hierarchical Assessment Modeling
+
+The grading model was extended to support parent-child assessments, rule metadata, and nested score persistence. Backend grading logic was designed to operate correctly on hierarchical grading structures rather than assuming all assessments are flat.
+
+This allowed the application to support more realistic course grading schemes and laid the foundation for future advanced rule handling.
 
 ## 5. Concerns / Issues (ITR2)
 
-(To be updated)
+* No major group conflicts occurred during Iteration 2.
+* Some integration work required extra coordination between backend, frontend, and database components due to the larger scope of persistence and extraction features.
+* A few features were implemented in a phased manner, where backend functionality was completed before full frontend refinement.
+* Minor adjustments were needed during testing to align persistence behavior, extraction flow, and multi-course interactions.
+* No critical blockers prevented completion of the main ITR2 goals.
 
 ## 6. Iteration Summary (ITR2)
 
-(To be updated)
+Total number of user stories implemented: 6
+
+During Iteration 2, the team expanded Evalio from a stub-based single-course prototype into a more complete planning system with persistence, extraction, multi-course support, evaluation modeling, and deadline management.
+
+The team successfully delivered:
+
+* Persistent multi-course storage with repository abstraction and PostgreSQL support
+* Automatic course outline extraction with editable confirmation flow
+* YorkU-based evaluation and rule modeling
+* Interactive dashboard and multi-course management improvements
+* Smart deadline management with OCR/manual support and calendar export flow
+* User-scoped authentication and protected course access
+* Expanded backend/frontend integration across newly added features
+* Improved test coverage with both unit and integration testing
+
+Overall, Iteration 2 introduced significantly more architectural complexity than Iteration 1, especially through persistence, extraction, authentication, and multi-feature integration. Despite this, the main ITR2 goals were completed and the project progressed toward a more realistic end-to-end system.
+
+The system is now substantially more complete than in ITR1, with stronger persistence, richer workflows, and better support for real student planning across multiple sessions and multiple courses.
