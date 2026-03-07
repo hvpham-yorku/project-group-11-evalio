@@ -553,13 +553,155 @@ This section records the planning, development process, task assignments, time t
 
 ## 1. Meeting Minutes (ITR2)
 
-(To be updated)
+### Internal Team Meeting #1 – ITR2 Planning Discussion
+
+**Date:** February 16, 2026  
+**Participants:** All team members
+
+**Discussion:**
+
+* Reviewed the goals and expectations for Iteration 2.
+* Discussed the main features to be implemented during ITR2.
+* Finalized the ITR2 user stories based on project priorities and feasibility.
+* Aligned team members on implementation ownership for the selected stories.
+
+**Outcome:**
+
+* ITR2 user stories were finalized.
+* Initial task ownership was discussed and agreed upon.
+* Development direction for Iteration 2 was confirmed.
+
+---
+
+### Internal Team Meeting #2 – Deliverable 1 Discussion
+
+**Date:** March 1, 2026  
+**Participants:** Shivam, Shadi, Himanshi, Rima
+
+**Discussion:**
+
+* Discussed the requirements and preparation needed for Deliverable 1.
+* Worked on the presentation content and slide organization.
+* Prepared the supporting document(s) required for submission.
+* Completed the peer evaluation form.
+
+**Outcome:**
+
+* Deliverable 1 presentation was prepared.
+* Required supporting document for submission was completed.
+* Peer evaluation form was finalized.
 
 ## 2. Plan Review (ITR1 → ITR2)
 
-(To be updated)
+At the beginning of Iteration 2, the team reviewed the results and scope of Iteration 1 and confirmed that the overall project direction for Evalio remained unchanged.
+
+The team decided to continue building on the existing foundation from ITR1 rather than changing the core vision or architecture. The main focus of ITR2 was to extend the system with additional planned functionality.
+
+Compared to ITR1:
+
+* The overall project direction remained the same.
+* New ITR2 user stories were added based on the planned next phase of development.
+* No previously planned ITR1 stories were significantly changed or redefined.
+* No major priority changes were introduced during ITR2 planning.
+* No major scope reductions or dropped items were identified at the planning stage.
+
+The team proceeded with ITR2 by expanding the system with the next set of planned features while keeping the original Evalio concept and structure consistent.
 
 ## 3. Task Assignment & Work Breakdown (ITR2)
+
+### ITR2-1 — Automatic Course Evaluation Extraction (AI-Optional & Robust Design)
+
+([SCRUM-95](https://rimaaa.atlassian.net/browse/SCRUM-95))
+
+**Story Owner:** Shivam Gupta  
+**Planned Effort:** 5–6 days  
+**Actual Effort:** 4 days
+
+#### Story Description
+
+As a student, I want to upload my course outline (PDF or image) and automatically extract assessment components, weight percentages, and grading rules, so that I can quickly and accurately set up my course evaluation without manually entering all grading details.
+
+#### Scope (ITR2)
+
+* AI is used only to assist in extracting structured grading information.
+* Core evaluation logic remains independent and fully functional without AI.
+* User can upload a course outline in supported file formats.
+* System extracts assessment components such as:
+
+  * Tests
+  * Quizzes
+  * Assignments
+  * Exams
+* System extracts corresponding weight percentages for each assessment.
+* System detects supported grading rules such as:
+
+  * Best X of Y
+  * Drop Lowest
+* Extracted information is converted into structured grading data.
+* Extracted grading structure is shown in an editable preview screen.
+* User can:
+
+  * edit assessment names
+  * modify weight percentages
+  * adjust grading rule parameters
+* System requires explicit user confirmation before saving extracted data.
+* System validates extracted data before saving, including:
+
+  * no negative weights
+  * valid total weight
+  * logical consistency of grading rules
+* Manual setup remains available if extraction fails or AI is unavailable.
+* Core grading calculations must continue working correctly without AI extraction.
+
+#### Out of Scope (Future Iterations)
+
+* Advanced grading rule semantics such as mandatory pass requirements and bonus-cap behavior.
+* Institution-specific extraction customization beyond the currently supported grading rule patterns.
+* Fully automatic correction of ambiguous or incomplete course outlines without user review.
+* AI-driven academic recommendations based on extracted course data.
+
+#### Development Subtasks & Assignments
+
+1. Backend: Extraction pipeline & validation logic
+
+   * Assignee: Shivam ([SCRUM-101](https://rimaaa.atlassian.net/browse/SCRUM-101))
+
+2. Frontend: Upload interface & editable extraction preview
+
+   * Assignee: Shadi ([SCRUM-102](https://rimaaa.atlassian.net/browse/SCRUM-102))
+
+3. Frontend: UI/UX design in Figma
+
+   * Assignee: Shadi ([SCRUM-127](https://rimaaa.atlassian.net/browse/SCRUM-127))
+
+4. Frontend–Backend integration for extraction flow
+
+   * Assignee: Shivam ([SCRUM-133](https://rimaaa.atlassian.net/browse/SCRUM-133))
+
+5. Database: Design schema for extracted course persistence
+
+   * Assignee: Himanshi ([SCRUM-105](https://rimaaa.atlassian.net/browse/SCRUM-105))
+
+6. Backend–Database integration for extracted course persistence
+
+   * Assignee: Shivam ([SCRUM-134](https://rimaaa.atlassian.net/browse/SCRUM-134))
+
+7. Testing: Unit & integration tests for extraction flow
+
+   * Assignee: Shivam ([SCRUM-103](https://rimaaa.atlassian.net/browse/SCRUM-103))
+
+8. Docs: Update `log.md`
+
+   * Assignee: Shivam ([SCRUM-104](https://rimaaa.atlassian.net/browse/SCRUM-104))
+
+#### Notes / Reflection
+
+* Implemented a modular backend extraction pipeline to support multiple file types and improve maintainability.
+* Added PDF parsing and OCR fallback to support scanned or low-quality course outlines.
+* Ensured extracted data is not persisted automatically and only saved after explicit user confirmation.
+* Validation and confirmation flow improved reliability by preventing invalid extracted structures from being accepted directly.
+* AI was limited to extraction support only, while all grading and evaluation logic remained deterministic and independent of AI.
+* No major blockers were encountered, although extraction robustness required handling inconsistent formatting across different course outline documents.
 
 ### ITR2-2 — Persistent Multi-Course Planning System (DB + Multi-Course Support)
 
@@ -799,6 +941,82 @@ Status: IN PROGRESS
 - Integrated the learning strategy recommendation UI to help students prioritize high-weight assessments (80/20 rule).
 - Verified calculation transparency logic with unit tests to ensure mathematical accuracy in the weighted average displays.
 - Current focus is finalizing the documentation for the persistence architecture and helping the backend team sync the projection logic with the updated database schema.
+
+### ITR2-6 — Smart Deadline Management (OCR + Manual Entry + Calendar Sync)
+
+([SCRUM-82](https://rimaaa.atlassian.net/browse/SCRUM-82))
+
+**Story Owner:** Shadi Karimpour  
+**Planned Effort:** 4–5 days  
+**Actual Effort:** 4 days
+
+#### Story Description
+
+As a student, I want my assignment and test deadlines to be automatically extracted from my course outline, but also be able to manually add or edit them, so that I have full control over my deadlines and never miss anything due to OCR errors or missing information.
+
+#### Scope (ITR2)
+
+* Use OCR to extract assessment names, due dates, and times (if available) from uploaded course outlines.
+* Display all detected deadlines in an editable list view.
+* Allow users to:
+
+  * edit any deadline (name, date, time, type, notes)
+  * delete incorrect entries
+  * add new deadlines manually at any time
+* If OCR detects no deadlines, show a clear empty state with an “Add Deadline” button.
+* Include a review and confirm step before exporting deadlines to Google Calendar.
+* Allow users to export selected or all deadlines to Google Calendar using the Google Calendar API.
+* Exported events include:
+
+  * course name + assessment title
+  * due date/time
+  * automatic reminder 1 week before the due date
+  * minimum grade needed (if calculated) in the event description
+* Show a countdown display on the dashboard for upcoming deadlines.
+* Mark deadlines with a badge such as “From Outline” or “Manual” for clarity.
+* Prevent duplicate exports of the same deadline.
+
+#### Out of Scope (Future Iterations)
+
+* Advanced recurring deadline logic for repeated academic tasks.
+* Support for external calendar providers beyond Google Calendar.
+* Full natural-language deadline extraction from highly ambiguous course outlines.
+* Smart prioritization or scheduling recommendations based on workload and time remaining.
+
+#### Development Tasks & Assignments
+
+1. Backend: Deadline management, OCR parsing, and calendar integration
+
+   * Assignee: Kartik ([SCRUM-83](https://rimaaa.atlassian.net/browse/SCRUM-83))
+
+2. Frontend: Deadline management UI, review flow, and countdown display
+
+   * Assignee: Shadi ([SCRUM-84](https://rimaaa.atlassian.net/browse/SCRUM-84))
+
+3. Frontend: UI/UX design in Figma
+
+   * Assignee: Shadi ([SCRUM-132](https://rimaaa.atlassian.net/browse/SCRUM-132))
+
+4. Database: Deadline storage and calendar sync schema
+
+   * Assignee: Himanshi ([SCRUM-85](https://rimaaa.atlassian.net/browse/SCRUM-85))
+
+5. Testing: Unit & integration tests for deadline flow
+
+   * Assignee: Bardiya ([SCRUM-86](https://rimaaa.atlassian.net/browse/SCRUM-86))
+
+6. Docs: Update `log.md` for deadline feature architecture, API endpoints, and flow
+
+   * Assignee: Shadi ([SCRUM-87](https://rimaaa.atlassian.net/browse/SCRUM-87))
+
+#### Notes / Reflection
+
+* Combined OCR-based extraction with manual deadline management to reduce user effort while still allowing full control over deadline data.
+* Added editable deadline review flow so extracted results can be corrected before being used or exported.
+* Integrated countdown display to improve visibility of upcoming academic tasks directly in the dashboard.
+* Designed the feature so manually added deadlines and OCR-detected deadlines behave consistently across editing, display, and export flows.
+* Google Calendar integration required careful handling of event export behavior and duplicate prevention logic.
+* No major blockers were encountered during this story.
 
 ## 4. Major Design Decisions (ITR2)
 
