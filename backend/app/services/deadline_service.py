@@ -61,6 +61,19 @@ _ASSESSMENT_HINTS = {
 _DEADLINE_MARKERS = {"due", "deadline", "submission", "exam date", "test date", "due date"}
 _NON_ASSESSMENT_PREFIXES = ("from ", "starting ", "starts ", "available ", "between ")
 
+
+def _infer_deadline_type(title: str) -> str:
+    lowered = title.lower()
+    if any(keyword in lowered for keyword in ("assignment", "homework", "project")):
+        return "Assignment"
+    if "quiz" in lowered:
+        return "Quiz"
+    if any(keyword in lowered for keyword in ("exam", "final")):
+        return "Exam"
+    if any(keyword in lowered for keyword in ("test", "midterm")):
+        return "Test"
+    return "Other"
+
 # ─── Google Calendar config ───────────────────────────────────────────────────
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
@@ -208,6 +221,7 @@ def extract_deadlines_from_text(
 
         results.append({
             "title": title,
+            "deadline_type": _infer_deadline_type(title),
             "due_date": parsed_date,
             "due_time": parsed_time,
             "source": "outline",
@@ -547,6 +561,7 @@ class DeadlineService:
         for raw in raw_deadlines:
             dl_create = DeadlineCreate(
                 title=raw.get("title", "Untitled"),
+                deadline_type=raw.get("deadline_type"),
                 due_date=raw.get("due_date", date.today().isoformat()),
                 due_time=raw.get("due_time"),
                 source=raw.get("source", "outline"),

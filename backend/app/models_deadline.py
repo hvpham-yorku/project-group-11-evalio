@@ -19,6 +19,7 @@ class Deadline(BaseModel):
     deadline_id: UUID
     course_id: UUID
     title: str
+    deadline_type: Optional[str] = None
     due_date: str = Field(..., description="ISO-8601 date (YYYY-MM-DD)")
     due_time: Optional[str] = Field(None, description="HH:MM (24h)")
     source: str = Field(default="manual", description="'outline' or 'manual'")
@@ -35,6 +36,7 @@ class Deadline(BaseModel):
 
 class DeadlineCreate(BaseModel):
     title: str = Field(..., min_length=1)
+    deadline_type: Optional[str] = None
     due_date: str = Field(..., description="ISO-8601 date (YYYY-MM-DD)")
     due_time: Optional[str] = Field(None, description="HH:MM (24h)")
     source: str = Field(default="manual")
@@ -44,6 +46,7 @@ class DeadlineCreate(BaseModel):
 
 class DeadlineUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1)
+    deadline_type: Optional[str] = None
     due_date: Optional[str] = None
     due_time: Optional[str] = None
     notes: Optional[str] = None
@@ -55,6 +58,10 @@ class DeadlineExportRequest(BaseModel):
     deadline_ids: Optional[list[UUID]] = Field(
         None,
         description="Specific deadline IDs to export. Omit or null to export all.",
+    )
+    min_grade_info: Optional[dict[str, dict[str, Any]]] = Field(
+        None,
+        description="Optional minimum-grade mapping by assessment name for export descriptions.",
     )
 
 

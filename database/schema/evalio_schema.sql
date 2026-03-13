@@ -83,6 +83,8 @@ CREATE TABLE deadlines (
 
     title VARCHAR(255) NOT NULL,
 
+    deadline_type VARCHAR(30),
+
     due_date DATE NOT NULL,
     due_time TIME,
 

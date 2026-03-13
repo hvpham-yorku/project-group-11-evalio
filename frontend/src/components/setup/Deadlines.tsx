@@ -18,6 +18,7 @@ import {
   listCourses,
   getGoogleAuthUrl,
   exportToGoogleCalendar,
+  getMinimumRequired,
   listDeadlines as listDeadlinesApi,
   createDeadline as createDeadlineApi,
   updateDeadline as updateDeadlineApi,
@@ -36,6 +37,7 @@ type Deadline = {
   course_id: string;
 
   title: string;
+  assessment_name?: string;
   due_date: string; // YYYY-MM-DD
   due_time?: string; // HH:mm
   type: DeadlineType;
@@ -49,6 +51,8 @@ type Deadline = {
 
 const PENDING_DEADLINES_KEY = "evalio_pending_deadlines_v1"; // upload step can write here
 const CONFIRMED_DEADLINES_KEY = "evalio_deadlines_confirmed_v1"; // { [course_id]: Deadline[] }
+const TARGET_STORAGE_KEY = "evalio_target_grade";
+const DEFAULT_TARGET_GRADE = 85;
 
 function safeParse<T>(raw: string | null): T | null {
   if (!raw) return null;
@@ -111,11 +115,19 @@ function inferDeadlineType(title: string): DeadlineType {
   return "Other";
 }
 
+function toDeadlineType(value?: string | null): DeadlineType | null {
+  if (value === "Assignment" || value === "Test" || value === "Exam" || value === "Quiz" || value === "Other") {
+    return value;
+  }
+  return null;
+}
+
 function normalizeDeadline(input: Partial<Deadline> & { title: string; due_date: string; type: DeadlineType }): Deadline {
   return {
     id: input.id ?? `deadline-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     course_id: input.course_id ?? "",
     title: input.title,
+    assessment_name: input.assessment_name ?? input.title,
     due_date: input.due_date,
     due_time: input.due_time || undefined,
     type: input.type,
@@ -131,9 +143,10 @@ function mapApiDeadline(deadline: ApiDeadline): Deadline {
     id: deadline.deadline_id,
     course_id: deadline.course_id,
     title: deadline.title,
+    assessment_name: deadline.assessment_name ?? deadline.title,
     due_date: deadline.due_date,
     due_time: deadline.due_time ?? undefined,
-    type: inferDeadlineType(deadline.title),
+    type: toDeadlineType(deadline.deadline_type) ?? inferDeadlineType(deadline.title),
     notes: deadline.notes ?? undefined,
     source: deadline.source === "outline" ? "From Outline" : "Manual",
     exported: deadline.exported_to_gcal,
@@ -164,7 +177,6 @@ export default function DeadlinesPage() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [exportWithReminder, setExportWithReminder] = useState(true);
 
   const [error, setError] = useState<string>("");
 
@@ -274,6 +286,8 @@ export default function DeadlinesPage() {
         extractedDeadlines.map((deadline) =>
           createDeadlineApi(courseId, {
             title: deadline.title,
+            deadline_type: deadline.type,
+            assessment_name: deadline.assessment_name ?? deadline.title,
             due_date: deadline.due_date,
             due_time: deadline.due_time ?? null,
             notes: deadline.notes ?? null,
@@ -311,6 +325,8 @@ export default function DeadlinesPage() {
         setError("");
         await createDeadlineApi(courseId, {
           title: deadline.title,
+          deadline_type: deadline.type,
+          assessment_name: deadline.assessment_name ?? deadline.title,
           due_date: deadline.due_date,
           due_time: deadline.due_time ?? null,
           notes: deadline.notes ?? null,
@@ -337,6 +353,8 @@ export default function DeadlinesPage() {
 
         await updateDeadlineApi(courseId, id, {
           title: updates.title ?? existing.title,
+          deadline_type: updates.type ?? existing.type,
+          assessment_name: updates.title ?? existing.assessment_name ?? existing.title,
           due_date: updates.due_date ?? existing.due_date,
           due_time:
             updates.due_time !== undefined
@@ -411,11 +429,42 @@ export default function DeadlinesPage() {
     setError("");
 
     const ids = Array.from(selectedDeadlines);
+    const selectedIdSet = new Set(ids);
+    const deadlinesToExport = ids.length
+      ? displayDeadlines.filter((deadline) => selectedIdSet.has(deadline.id))
+      : displayDeadlines;
+
+    const targetFromStorage = Number(window.localStorage.getItem(TARGET_STORAGE_KEY));
+    const targetForExport = Number.isFinite(targetFromStorage) ? targetFromStorage : DEFAULT_TARGET_GRADE;
+    const minGradeInfo: Record<string, { minimum_required: number }> = {};
+
+    await Promise.all(
+      deadlinesToExport.map(async (deadline) => {
+        const assessmentName = (deadline.assessment_name ?? deadline.title).trim();
+        if (!assessmentName) return;
+        try {
+          const minimum = await getMinimumRequired(courseId, {
+            target: targetForExport,
+            assessment_name: assessmentName,
+          });
+          if (Number.isFinite(minimum.minimum_required)) {
+            minGradeInfo[assessmentName] = {
+              minimum_required: minimum.minimum_required,
+            };
+          }
+        } catch {
+          // Best-effort enrichment: skip entries without a computable minimum.
+        }
+      })
+    );
 
     try {
       const result = await exportToGoogleCalendar(
         courseId,
-        ids.length > 0 ? { deadlineIds: ids } : undefined
+        {
+          deadlineIds: ids.length > 0 ? ids : undefined,
+          minGradeInfo: Object.keys(minGradeInfo).length ? minGradeInfo : undefined,
+        }
       );
 
       // Mark exported deadlines in local state
@@ -688,8 +737,6 @@ export default function DeadlinesPage() {
         open={showExportModal}
         selectedCount={selectedDeadlines.size}
         deadlines={displayDeadlines.filter((d) => selectedDeadlines.has(d.id))}
-        exportWithReminder={exportWithReminder}
-        setExportWithReminder={setExportWithReminder}
         selectedCalendar="Primary Calendar"
         isLoading={isExporting}
         onClose={() => setShowExportModal(false)}
@@ -1055,8 +1102,6 @@ function ExportModal({
   open,
   selectedCount,
   deadlines,
-  exportWithReminder,
-  setExportWithReminder,
   selectedCalendar,
   isLoading,
   onClose,
@@ -1065,8 +1110,6 @@ function ExportModal({
   open: boolean;
   selectedCount: number;
   deadlines: Deadline[];
-  exportWithReminder: boolean;
-  setExportWithReminder: (value: boolean) => void;
   selectedCalendar: string;
   isLoading?: boolean;
   onClose: () => void;
@@ -1094,16 +1137,6 @@ function ExportModal({
             </div>
           ))}
         </div>
-
-        <label className="mt-4 flex items-center gap-2 rounded-2xl bg-[#F6F1EA] border border-gray-100 p-4">
-          <input
-            type="checkbox"
-            checked={exportWithReminder}
-            onChange={(e) => setExportWithReminder(e.target.checked)}
-            className="h-4 w-4 accent-[#5D737E]"
-          />
-          <span className="text-sm text-gray-700">Add 1-week reminder automatically</span>
-        </label>
 
         <div className="mt-6 flex gap-3">
           <button

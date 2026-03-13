@@ -537,6 +537,7 @@ export type Deadline = {
   deadline_id: string;
   course_id: string;
   title: string;
+  deadline_type?: string | null;
   due_date: string;
   due_time?: string | null;
   notes?: string | null;
@@ -573,9 +574,11 @@ export function createDeadline(
   courseId: string,
   payload: {
     title: string;
+    deadline_type?: string | null;
     due_date: string;
     due_time?: string | null;
     notes?: string | null;
+    assessment_name?: string | null;
   }
 ) {
   return request(`/courses/${courseId}/deadlines`, {
@@ -589,9 +592,11 @@ export function updateDeadline(
   deadlineId: string,
   payload: {
     title?: string;
+    deadline_type?: string | null;
     due_date?: string;
     due_time?: string | null;
     notes?: string | null;
+    assessment_name?: string | null;
   }
 ) {
   return request(`/courses/${courseId}/deadlines/${deadlineId}`, {
@@ -618,20 +623,33 @@ export function exportToGoogleCalendar(
   courseId: string,
   payload?: {
     deadlineIds?: string[];
+    minGradeInfo?: Record<string, { minimum_required: number }>;
   }
 ) {
   return request(`/courses/${courseId}/deadlines/export/gcal`, {
     method: "POST",
-    body: JSON.stringify({ deadline_ids: payload?.deadlineIds ?? null }),
+    body: JSON.stringify({
+      deadline_ids: payload?.deadlineIds ?? null,
+      min_grade_info: payload?.minGradeInfo ?? null,
+    }),
   }) as Promise<DeadlineExportResponse>;
 }
 
-export function exportToIcs(courseId: string, deadlineIds?: string[]) {
+export function exportToIcs(
+  courseId: string,
+  payload?: {
+    deadlineIds?: string[];
+    minGradeInfo?: Record<string, { minimum_required: number }>;
+  }
+) {
   // ICS returns a file, handle differently
   return fetch(`${API_BASE_URL}/courses/${courseId}/deadlines/export/ics`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ deadline_ids: deadlineIds ?? null }),
+    body: JSON.stringify({
+      deadline_ids: payload?.deadlineIds ?? null,
+      min_grade_info: payload?.minGradeInfo ?? null,
+    }),
   });
 }

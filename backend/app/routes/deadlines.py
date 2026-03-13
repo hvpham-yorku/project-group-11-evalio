@@ -113,6 +113,7 @@ async def extract_deadlines(
         for ed in extraction_result.deadlines:
             candidates.append({
                 "title": ed.title,
+                "deadline_type": getattr(ed, "deadline_type", None),
                 "due_date": ed.due_date or "",
                 "due_time": ed.due_time,
                 "source": "outline",
@@ -252,6 +253,7 @@ def export_ics(
         course_id=course_id,
         course_name=stored.course.name,
         deadline_ids=payload.deadline_ids,
+        min_grade_info=payload.min_grade_info,
     )
     return Response(
         content=ics_content,
@@ -344,6 +346,7 @@ def export_to_google_calendar(
             course_id=course_id,
             course_name=stored.course.name,
             deadline_ids=payload.deadline_ids,
+            min_grade_info=payload.min_grade_info,
         )
     except GoogleCalendarError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc

@@ -51,6 +51,7 @@ class PostgresDeadlineRepository:
             row = DeadlineDB(
                 course_id=course_id,
                 title=data.title,
+                deadline_type=data.deadline_type,
                 due_date=due_date,
                 due_time=due_time,
                 source=data.source,
@@ -103,6 +104,8 @@ class PostgresDeadlineRepository:
             }
             if "title" in updates:
                 row.title = updates["title"]
+            if "deadline_type" in updates:
+                row.deadline_type = updates["deadline_type"]
             if "due_date" in updates:
                 row.due_date = date.fromisoformat(updates["due_date"])
             if "due_time" in updates:
@@ -157,6 +160,7 @@ class PostgresDeadlineRepository:
             deadline_id=row.id,
             course_id=row.course_id,
             title=row.title,
+            deadline_type=row.deadline_type,
             due_date=row.due_date.isoformat(),
             due_time=row.due_time.strftime("%H:%M") if row.due_time else None,
             source=row.source,

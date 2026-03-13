@@ -257,6 +257,29 @@ class TestDeadlineEndpoints:
         assert r2.status_code == 200
         assert r2.json()["count"] == 1
 
+    def test_deadline_type_round_trip(self, auth_client):
+        course_id = self._create_course(auth_client)
+
+        created = auth_client.post(
+            f"/courses/{course_id}/deadlines",
+            json={
+                "title": "Project Milestone",
+                "deadline_type": "Assignment",
+                "due_date": "2026-03-15",
+            },
+        )
+        assert created.status_code == 200
+        deadline = created.json()["deadline"]
+        assert deadline["deadline_type"] == "Assignment"
+
+        deadline_id = deadline["deadline_id"]
+        updated = auth_client.put(
+            f"/courses/{course_id}/deadlines/{deadline_id}",
+            json={"deadline_type": "Exam"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["deadline"]["deadline_type"] == "Exam"
+
     def test_update_deadline(self, auth_client):
         course_id = self._create_course(auth_client)
         r = auth_client.post(f"/courses/{course_id}/deadlines", json={
@@ -416,6 +439,64 @@ class TestDeadlineEndpoints:
         second_body = second.json()
         assert second_body["exported_count"] == 0
         assert second_body["skipped_duplicates"] == 1
+
+    def test_google_export_includes_min_grade_text(self, auth_client, monkeypatch):
+        service = get_deadline_service()
+        service._google_tokens.clear()
+
+        course_id = self._create_course(auth_client)
+        created = auth_client.post(
+            f"/courses/{course_id}/deadlines",
+            json={
+                "title": "Midterm Exam",
+                "assessment_name": "Midterm",
+                "due_date": "2026-03-15",
+                "due_time": "14:00",
+            },
+        )
+        assert created.status_code == 200
+
+        monkeypatch.setattr(
+            deadline_routes,
+            "exchange_google_code",
+            lambda _code: {"access_token": "token"},
+        )
+        monkeypatch.setattr(
+            deadline_routes,
+            "google_calendar_configured",
+            lambda: True,
+        )
+
+        captured_min_grade_text: list[str] = []
+
+        def _capture_event(**kwargs):
+            captured_min_grade_text.append(kwargs.get("min_grade_text", ""))
+            return {"id": "evt_456"}
+
+        monkeypatch.setattr(
+            deadline_service_module,
+            "create_google_calendar_event",
+            _capture_event,
+        )
+
+        callback = auth_client.get(
+            "/deadlines/google/callback?code=test-code",
+            follow_redirects=False,
+        )
+        assert callback.status_code == 302
+
+        exported = auth_client.post(
+            f"/courses/{course_id}/deadlines/export/gcal",
+            json={
+                "min_grade_info": {
+                    "Midterm": {"minimum_required": 72.5}
+                }
+            },
+        )
+        assert exported.status_code == 200
+        assert exported.json()["exported_count"] == 1
+        assert captured_min_grade_text
+        assert "72.5" in captured_min_grade_text[0]
 
     def test_extract_endpoint_uses_text_fallback_parser(self, auth_client, monkeypatch):
         course_id = self._create_course(auth_client)

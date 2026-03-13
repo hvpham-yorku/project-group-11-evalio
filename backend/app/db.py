@@ -193,6 +193,7 @@ class DeadlineDB(Base):
         PGUUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(Text, nullable=False)
+    deadline_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     due_time: Mapped[time | None] = mapped_column(nullable=True)
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual")
@@ -308,6 +309,7 @@ class DeadlineExportDB(Base):
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_deadlines_due_date_column()
+    _ensure_deadlines_deadline_type_column()
     _ensure_rules_rule_type_constraint()
 
 
@@ -362,6 +364,35 @@ BEGIN
 END
 $$;
 """
+    with engine.begin() as connection:
+        connection.execute(text(ddl))
+
+
+def _ensure_deadlines_deadline_type_column() -> None:
+    if engine.dialect.name != "postgresql":
+        return
+
+    ddl = """
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'deadlines'
+    ) THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'deadlines' AND column_name = 'deadline_type'
+        ) THEN
+            ALTER TABLE deadlines
+            ADD COLUMN deadline_type VARCHAR(30);
+        END IF;
+    END IF;
+END
+$$;
+"""
+
     with engine.begin() as connection:
         connection.execute(text(ddl))
 
