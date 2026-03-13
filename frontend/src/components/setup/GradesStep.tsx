@@ -97,48 +97,79 @@ function getBestOfEffectiveCount(assessment: Assessment): number {
   return Math.max(1, assessment.children.length);
 }
 
-function computeParentPercentFromChildren(assessment: Assessment): number | null {
-  if (!assessment.children.length) return null;
+function getDropLowestCount(assessment: Assessment): number {
+  if (assessment.rule_type !== "drop_lowest") return 0;
 
-  const childPercents = assessment.children.map((child) => {
+  const config = assessment.rule_config ?? {};
+  const dropCountRaw =
+    typeof config.drop_count === "number"
+      ? config.drop_count
+      : typeof config.drop === "number"
+        ? config.drop
+        : 1;
+
+  if (!Number.isFinite(dropCountRaw)) return 1;
+  return Math.max(0, Math.floor(dropCountRaw));
+}
+
+function getSelectableChildren(assessment: Assessment) {
+  const entries = assessment.children.map((child) => {
     const raw = parseNumberOrNull(child.raw_score);
     const total = parseNumberOrNull(child.total_score);
     if (raw === null || total === null || total <= 0) {
-      return { percent: 0, graded: false };
+      return { child, percent: 0, graded: false };
     }
-    return { percent: toPercentage(raw, total), graded: true };
+    return { child, percent: toPercentage(raw, total), graded: true };
   });
 
-  const hasAnyGraded = childPercents.some((entry) => entry.graded);
+  if (assessment.rule_type === "best_of") {
+    return [...entries]
+      .sort((left, right) => right.percent - left.percent)
+      .slice(0, getBestOfEffectiveCount(assessment));
+  }
+
+  if (assessment.rule_type === "drop_lowest") {
+    const keepCount = Math.max(0, entries.length - getDropLowestCount(assessment));
+    return [...entries]
+      .sort((left, right) => right.percent - left.percent)
+      .slice(0, keepCount);
+  }
+
+  return entries;
+}
+
+function computeAssessmentContribution(assessment: Assessment): number {
+  if (!assessment.children.length) {
+    const raw = parseNumberOrNull(assessment.raw_score);
+    const total = parseNumberOrNull(assessment.total_score);
+    if (raw === null || total === null || total <= 0) return 0;
+    return (toPercentage(raw, total) * assessment.weight) / 100;
+  }
+
+  return getSelectableChildren(assessment).reduce(
+    (sum, entry) => sum + (entry.percent * entry.child.weight) / 100,
+    0
+  );
+}
+
+function computeParentPercentFromChildren(assessment: Assessment): number | null {
+  if (!assessment.children.length) return null;
+
+  const selectedChildren = getSelectableChildren(assessment);
+  const hasAnyGraded = selectedChildren.some((entry) => entry.graded);
   if (!hasAnyGraded) return null;
 
-  if (assessment.rule_type === "pure_multiplicative") {
-    const sum = childPercents.reduce((acc, item) => acc + item.percent, 0);
-    return clampPercent(sum / assessment.children.length);
-  }
+  const effectiveWeight = selectedChildren.reduce(
+    (sum, entry) => sum + Math.max(0, entry.child.weight),
+    0
+  );
+  if (effectiveWeight <= 0) return null;
 
-  if (assessment.rule_type === "best_of") {
-    const effectiveCount = getBestOfEffectiveCount(assessment);
-    const selected = [...childPercents]
-      .map((item) => item.percent)
-      .sort((a, b) => b - a)
-      .slice(0, effectiveCount);
-    if (!selected.length) return null;
-    const sum = selected.reduce((acc, value) => acc + value, 0);
-    return clampPercent(sum / selected.length);
-  }
-
-  const totalChildWeight = assessment.children.reduce((sum, child) => sum + child.weight, 0);
-  if (totalChildWeight <= 0) {
-    const sum = childPercents.reduce((acc, item) => acc + item.percent, 0);
-    return clampPercent(sum / assessment.children.length);
-  }
-
-  const weighted = assessment.children.reduce((sum, child, index) => {
-    const percent = childPercents[index]?.percent ?? 0;
-    return sum + (percent * child.weight) / totalChildWeight;
-  }, 0);
-  return clampPercent(weighted);
+  const contribution = selectedChildren.reduce(
+    (sum, entry) => sum + (entry.percent * entry.child.weight) / 100,
+    0
+  );
+  return clampPercent((contribution / effectiveWeight) * 100);
 }
 
 function syncParentFromChildren(assessment: Assessment): Assessment {
@@ -182,20 +213,15 @@ function isAssessmentGraded(assessment: Assessment): boolean {
 
 function getEffectiveAssessmentWeight(assessment: Assessment): number {
   const parentWeight = Number.isFinite(assessment.weight) ? Math.max(0, assessment.weight) : 0;
-  if (assessment.rule_type !== "best_of") return parentWeight;
   if (!assessment.children.length) return parentWeight;
 
-  const effectiveCount = getBestOfEffectiveCount(assessment);
-  if (effectiveCount <= 0) return parentWeight;
+  const selectedWeight = getSelectableChildren(assessment).reduce(
+    (sum, entry) => sum + Math.max(0, entry.child.weight),
+    0
+  );
 
-  const topWeightSum = [...assessment.children]
-    .map((child) => (Number.isFinite(child.weight) ? Math.max(0, child.weight) : 0))
-    .sort((a, b) => b - a)
-    .slice(0, effectiveCount)
-    .reduce((sum, value) => sum + value, 0);
-
-  if (!Number.isFinite(topWeightSum) || topWeightSum <= 0) return parentWeight;
-  return Math.min(parentWeight, topWeightSum);
+  if (!Number.isFinite(selectedWeight) || selectedWeight <= 0) return parentWeight;
+  return selectedWeight;
 }
 
 function buildGradeUpdatePayload(
@@ -334,15 +360,7 @@ export function GradesStep() {
   const remainingWeight = Math.max(0, Math.min(100, 100 - gradedWeight));
 
   const currentGrade = useMemo(
-    () =>
-      assessments.reduce((sum, a) => {
-        const raw = parseNumberOrNull(a.raw_score);
-        const total = parseNumberOrNull(a.total_score);
-        if (raw === null || total === null || total <= 0) return sum;
-        const percent = toPercentage(raw, total);
-        const weightedContribution = getEffectiveAssessmentWeight(a);
-        return sum + (percent * weightedContribution) / 100;
-      }, 0),
+    () => assessments.reduce((sum, assessment) => sum + computeAssessmentContribution(assessment), 0),
     [assessments]
   );
 
@@ -601,7 +619,7 @@ export function GradesStep() {
           Institutional Evaluation ({institutionalMeta.institutionName})
         </h3>
         <p className="mt-2 text-base text-[#6A6561]">
-          Your current standing expressed using YorkU grading rules.
+          Your current standing expressed using the selected institutional grading rules.
         </p>
 
         {gradedWeight > 0 ? (
@@ -639,7 +657,7 @@ export function GradesStep() {
         ) : (
           <div className="mt-6 rounded-xl border border-dashed border-[#95A0A9] bg-[#EAE6E0] py-8 text-center">
             <p className="text-sm text-[#6A6561]">
-              No graded work yet — enter a grade to see your YorkU evaluation.
+              No graded work yet — enter a grade to see your institutional evaluation.
             </p>
           </div>
         )}
@@ -658,14 +676,22 @@ export function GradesStep() {
             const isExpanded = !!expandedByKey[String(a.id)];
             const childWeightSum = a.children.reduce((sum, child) => sum + child.weight, 0);
             const bestOfEffectiveCount = getBestOfEffectiveCount(a);
+            const dropLowestCount = getDropLowestCount(a);
             const bestOfChildWeightSum = [...a.children]
               .map((child) => child.weight)
               .sort((left, right) => right - left)
               .slice(0, bestOfEffectiveCount)
               .reduce((sum, weight) => sum + weight, 0);
+            const dropLowestChildWeightSum = [...a.children]
+              .map((child) => child.weight)
+              .sort((left, right) => right - left)
+              .slice(0, Math.max(0, a.children.length - dropLowestCount))
+              .reduce((sum, weight) => sum + weight, 0);
             const childWeightMismatch = hasChildren
               ? a.rule_type === "best_of"
                 ? Math.abs(bestOfChildWeightSum - a.weight) > CHILD_WEIGHT_TOLERANCE
+                : a.rule_type === "drop_lowest"
+                  ? Math.abs(dropLowestChildWeightSum - a.weight) > CHILD_WEIGHT_TOLERANCE
                 : Math.abs(childWeightSum - a.weight) > CHILD_WEIGHT_TOLERANCE
               : false;
 
@@ -827,6 +853,8 @@ export function GradesStep() {
                           <p className="ml-4 text-xs text-amber-700">
                             {a.rule_type === "best_of"
                               ? `Top ${bestOfEffectiveCount} child weights should sum to ${a.weight}% (current: ${formatScore(bestOfChildWeightSum)}%).`
+                              : a.rule_type === "drop_lowest"
+                                ? `All but the lowest ${dropLowestCount} child weights should sum to ${a.weight}% (current: ${formatScore(dropLowestChildWeightSum)}%).`
                               : `Child weights should sum to ${a.weight}% (current: ${formatScore(childWeightSum)}%).`}
                           </p>
                         ) : null}

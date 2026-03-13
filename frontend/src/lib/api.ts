@@ -1,5 +1,21 @@
+function getDefaultApiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+
+    if (hostname === "127.0.0.1") {
+      return "http://127.0.0.1:8000";
+    }
+
+    if (hostname === "localhost") {
+      return "http://localhost:8000";
+    }
+  }
+
+  return "http://127.0.0.1:8000";
+}
+
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_BASE_URL?.trim() || getDefaultApiBaseUrl();
 
 export type CourseAssessment = {
   name: string;
@@ -95,6 +111,133 @@ export type MinimumRequiredResponse = {
   other_remaining_assumed_max: number;
   target: number;
   explanation: string;
+};
+
+export type GpaConversion = {
+  letter: string;
+  grade_point: number;
+  description: string;
+  scale: string;
+  percentage: number;
+};
+
+export type CourseGpaResponse = {
+  course_id: string;
+  course_name: string;
+  percentage: number;
+  totals: Record<string, unknown>;
+  gpa: GpaConversion;
+  all_scales: Record<string, GpaConversion>;
+};
+
+export type CgpaCoursePayload = {
+  name: string;
+  percentage: number | null;
+  credits: number;
+  grade_type?: "numeric" | "pass_fail" | "withdrawn";
+};
+
+export type CgpaResponse = {
+  scale: string;
+  cgpa: number;
+  total_credits: number;
+  total_weighted_points: number;
+  courses: Array<{
+    name: string;
+    credits: number;
+    percentage: number;
+    letter: string;
+    grade_point: number;
+    description: string;
+    scale: string;
+    weighted_contribution: number;
+  }>;
+  excluded: Array<{
+    name: string;
+    credits: number;
+    grade_type: string;
+    reason: string;
+  }>;
+  formula: string;
+};
+
+export type LearningStrategyTechnique = {
+  name: string;
+  description: string;
+  best_for: string[];
+  reason: string;
+  priority: string;
+};
+
+export type LearningStrategySuggestion = {
+  assessment_name: string;
+  assessment_type: string;
+  weight: number;
+  days_until_due?: number | null;
+  due_date?: string | null;
+  techniques: LearningStrategyTechnique[];
+};
+
+export type LearningStrategiesResponse = {
+  course_name: string;
+  suggestions: LearningStrategySuggestion[];
+};
+
+export type DashboardBreakdownEntry = {
+  name: string;
+  weight: number;
+  is_bonus: boolean;
+  graded: boolean;
+  current_contribution: number;
+  max_contribution: number;
+  remaining_potential: number;
+  score_percent?: number;
+};
+
+export type DashboardSummaryResponse = {
+  course_name: string;
+  min_grade: number;
+  max_grade: number;
+  current_grade: number;
+  min_normalised: number;
+  max_normalised: number;
+  current_normalised: number;
+  normalisation_applied: boolean;
+  core_weight: number;
+  bonus_weight: number;
+  graded_weight: number;
+  remaining_weight: number;
+  breakdown: DashboardBreakdownEntry[];
+  gpa_current: Record<string, GpaConversion>;
+  gpa_best_case: Record<string, GpaConversion>;
+  york_equivalent: YorkEquivalent;
+};
+
+export type DashboardWhatIfBreakdownEntry = {
+  name: string;
+  weight: number;
+  is_bonus: boolean;
+  source: string;
+  contribution: number;
+  max_contribution: number;
+  hypothetical_score?: number;
+};
+
+export type DashboardWhatIfResponse = {
+  course_name: string;
+  projected_grade: number;
+  maximum_possible: number;
+  current_grade: number;
+  projected_normalised?: number;
+  maximum_possible_normalised?: number;
+  current_normalised?: number;
+  normalisation_applied?: boolean;
+  core_weight?: number;
+  bonus_weight?: number;
+  scenarios_applied: number;
+  york_equivalent_projected: YorkEquivalent;
+  gpa_projected: Record<string, GpaConversion>;
+  breakdown: DashboardWhatIfBreakdownEntry[];
 };
 
 export type SaveScenarioPayload = {
@@ -352,6 +495,42 @@ export function getMinimumRequired(
   }) as Promise<MinimumRequiredResponse>;
 }
 
+export function getCourseGpa(courseId: string, scale = "4.0") {
+  return request(
+    `/courses/${courseId}/gpa?scale=${encodeURIComponent(scale)}`
+  ) as Promise<CourseGpaResponse>;
+}
+
+export function computeCgpa(payload: {
+  courses: CgpaCoursePayload[];
+  scale: string;
+}) {
+  return request("/gpa/cgpa", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }) as Promise<CgpaResponse>;
+}
+
+export function getLearningStrategies(courseId: string) {
+  return request(
+    `/courses/${courseId}/dashboard/strategies`
+  ) as Promise<LearningStrategiesResponse>;
+}
+
+export function getDashboardSummary(courseId: string) {
+  return request(`/courses/${courseId}/dashboard`) as Promise<DashboardSummaryResponse>;
+}
+
+export function runDashboardWhatIf(
+  courseId: string,
+  payload: { scenarios: Array<{ assessment_name: string; score: number }> }
+) {
+  return request(`/courses/${courseId}/dashboard/whatif`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }) as Promise<DashboardWhatIfResponse>;
+}
+
 // ─── Deadline & Google Calendar Types ─────────────────────────────────────────
 
 export type Deadline = {
@@ -362,8 +541,10 @@ export type Deadline = {
   due_time?: string | null;
   notes?: string | null;
   source: string;
-  exported: boolean;
-  exported_at?: string | null;
+  assessment_name?: string | null;
+  exported_to_gcal: boolean;
+  gcal_event_id?: string | null;
+  created_at: string;
 };
 
 export type DeadlineListResponse = {
@@ -379,7 +560,7 @@ export type GoogleAuthUrlResponse = {
 export type DeadlineExportResponse = {
   exported_count: number;
   skipped_duplicates: number;
-  events: Array<{ deadline_id: string; event_id?: string }>;
+  events: Array<{ deadline_id: string; gcal_event_id?: string; status?: string }>;
 };
 
 // ─── Deadline & Google Calendar API Functions ─────────────────────────────────
@@ -435,11 +616,13 @@ export function exchangeGoogleCode(code: string, state: string) {
 
 export function exportToGoogleCalendar(
   courseId: string,
-  deadlineIds?: string[]
+  payload?: {
+    deadlineIds?: string[];
+  }
 ) {
   return request(`/courses/${courseId}/deadlines/export/gcal`, {
     method: "POST",
-    body: JSON.stringify({ deadline_ids: deadlineIds ?? null }),
+    body: JSON.stringify({ deadline_ids: payload?.deadlineIds ?? null }),
   }) as Promise<DeadlineExportResponse>;
 }
 

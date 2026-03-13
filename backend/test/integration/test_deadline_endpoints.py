@@ -12,7 +12,9 @@ Covers:
 import pytest
 from types import SimpleNamespace
 
-from app.dependencies import get_extraction_service
+from app.dependencies import get_deadline_service, get_extraction_service
+from app.routes import deadlines as deadline_routes
+from app.services import deadline_service as deadline_service_module
 from app.models_deadline import DeadlineCreate
 from app.repositories.inmemory_deadline_repo import InMemoryDeadlineRepository
 from app.services.deadline_service import (
@@ -292,6 +294,128 @@ class TestDeadlineEndpoints:
         assert r.status_code == 200
         assert "BEGIN:VCALENDAR" in r.text
         assert r.headers["content-type"] == "text/calendar; charset=utf-8"
+
+    def test_google_authorize_unconfigured(self, auth_client, monkeypatch):
+        def _raise(state: str = ""):
+            raise deadline_routes.GoogleCalendarError(
+                "Google Calendar integration is not configured."
+            )
+
+        monkeypatch.setattr(deadline_routes, "get_google_auth_url", _raise)
+
+        response = auth_client.get("/deadlines/google/authorize")
+
+        assert response.status_code == 501
+        assert "not configured" in response.json()["detail"].lower()
+
+    def test_google_authorize_configured(self, auth_client, monkeypatch):
+        monkeypatch.setattr(
+            deadline_routes,
+            "get_google_auth_url",
+            lambda state="": {
+                "authorization_url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=test",
+                "state": state,
+            },
+        )
+
+        response = auth_client.get("/deadlines/google/authorize")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["authorization_url"].startswith(
+            "https://accounts.google.com/o/oauth2/v2/auth"
+        )
+        assert body["state"]
+
+    def test_google_callback_stores_tokens_and_redirects(
+        self, auth_client, monkeypatch
+    ):
+        service = get_deadline_service()
+        service._google_tokens.clear()
+
+        monkeypatch.setattr(
+            deadline_routes,
+            "exchange_google_code",
+            lambda _code: {
+                "access_token": "access-token",
+                "refresh_token": "refresh-token",
+            },
+        )
+
+        response = auth_client.get(
+            "/deadlines/google/callback?code=test-code",
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 302
+        assert response.headers["location"].endswith(
+            "/setup/deadlines?gcal_connected=true"
+        )
+        assert len(service._google_tokens) == 1
+        assert next(iter(service._google_tokens.values()))["access_token"] == "access-token"
+
+    def test_google_export_unconfigured_returns_501(self, auth_client, monkeypatch):
+        course_id = self._create_course(auth_client)
+        monkeypatch.setattr(
+            deadline_routes,
+            "google_calendar_configured",
+            lambda: False,
+        )
+
+        response = auth_client.post(f"/courses/{course_id}/deadlines/export/gcal")
+
+        assert response.status_code == 501
+        assert "not configured" in response.json()["detail"].lower()
+
+    def test_google_export_skips_duplicates(self, auth_client, monkeypatch):
+        service = get_deadline_service()
+        service._google_tokens.clear()
+
+        course_id = self._create_course(auth_client)
+        created = auth_client.post(
+            f"/courses/{course_id}/deadlines",
+            json={
+                "title": "Midterm Exam",
+                "due_date": "2026-03-15",
+                "due_time": "14:00",
+            },
+        )
+        assert created.status_code == 200
+
+        monkeypatch.setattr(
+            deadline_routes,
+            "exchange_google_code",
+            lambda _code: {"access_token": "token"},
+        )
+        monkeypatch.setattr(
+            deadline_routes,
+            "google_calendar_configured",
+            lambda: True,
+        )
+        monkeypatch.setattr(
+            deadline_service_module,
+            "create_google_calendar_event",
+            lambda **_kwargs: {"id": "evt_123"},
+        )
+
+        callback = auth_client.get(
+            "/deadlines/google/callback?code=test-code",
+            follow_redirects=False,
+        )
+        assert callback.status_code == 302
+
+        first = auth_client.post(f"/courses/{course_id}/deadlines/export/gcal")
+        assert first.status_code == 200
+        first_body = first.json()
+        assert first_body["exported_count"] == 1
+        assert first_body["skipped_duplicates"] == 0
+        assert first_body["events"][0]["gcal_event_id"] == "evt_123"
+
+        second = auth_client.post(f"/courses/{course_id}/deadlines/export/gcal")
+        assert second.status_code == 200
+        second_body = second.json()
+        assert second_body["exported_count"] == 0
+        assert second_body["skipped_duplicates"] == 1
 
     def test_extract_endpoint_uses_text_fallback_parser(self, auth_client, monkeypatch):
         course_id = self._create_course(auth_client)

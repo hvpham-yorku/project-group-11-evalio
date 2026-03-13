@@ -108,5 +108,5 @@ npm run lint
 
 ## Notes / Limitations
 
-- Upload input UI currently accepts `.pdf`, `.doc`, `.docx`, `.txt`.
+- Upload input UI currently accepts `.pdf`, `.docx`, `.txt`, `.png`, `.jpg`, `.jpeg`.
 - Deadlines page currently uses localStorage for pending/confirmed UI state while the backend also exposes deadline APIs.

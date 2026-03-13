@@ -90,6 +90,141 @@ function getChildBaseLabel(parentName: string): string {
   return "Item";
 }
 
+const BEST_OF_RULE_REGEX = /best\s+(\d+)\s+(?:(?:out\s+of|of)\s+)?(\d+)/i;
+const DROP_LOWEST_RULE_REGEX = /\bdrop\s+lowest(?:\s+(\d+))?\b/i;
+const DROP_LOWEST_ALT_RULE_REGEX = /\bdrop\s+(\d+)\s+lowest\b/i;
+const TOTAL_COUNT_REGEX = /\b(?:out\s+of|of)\s+(\d+)\b/i;
+const LEADING_COUNT_REGEX = /^(\d+)\s+/;
+
+function parsePositiveInteger(value: unknown): number | null {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return Math.floor(numeric);
+}
+
+function deriveRuleMetadata(
+  ruleText: string,
+  assessmentName: string
+): Pick<EditableAssessment, "rule_type" | "total_count" | "effective_count"> {
+  const normalizedRule = ruleText.trim();
+  if (!normalizedRule) {
+    return {
+      rule_type: null,
+      total_count: null,
+      effective_count: null,
+    };
+  }
+
+  const bestMatch = BEST_OF_RULE_REGEX.exec(normalizedRule);
+  if (bestMatch) {
+    const effectiveCount = parsePositiveInteger(bestMatch[1]);
+    const totalCount = parsePositiveInteger(bestMatch[2]);
+    return {
+      rule_type: "best_of",
+      effective_count: effectiveCount,
+      total_count: totalCount,
+    };
+  }
+
+  const altDropMatch = DROP_LOWEST_ALT_RULE_REGEX.exec(normalizedRule);
+  const dropMatch = DROP_LOWEST_RULE_REGEX.exec(normalizedRule);
+  if (altDropMatch || dropMatch) {
+    const dropCount =
+      parsePositiveInteger(altDropMatch?.[1]) ??
+      parsePositiveInteger(dropMatch?.[1]) ??
+      1;
+
+    const totalCountFromRule = parsePositiveInteger(TOTAL_COUNT_REGEX.exec(normalizedRule)?.[1]);
+    const totalCountFromName = parsePositiveInteger(LEADING_COUNT_REGEX.exec(assessmentName.trim())?.[1]);
+    const totalCount = totalCountFromRule ?? totalCountFromName;
+    const effectiveCount = totalCount ? Math.max(1, totalCount - dropCount) : null;
+
+    return {
+      rule_type: "drop_lowest",
+      total_count: totalCount,
+      effective_count: effectiveCount,
+    };
+  }
+
+  return {
+    rule_type: null,
+    total_count: null,
+    effective_count: null,
+  };
+}
+
+function getRuleSummaryLabel(assessment: EditableAssessment): string | null {
+  const effectiveCount = parsePositiveInteger(assessment.effective_count);
+  const totalCount = parsePositiveInteger(assessment.total_count);
+
+  if (assessment.rule_type === "best_of") {
+    if (effectiveCount && totalCount) {
+      return `Best ${effectiveCount} of ${totalCount} count`;
+    }
+    return "Best-of grading applied";
+  }
+
+  if (assessment.rule_type === "drop_lowest") {
+    if (effectiveCount && totalCount) {
+      const dropped = Math.max(0, totalCount - effectiveCount);
+      return `Drop lowest ${dropped} of ${totalCount}`;
+    }
+    return "Drop-lowest grading applied";
+  }
+
+  if (assessment.rule_type === "pure_multiplicative") {
+    return "All sub-items count";
+  }
+
+  return null;
+}
+
+function findAssessmentValidationError(items: EditableAssessment[]): string | null {
+  const WEIGHT_TOLERANCE = 0.01;
+
+  for (const assessment of items) {
+    const trimmedName = assessment.name.trim();
+    if (!trimmedName) {
+      return "Every assessment must have a name.";
+    }
+
+    if (!Number.isFinite(assessment.weight) || assessment.weight <= 0) {
+      return `Assessment "${trimmedName}" must have a positive weight.`;
+    }
+
+    const children = Array.isArray(assessment.children) ? assessment.children : [];
+    if (children.length > 0) {
+      for (const child of children) {
+        const childName = child.name.trim();
+        if (!childName) {
+          return `Assessment "${trimmedName}" has a child item with an empty name.`;
+        }
+        if (!Number.isFinite(child.weight) || child.weight <= 0) {
+          return `Child item "${childName}" under "${trimmedName}" must have a positive weight.`;
+        }
+      }
+
+      const childWeightSum = children.reduce(
+        (sum, child) => sum + (Number.isFinite(child.weight) ? child.weight : 0),
+        0
+      );
+
+      if (assessment.rule_type === "best_of" || assessment.rule_type === "drop_lowest") {
+        if (childWeightSum + WEIGHT_TOLERANCE < assessment.weight) {
+          return `Assessment "${trimmedName}" needs child weights totaling at least ${assessment.weight}%.`;
+        }
+      } else if (Math.abs(childWeightSum - assessment.weight) > WEIGHT_TOLERANCE) {
+        return `Assessment "${trimmedName}" requires child weights to sum to ${assessment.weight}% (currently ${childWeightSum.toFixed(2)}%).`;
+      }
+    }
+
+    const nestedError = findAssessmentValidationError(children);
+    if (nestedError) return nestedError;
+  }
+
+  return null;
+}
+
 type GradeBoundary = {
   letter: string;
   minLabel: string; // e.g., "90–100" or "below 50"
@@ -256,21 +391,6 @@ export default function StructureStep() {
     setRulesOpenById((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const bestOfLabel = (a: EditableAssessment) => {
-    if (a.rule_type !== "best_of") return null;
-    const effectiveCount = Number(a.effective_count);
-    const totalCount = Number(a.total_count);
-    if (
-      Number.isFinite(effectiveCount) &&
-      Number.isFinite(totalCount) &&
-      effectiveCount > 0 &&
-      totalCount > 0
-    ) {
-      return `Best ${effectiveCount} of ${totalCount} count`;
-    }
-    return "Best-of grading applied";
-  };
-
   const addGradeBoundary = () => {
     setGradeBoundaries((prev) => [
       ...prev,
@@ -295,6 +415,12 @@ export default function StructureStep() {
 
     if (!courseName.trim()) {
       setError("Please enter a course name.");
+      return;
+    }
+
+    const assessmentValidationError = findAssessmentValidationError(assessments);
+    if (assessmentValidationError) {
+      setError(assessmentValidationError);
       return;
     }
 
@@ -348,8 +474,8 @@ export default function StructureStep() {
     const children = Array.isArray(a.children) ? a.children : [];
     const hasChildren = children.length > 0;
     const expanded = !!expandedByKey[a.id];
-    const bestLabel = bestOfLabel(a);
-    const rulesOpenByDefault = Boolean((a.rule ?? "").trim() || bestLabel);
+    const ruleSummaryLabel = getRuleSummaryLabel(a);
+    const rulesOpenByDefault = Boolean((a.rule ?? "").trim() || ruleSummaryLabel);
     const rulesOpen = rulesOpenById[a.id] ?? rulesOpenByDefault;
 
     return (
@@ -374,7 +500,14 @@ export default function StructureStep() {
                 <div className="flex-1">
                   <input
                     value={a.name}
-                    onChange={(e) => updateAssessment(a.id, { name: e.target.value })}
+                    onChange={(e) => {
+                      const nextName = e.target.value;
+                      const derived = deriveRuleMetadata(a.rule ?? "", nextName);
+                      updateAssessment(a.id, {
+                        name: nextName,
+                        ...derived,
+                      });
+                    }}
                     placeholder="Assessment name"
                     className="w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
                   />
@@ -430,14 +563,21 @@ export default function StructureStep() {
                   <>
                     <input
                       value={a.rule ?? ""}
-                      onChange={(e) => updateAssessment(a.id, { rule: e.target.value })}
+                      onChange={(e) => {
+                        const nextRule = e.target.value;
+                        const derived = deriveRuleMetadata(nextRule, a.name);
+                        updateAssessment(a.id, {
+                          rule: nextRule,
+                          ...derived,
+                        });
+                      }}
                       placeholder="e.g., Best 10 of 11 quizzes count"
                       className="mt-2 w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
                     />
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-500">
-                      {bestLabel ? (
+                      {ruleSummaryLabel ? (
                         <span className="px-2 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200">
-                          {bestLabel}
+                          {ruleSummaryLabel}
                         </span>
                       ) : null}
                     </div>
@@ -661,7 +801,9 @@ export default function StructureStep() {
           onClick={() => setInstitutionalOpen((v) => !v)}
         >
           <div>
-            <h3 className="text-base font-semibold text-[#333333]">Institutional Grading Rules (York University Default)</h3>
+            <h3 className="text-base font-semibold text-[#333333]">
+              Institutional Grading Rules ({institutionName || "York University"} Default)
+            </h3>
             <p className="mt-1 text-sm text-[#5F7A8A]">
               Optional - Change to match your institution
             </p>

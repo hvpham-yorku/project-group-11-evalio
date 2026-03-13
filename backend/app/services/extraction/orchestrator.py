@@ -79,8 +79,47 @@ class ExtractionService(
             else None
         )
 
+        def _env_truthy(name: str, default: bool) -> bool:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+        def _env_positive_int(name: str, default: int) -> int:
+            raw = os.getenv(name)
+            if raw is None:
+                return default
+            try:
+                parsed = int(raw)
+            except ValueError:
+                return default
+            return max(1000, parsed)
+
+        max_llm_input_chars = _env_positive_int("EXTRACTION_LLM_MAX_CHARS", 45000)
+        max_retry_input_chars = _env_positive_int("EXTRACTION_RETRY_MAX_CHARS", 60000)
+        allow_full_text_retry = _env_truthy("EXTRACTION_ENABLE_FULL_TEXT_RETRY", True)
+
         def _preview_text(text: str, *, max_chars: int = 1000) -> str:
             return text[:max_chars].replace("\n", "\\n")
+
+        def _truncate_text_for_llm(
+            text: str,
+            *,
+            max_chars: int,
+            warning_prefix: str,
+        ) -> tuple[str, str | None]:
+            if len(text) <= max_chars:
+                return text, None
+
+            head_chars = int(max_chars * 0.75)
+            tail_chars = max_chars - head_chars
+            truncated = (
+                text[:head_chars]
+                + "\n\n[... trimmed for extraction speed ...]\n\n"
+                + text[-tail_chars:]
+            )
+            warning = f"{warning_prefix}:{len(text)}->{len(truncated)}"
+            return truncated, warning
 
         def _deadline_line_scan(text: str, *, max_samples: int = 15) -> tuple[int, list[str]]:
             total_matches = 0
@@ -170,6 +209,16 @@ class ExtractionService(
                     course_code_executor.shutdown(wait=False)
             return resolved_course_code["value"] if isinstance(resolved_course_code["value"], str) else None
         llm_input_text, filtered_used = self._grading_filter.filter(full_text)
+        llm_input_text, llm_input_truncation_warning = _truncate_text_for_llm(
+            llm_input_text,
+            max_chars=max_llm_input_chars,
+            warning_prefix="llm_input_truncated",
+        )
+        full_text_retry_input, full_retry_truncation_warning = _truncate_text_for_llm(
+            full_text,
+            max_chars=max_retry_input_chars,
+            warning_prefix="full_text_retry_truncated",
+        )
         print("FILTERED_TEXT_LEN:", len(llm_input_text))
         print("FILTERED_TEXT_APPROX_TOKENS:", len(llm_input_text) / 4)
         print("FILTER_USED:", filtered_used)
@@ -301,7 +350,18 @@ class ExtractionService(
         )
         filtered_weight_sum = _sum_non_bonus_weights(normalized["assessments"])
         retry_used = False
-        if filtered_weight_sum < Decimal("60.00") and not retry_used:
+        retry_skipped_warning: str | None = None
+        if filtered_weight_sum < Decimal("60.00") and not filtered_used:
+            retry_skipped_warning = "full_text_retry_skipped:already_used_full_text"
+        elif filtered_weight_sum < Decimal("60.00") and not allow_full_text_retry:
+            retry_skipped_warning = "full_text_retry_skipped:disabled_by_env"
+
+        if (
+            filtered_weight_sum < Decimal("60.00")
+            and not retry_used
+            and filtered_used
+            and allow_full_text_retry
+        ):
             retry_used = True
             retry_warning = "full_text_retry_attempted:true"
             if debug_enabled:
@@ -313,7 +373,7 @@ class ExtractionService(
                 retry_start = time.perf_counter()
                 if debug_enabled:
                     print("[LLM_INPUT_SOURCE] source=full_text_retry")
-                retry_payload = self._llm_client.extract(full_text)
+                retry_payload = self._llm_client.extract(full_text_retry_input)
                 retry_end = time.perf_counter()
                 print("LLM_RETRY_DURATION_SECONDS:", round(retry_end - retry_start, 3))
                 retry_normalized = self._normalize_llm_payload(retry_payload)
@@ -352,6 +412,12 @@ class ExtractionService(
             validation_result=validation_result,
         )
         source_warnings = [filtered_warning]
+        if llm_input_truncation_warning:
+            source_warnings.append(llm_input_truncation_warning)
+        if full_retry_truncation_warning:
+            source_warnings.append(full_retry_truncation_warning)
+        if retry_skipped_warning:
+            source_warnings.append(retry_skipped_warning)
         if retry_warning:
             source_warnings.append(retry_warning)
         parse_warnings = self._merge_parse_warnings(

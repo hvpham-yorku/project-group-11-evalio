@@ -3,65 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Target, TrendingUp } from "lucide-react";
-import { checkTarget, listCourses, type TargetCheckResponse } from "@/lib/api";
+import { checkTarget, getDashboardSummary, listCourses, type TargetCheckResponse } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
 
 const TARGET_STORAGE_KEY = "evalio_target_grade";
-
-function resolveCurrentGrade(result: { current_standing: number; final_total?: number }): number {
-  return Number.isFinite(result.final_total) ? Number(result.final_total) : result.current_standing;
-}
-
-function getBestOfEffectiveCount(assessment: {
-  effective_count?: number | null;
-  rule_config?: Record<string, unknown> | null;
-  children?: Array<{ weight: number }> | null;
-}): number {
-  if (typeof assessment.effective_count === "number" && assessment.effective_count > 0) {
-    return Math.max(1, Math.floor(assessment.effective_count));
-  }
-
-  const config = assessment.rule_config ?? {};
-  const bestCountRaw =
-    typeof config.best_count === "number"
-      ? config.best_count
-      : typeof config.best === "number"
-      ? config.best
-      : null;
-
-  if (typeof bestCountRaw === "number" && bestCountRaw > 0) {
-    return Math.max(1, Math.floor(bestCountRaw));
-  }
-
-  return 1;
-}
-
-function getEffectiveWeight(assessment: {
-  weight: number;
-  rule_type?: string | null;
-  children?: Array<{ weight: number }> | null;
-  effective_count?: number | null;
-  rule_config?: Record<string, unknown> | null;
-}): number {
-  const parentWeight = Number.isFinite(assessment.weight) ? Math.max(0, assessment.weight) : 0;
-  if (assessment.rule_type !== "best_of") return parentWeight;
-
-  const children = Array.isArray(assessment.children) ? assessment.children : [];
-  if (!children.length) return parentWeight;
-
-  const effectiveCount = Math.min(getBestOfEffectiveCount(assessment), children.length);
-  if (effectiveCount <= 0) return parentWeight;
-
-  const topWeightSum = [...children]
-    .map((child) => (Number.isFinite(child.weight) ? Math.max(0, child.weight) : 0))
-    .sort((a, b) => b - a)
-    .slice(0, effectiveCount)
-    .reduce((sum, value) => sum + value, 0);
-
-  if (!Number.isFinite(topWeightSum) || topWeightSum <= 0) return parentWeight;
-  return Math.min(parentWeight, topWeightSum);
-}
 
 export function GoalsStep() {
   const router = useRouter();
@@ -130,18 +76,9 @@ export function GoalsStep() {
           return;
         }
 
-        const graded = latest.assessments.filter(
-          (a) =>
-            !a.is_bonus &&
-            typeof a.raw_score === "number" &&
-            typeof a.total_score === "number" &&
-            a.total_score > 0
-        );
-
-        const gradedW = graded.reduce((sum, a) => sum + getEffectiveWeight(a), 0);
-        const clampedGraded = Math.max(0, Math.min(100, gradedW));
-        setGradedWeight(clampedGraded);
-        setRemainingWeight(Math.max(0, Math.min(100, 100 - clampedGraded)));
+        const summary = await getDashboardSummary(latest.course_id);
+        setGradedWeight(summary.graded_weight);
+        setRemainingWeight(summary.remaining_weight);
       } catch (e) {
         setError(getApiErrorMessage(e, "Failed to load goals."));
       }
@@ -157,7 +94,7 @@ export function GoalsStep() {
       try {
         const response = (await checkTarget(courseId, { target })) as TargetCheckResponse;
 
-        setCurrentStanding(resolveCurrentGrade(response));
+        setCurrentStanding(response.current_standing);
         setExplanation(response.explanation);
         setYorkEquivalent(response.york_equivalent);
 
@@ -223,9 +160,9 @@ export function GoalsStep() {
 
   // NEW: values used in Evaluation Breakdown
   const earnedSoFar = useMemo(() => {
-    const earned = (Number(currentStanding) * Number(gradedWeight)) / 100;
+    const earned = Number(currentStanding);
     return Number.isFinite(earned) ? earned : 0;
-  }, [currentStanding, gradedWeight]);
+  }, [currentStanding]);
 
   const formulaText = useMemo(() => {
     const t = Number.isFinite(target) ? target : 0;
@@ -235,7 +172,7 @@ export function GoalsStep() {
     if (rem <= 0) return "No remaining weight — required average is not applicable.";
 
     const req = Number.isFinite(requiredAverage) ? requiredAverage : 0;
-    return `(${t.toFixed(1)} − ${earned.toFixed(1)}) ÷ ${rem.toFixed(1)} = ${req.toFixed(1)}%`;
+    return `((${t.toFixed(1)} − ${earned.toFixed(1)}) ÷ ${rem.toFixed(1)}) × 100 = ${req.toFixed(1)}%`;
   }, [target, earnedSoFar, remainingWeight, requiredAverage]);
 
   return (

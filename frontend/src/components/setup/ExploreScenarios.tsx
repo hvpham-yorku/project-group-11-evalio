@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lightbulb, RotateCcw } from "lucide-react";
 import {
   deleteSavedScenario,
+  getDashboardSummary,
   listCourses,
   listSavedScenarios,
-  runWhatIf,
+  runDashboardWhatIf,
   runSavedScenario,
   saveScenario,
   updateCourseGrades,
   type Course,
   type CourseAssessment,
+  type DashboardSummaryResponse,
+  type DashboardWhatIfResponse,
   type SavedScenario,
 } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
@@ -52,6 +55,10 @@ export function ExploreScenarios() {
   const [selectedScenarioId, setSelectedScenarioId] = useState("");
   const [loadingScenario, setLoadingScenario] = useState(false);
   const { courseId, ensureCourseIdFromList } = useSetupCourse();
+  const [dashboardSummary, setDashboardSummary] =
+    useState<DashboardSummaryResponse | null>(null);
+  const [scenarioProjection, setScenarioProjection] =
+    useState<DashboardWhatIfResponse | null>(null);
 
   const [activeScenario, setActiveScenario] = useState<Record<string, number>>({});
   const [activeAssessmentName, setActiveAssessmentName] = useState<string | null>(
@@ -89,8 +96,10 @@ export function ExploreScenarios() {
           ...a,
           id: i + 1,
         }));
+        const summary = await getDashboardSummary(resolvedCourseId);
 
         setAssessments(normalized);
+        setDashboardSummary(summary);
         await fetchSavedScenarios(resolvedCourseId);
         setError("");
       } catch (e) {
@@ -101,39 +110,16 @@ export function ExploreScenarios() {
     loadCourse();
   }, [ensureCourseIdFromList]);
 
-  useEffect(() => {
-    if (!courseId || !activeAssessmentName) return;
-
-    const assessment = assessments.find((a) => a.name === activeAssessmentName);
-    if (!assessment || hasPersistedGrade(assessment)) return;
-
-    const value = activeScenario[activeAssessmentName];
-    if (typeof value !== "number") return;
-
-    const timer = window.setTimeout(async () => {
-      try {
-        await runWhatIf(courseId, {
-          assessment_name: activeAssessmentName,
-          hypothetical_score: clampPercent(value),
-        });
-      } catch {
-        // Avoid replacing main UI error text with noisy per-change failures.
-      }
-    }, 300);
-
-    return () => window.clearTimeout(timer);
-  }, [courseId, activeAssessmentName, activeScenario, assessments]);
-
-  const getActualGrade = (a: Assessment): number | undefined => {
+  const getActualGrade = useCallback((a: Assessment): number | undefined => {
     const raw = a.raw_score;
     const total = a.total_score;
     if (typeof raw !== "number" || typeof total !== "number") return undefined;
     if (!Number.isFinite(raw) || !Number.isFinite(total) || total <= 0)
       return undefined;
     return clampPercent((raw / total) * 100);
-  };
+  }, []);
 
-  const getScenarioValue = (a: Assessment) => {
+  const getScenarioValue = useCallback((a: Assessment) => {
     const override = activeScenario[a.name];
     if (typeof override === "number") return clampPercent(override);
 
@@ -141,11 +127,42 @@ export function ExploreScenarios() {
     if (typeof actual === "number") return actual;
 
     return 75;
-  };
+  }, [activeScenario, getActualGrade]);
+
+  useEffect(() => {
+    if (!courseId || !assessments.length) return;
+
+    const scenarioEntries = assessments
+      .filter(
+        (assessment) =>
+          !hasPersistedGrade(assessment) ||
+          typeof activeScenario[assessment.name] === "number"
+      )
+      .map((assessment) => ({
+        assessment_name: assessment.name,
+        score: clampPercent(getScenarioValue(assessment)),
+      }));
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await runDashboardWhatIf(courseId, {
+          scenarios: scenarioEntries,
+        });
+        setScenarioProjection(response);
+      } catch {
+        setScenarioProjection(null);
+      }
+    }, 200);
+
+    return () => window.clearTimeout(timer);
+  }, [courseId, activeScenario, assessments, getScenarioValue]);
 
   const hasChanges = Object.keys(activeScenario).length > 0;
 
   const projectedFinal = (() => {
+    if (scenarioProjection) {
+      return scenarioProjection.projected_normalised ?? scenarioProjection.projected_grade;
+    }
     if (!assessments.length) return 0;
     const sum = assessments.reduce((acc, a) => {
       const v = getScenarioValue(a);
@@ -153,6 +170,22 @@ export function ExploreScenarios() {
     }, 0);
     return Number.isFinite(sum) ? sum : 0;
   })();
+
+  const currentStanding =
+    dashboardSummary?.current_normalised ?? dashboardSummary?.current_grade ?? 0;
+  const worstCaseFloor =
+    dashboardSummary?.min_normalised ?? dashboardSummary?.min_grade ?? 0;
+  const bestCaseReachable =
+    scenarioProjection?.maximum_possible_normalised ??
+    scenarioProjection?.maximum_possible ??
+    dashboardSummary?.max_normalised ??
+    dashboardSummary?.max_grade ??
+    0;
+  const projectionBreakdown = scenarioProjection?.breakdown ?? [];
+  const normalisationApplied =
+    scenarioProjection?.normalisation_applied ??
+    dashboardSummary?.normalisation_applied ??
+    false;
 
   const handleSliderChange = (name: string, value: number) => {
     const safe = clampPercent(value);
@@ -485,25 +518,85 @@ export function ExploreScenarios() {
               <p className="mt-3 text-6xl font-semibold text-[#5D737E]">
                 {projectedFinal.toFixed(2)}%
               </p>
+              <p className="mt-3 text-xs text-gray-500">
+                {normalisationApplied
+                  ? "Displayed as the normalized course result."
+                  : "Displayed as the raw weighted course result."}
+              </p>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-3">
+              <div className="rounded-2xl border border-gray-100 bg-[#F6F1EA] px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">
+                  Current Standing
+                </p>
+                <p className="mt-1 text-2xl font-semibold text-gray-800">
+                  {currentStanding.toFixed(2)}%
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-100 bg-[#EEF3F5] px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">
+                  Scenario Projection
+                </p>
+                <p className="mt-1 text-2xl font-semibold text-[#5D737E]">
+                  {projectedFinal.toFixed(2)}%
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-100 bg-green-50 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">
+                  Best Case Reachable
+                </p>
+                <p className="mt-1 text-2xl font-semibold text-green-700">
+                  {bestCaseReachable.toFixed(2)}%
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-100 bg-red-50 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">
+                  Worst Case Floor
+                </p>
+                <p className="mt-1 text-2xl font-semibold text-red-600">
+                  {worstCaseFloor.toFixed(2)}%
+                </p>
+              </div>
             </div>
 
             <div className="mt-8 space-y-4">
-              {assessments.map((a) => {
-                const v = getScenarioValue(a);
-                const contribution = (v * a.weight) / 100;
+              {(projectionBreakdown.length > 0 ? projectionBreakdown : assessments).map(
+                (entry) => {
+                  const label = "source" in entry ? entry.name : entry.name;
+                  const contribution =
+                    "contribution" in entry
+                      ? entry.contribution
+                      : (getScenarioValue(entry) * entry.weight) / 100;
+                  const sourceLabel =
+                    "source" in entry
+                      ? entry.source === "scenario"
+                        ? "Scenario"
+                        : entry.source === "graded"
+                          ? "Graded"
+                          : "Remaining"
+                      : typeof activeScenario[entry.name] === "number"
+                        ? "Scenario"
+                        : hasPersistedGrade(entry)
+                          ? "Graded"
+                          : "Default";
 
-                return (
-                  <div
-                    key={a.id}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <span className="text-gray-500">{a.name}</span>
-                    <span className="font-semibold text-gray-800">
-                      +{contribution.toFixed(2)}%
-                    </span>
-                  </div>
-                );
-              })}
+                  return (
+                    <div
+                      key={label}
+                      className="flex items-center justify-between gap-4 text-sm"
+                    >
+                      <div>
+                        <span className="text-gray-500">{label}</span>
+                        <p className="text-xs text-gray-400">{sourceLabel}</p>
+                      </div>
+                      <span className="font-semibold text-gray-800">
+                        +{contribution.toFixed(2)}%
+                      </span>
+                    </div>
+                  );
+                }
+              )}
             </div>
 
             {hasChanges ? (

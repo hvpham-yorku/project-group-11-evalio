@@ -162,6 +162,12 @@ def compute_multi_whatif(
     projected = 0.0
     max_possible = 0.0
     whatif_breakdown: list[dict[str, Any]] = []
+    core_weight = sum(
+        a.weight for a in course.assessments if not getattr(a, "is_bonus", False)
+    )
+    bonus_weight = sum(
+        a.weight for a in course.assessments if getattr(a, "is_bonus", False)
+    )
 
     for a in course.assessments:
         is_bonus = getattr(a, "is_bonus", False)
@@ -199,11 +205,27 @@ def compute_multi_whatif(
 
     current_totals = calculate_course_totals(course)
 
+    if 0 < core_weight < 100:
+        norm_factor = 100.0 / core_weight
+        projected_normalised = round(projected * norm_factor, 2)
+        maximum_possible_normalised = round(max_possible * norm_factor, 2)
+        current_normalised = round(current_totals["final_total"] * norm_factor, 2)
+    else:
+        projected_normalised = round(projected, 2)
+        maximum_possible_normalised = round(max_possible, 2)
+        current_normalised = round(current_totals["final_total"], 2)
+
     return {
         "course_name": course.name,
         "projected_grade": round(projected, 2),
         "maximum_possible": round(max_possible, 2),
         "current_grade": current_totals["final_total"],
+        "projected_normalised": projected_normalised,
+        "maximum_possible_normalised": maximum_possible_normalised,
+        "current_normalised": current_normalised,
+        "normalisation_applied": 0 < core_weight < 100,
+        "core_weight": round(core_weight, 2),
+        "bonus_weight": round(bonus_weight, 2),
         "scenarios_applied": len(scenario_map),
         "york_equivalent_projected": get_york_grade(projected),
         "gpa_projected": convert_percentage_all_scales(projected),

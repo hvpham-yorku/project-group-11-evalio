@@ -22,6 +22,8 @@ import {
   createDeadline as createDeadlineApi,
   updateDeadline as updateDeadlineApi,
   deleteDeadline as deleteDeadlineApi,
+  type Course,
+  type Deadline as ApiDeadline,
 } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -94,6 +96,21 @@ function getCountdownColor(daysRemaining: number) {
   return "text-green-700";
 }
 
+function inferDeadlineType(title: string): DeadlineType {
+  const lowered = title.toLowerCase();
+  if (
+    lowered.includes("assignment") ||
+    lowered.includes("homework") ||
+    lowered.includes("project")
+  ) {
+    return "Assignment";
+  }
+  if (lowered.includes("quiz")) return "Quiz";
+  if (lowered.includes("exam") || lowered.includes("final")) return "Exam";
+  if (lowered.includes("test") || lowered.includes("midterm")) return "Test";
+  return "Other";
+}
+
 function normalizeDeadline(input: Partial<Deadline> & { title: string; due_date: string; type: DeadlineType }): Deadline {
   return {
     id: input.id ?? `deadline-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -107,6 +124,20 @@ function normalizeDeadline(input: Partial<Deadline> & { title: string; due_date:
     exported: Boolean(input.exported),
     exported_at: input.exported_at || undefined,
   };
+}
+
+function mapApiDeadline(deadline: ApiDeadline): Deadline {
+  return normalizeDeadline({
+    id: deadline.deadline_id,
+    course_id: deadline.course_id,
+    title: deadline.title,
+    due_date: deadline.due_date,
+    due_time: deadline.due_time ?? undefined,
+    type: inferDeadlineType(deadline.title),
+    notes: deadline.notes ?? undefined,
+    source: deadline.source === "outline" ? "From Outline" : "Manual",
+    exported: deadline.exported_to_gcal,
+  });
 }
 
 export default function DeadlinesPage() {
@@ -132,7 +163,6 @@ export default function DeadlinesPage() {
   const [isCalendarConnected, setIsCalendarConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [selectedCalendar, setSelectedCalendar] = useState("primary");
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportWithReminder, setExportWithReminder] = useState(true);
 
@@ -163,6 +193,11 @@ export default function DeadlinesPage() {
     }
   }, [searchParams, router]);
 
+  const refreshDeadlines = useCallback(async (resolvedCourseId: string) => {
+    const response = await listDeadlinesApi(resolvedCourseId);
+    setDeadlines((response.deadlines ?? []).map(mapApiDeadline));
+  }, []);
+
   // load course + initial data
   useEffect(() => {
     const run = async () => {
@@ -179,14 +214,9 @@ export default function DeadlinesPage() {
         const latestWithCourseName = latest as (Course & { course_name?: string }) | undefined;
         setCourseName(latestWithCourseName?.course_name ?? latest?.name ?? "Untitled course");
 
-        // 1) load confirmed deadlines for this course from localStorage
-        const confirmedMap = safeParse<Record<string, Deadline[]>>(
-          window.localStorage.getItem(CONFIRMED_DEADLINES_KEY)
-        );
-        const confirmedForCourse = confirmedMap?.[resolvedCourseId] ?? [];
-        setDeadlines(confirmedForCourse);
+        await refreshDeadlines(resolvedCourseId);
 
-        // 2) load extracted/pending deadlines from localStorage (if any)
+        // load extracted/pending deadlines from localStorage (if any)
         const pending = safeParse<Array<Omit<Deadline, "id" | "course_id" | "source"> & Partial<Deadline>>>(
           window.localStorage.getItem(PENDING_DEADLINES_KEY)
         );
@@ -235,28 +265,29 @@ export default function DeadlinesPage() {
     });
   };
 
-  const persistConfirmed = (nextDeadlines: Deadline[]) => {
-    if (!courseId) return;
-    const current = safeParse<Record<string, Deadline[]>>(window.localStorage.getItem(CONFIRMED_DEADLINES_KEY)) ?? {};
-    current[courseId] = nextDeadlines;
-    window.localStorage.setItem(CONFIRMED_DEADLINES_KEY, JSON.stringify(current));
-  };
-
-  const handleConfirmSave = () => {
+  const handleConfirmSave = async () => {
     if (!courseId) return;
 
-    const merged = [...deadlines, ...extractedDeadlines].map((d) =>
-      normalizeDeadline({ ...d, course_id: courseId })
-    );
+    try {
+      setError("");
+      await Promise.all(
+        extractedDeadlines.map((deadline) =>
+          createDeadlineApi(courseId, {
+            title: deadline.title,
+            due_date: deadline.due_date,
+            due_time: deadline.due_time ?? null,
+            notes: deadline.notes ?? null,
+          })
+        )
+      );
 
-    setDeadlines(merged);
-    persistConfirmed(merged);
-
-    setHasConfirmed(true);
-    setExtractedDeadlines([]);
-
-    // clear pending (OCR) store
-    window.localStorage.removeItem(PENDING_DEADLINES_KEY);
+      await refreshDeadlines(courseId);
+      setHasConfirmed(true);
+      setExtractedDeadlines([]);
+      window.localStorage.removeItem(PENDING_DEADLINES_KEY);
+    } catch (e) {
+      setError(getApiErrorMessage(e, "Failed to save extracted deadlines."));
+    }
   };
 
   const handleDiscardOCR = () => {
@@ -265,7 +296,7 @@ export default function DeadlinesPage() {
     window.localStorage.removeItem(PENDING_DEADLINES_KEY);
   };
 
-  const handleAddManual = (newDeadline: Omit<Deadline, "id" | "course_id" | "source" | "exported" | "exported_at">) => {
+  const handleAddManual = async (newDeadline: Omit<Deadline, "id" | "course_id" | "source" | "exported" | "exported_at">) => {
     if (!courseId) return;
 
     const deadline = normalizeDeadline({
@@ -276,9 +307,19 @@ export default function DeadlinesPage() {
     });
 
     if (hasConfirmed) {
-      const next = [...deadlines, deadline];
-      setDeadlines(next);
-      persistConfirmed(next);
+      try {
+        setError("");
+        await createDeadlineApi(courseId, {
+          title: deadline.title,
+          due_date: deadline.due_date,
+          due_time: deadline.due_time ?? null,
+          notes: deadline.notes ?? null,
+        });
+        await refreshDeadlines(courseId);
+      } catch (e) {
+        setError(getApiErrorMessage(e, "Failed to add deadline."));
+        return;
+      }
     } else {
       setExtractedDeadlines((prev) => [...prev, deadline]);
     }
@@ -286,26 +327,48 @@ export default function DeadlinesPage() {
     setShowAddModal(false);
   };
 
-  const handleSaveEdits = (id: string, updates: Partial<Deadline>) => {
+  const handleSaveEdits = async (id: string, updates: Partial<Deadline>) => {
     if (!courseId) return;
 
     if (hasConfirmed) {
-      const next = deadlines.map((d) => (d.id === id ? normalizeDeadline({ ...d, ...updates }) : d));
-      setDeadlines(next);
-      persistConfirmed(next);
+      try {
+        const existing = deadlines.find((deadline) => deadline.id === id);
+        if (!existing) return;
+
+        await updateDeadlineApi(courseId, id, {
+          title: updates.title ?? existing.title,
+          due_date: updates.due_date ?? existing.due_date,
+          due_time:
+            updates.due_time !== undefined
+              ? updates.due_time ?? null
+              : existing.due_time ?? null,
+          notes:
+            updates.notes !== undefined
+              ? updates.notes ?? null
+              : existing.notes ?? null,
+        });
+        await refreshDeadlines(courseId);
+      } catch (e) {
+        setError(getApiErrorMessage(e, "Failed to update deadline."));
+        return;
+      }
     } else {
       setExtractedDeadlines((prev) => prev.map((d) => (d.id === id ? normalizeDeadline({ ...d, ...updates }) : d)));
     }
     setEditingId(null);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!courseId) return;
 
     if (hasConfirmed) {
-      const next = deadlines.filter((d) => d.id !== id);
-      setDeadlines(next);
-      persistConfirmed(next);
+      try {
+        await deleteDeadlineApi(courseId, id);
+        await refreshDeadlines(courseId);
+      } catch (e) {
+        setError(getApiErrorMessage(e, "Failed to delete deadline."));
+        return;
+      }
     } else {
       setExtractedDeadlines((prev) => prev.filter((d) => d.id !== id));
     }
@@ -350,7 +413,10 @@ export default function DeadlinesPage() {
     const ids = Array.from(selectedDeadlines);
 
     try {
-      const result = await exportToGoogleCalendar(courseId, ids.length > 0 ? ids : undefined);
+      const result = await exportToGoogleCalendar(
+        courseId,
+        ids.length > 0 ? { deadlineIds: ids } : undefined
+      );
 
       // Mark exported deadlines in local state
       const exportedIds = new Set(result.events.map((e) => e.deadline_id));
@@ -365,9 +431,7 @@ export default function DeadlinesPage() {
       };
 
       if (hasConfirmed) {
-        const next = deadlines.map(markExported);
-        setDeadlines(next);
-        persistConfirmed(next);
+        await refreshDeadlines(courseId);
       } else {
         setExtractedDeadlines((prev) => prev.map(markExported));
       }
@@ -463,17 +527,9 @@ export default function DeadlinesPage() {
                   Connected
                 </span>
 
-                <div className="relative">
-                  <select
-                    value={selectedCalendar}
-                    onChange={(e) => setSelectedCalendar(e.target.value)}
-                    className="px-3 py-2 text-xs rounded-xl border border-gray-200 bg-white text-gray-700"
-                  >
-                    <option value="primary">Primary Calendar</option>
-                    <option value="work">Work Calendar</option>
-                    <option value="school">School Calendar</option>
-                  </select>
-                </div>
+                <span className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-white text-gray-700 border border-gray-200">
+                  Primary Calendar
+                </span>
 
                 <button
                   type="button"
@@ -527,9 +583,9 @@ export default function DeadlinesPage() {
             <button
               type="button"
               onClick={() => setShowExportModal(true)}
-              disabled={!isCalendarConnected || selectedDeadlines.size === 0}
+              disabled={!hasConfirmed || !isCalendarConnected || selectedDeadlines.size === 0}
               className={`text-xs px-3 py-2 rounded-xl transition ${
-                !isCalendarConnected || selectedDeadlines.size === 0
+                !hasConfirmed || !isCalendarConnected || selectedDeadlines.size === 0
                   ? "bg-[#E6E2DB] text-gray-400 cursor-not-allowed"
                   : "bg-[#5D737E] text-white hover:bg-[#4A5D66]"
               }`}
@@ -543,9 +599,9 @@ export default function DeadlinesPage() {
                 setSelectedDeadlines(new Set(displayDeadlines.map((d) => d.id)));
                 setShowExportModal(true);
               }}
-              disabled={!isCalendarConnected}
+              disabled={!hasConfirmed || !isCalendarConnected}
               className={`text-xs px-3 py-2 rounded-xl transition ${
-                !isCalendarConnected ? "bg-[#E6E2DB] text-gray-400 cursor-not-allowed" : "bg-[#5D737E] text-white hover:bg-[#4A5D66]"
+                !hasConfirmed || !isCalendarConnected ? "bg-[#E6E2DB] text-gray-400 cursor-not-allowed" : "bg-[#5D737E] text-white hover:bg-[#4A5D66]"
               }`}
             >
               Export All
@@ -634,7 +690,7 @@ export default function DeadlinesPage() {
         deadlines={displayDeadlines.filter((d) => selectedDeadlines.has(d.id))}
         exportWithReminder={exportWithReminder}
         setExportWithReminder={setExportWithReminder}
-        selectedCalendar={selectedCalendar}
+        selectedCalendar="Primary Calendar"
         isLoading={isExporting}
         onClose={() => setShowExportModal(false)}
         onConfirm={handleExport}

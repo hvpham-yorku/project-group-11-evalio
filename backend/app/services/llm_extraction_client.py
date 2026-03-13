@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import os
 from typing import Any
@@ -126,7 +128,7 @@ HIERARCHICAL_EXTRACTION_RESPONSE_FORMAT: dict[str, Any] = {
                             "unit_weight": {"type": ["number", "null"]},
                             "rule_type": {
                                 "type": ["string", "null"],
-                                "enum": ["pure_multiplicative", "best_of", None],
+                                "enum": ["pure_multiplicative", "best_of", "drop_lowest", None],
                             },
                             "children": {
                                 "type": "array",
@@ -154,7 +156,7 @@ HIERARCHICAL_EXTRACTION_RESPONSE_FORMAT: dict[str, Any] = {
                                         "unit_weight": {"type": ["number", "null"]},
                                         "rule_type": {
                                             "type": ["string", "null"],
-                                            "enum": ["pure_multiplicative", "best_of", None],
+                                            "enum": ["pure_multiplicative", "best_of", "drop_lowest", None],
                                         },
                                         "children": {
                                             "type": "array",
@@ -206,7 +208,62 @@ class LlmExtractionClient:
         self.timeout_seconds = timeout_seconds if timeout_seconds is not None else (
             float(raw_timeout) if raw_timeout is not None else 20.0
         )
+
+        cache_enabled_raw = os.getenv("LLM_EXTRACTION_CACHE_ENABLED", "true")
+        self._cache_enabled = cache_enabled_raw.strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+        cache_size_raw = os.getenv("LLM_EXTRACTION_CACHE_SIZE", "8")
+        try:
+            parsed_cache_size = int(cache_size_raw)
+        except ValueError:
+            parsed_cache_size = 8
+        self._cache_size = max(0, parsed_cache_size)
+        self._payload_cache: dict[str, dict[str, Any]] = {}
+        self._cache_order: list[str] = []
+
         self._client = client
+
+    def _build_cache_key(self, text: str) -> str:
+        digest = hashlib.sha256()
+        digest.update(self.model.encode("utf-8", errors="ignore"))
+        digest.update(b"\0")
+        digest.update(text.encode("utf-8", errors="ignore"))
+        return digest.hexdigest()
+
+    def _get_cached_payload(self, cache_key: str) -> dict[str, Any] | None:
+        if not self._cache_enabled or self._cache_size <= 0:
+            return None
+
+        cached = self._payload_cache.get(cache_key)
+        if cached is None:
+            return None
+
+        if cache_key in self._cache_order:
+            self._cache_order.remove(cache_key)
+        self._cache_order.append(cache_key)
+
+        if os.getenv("FILTER_DEBUG"):
+            print("[GPT_CACHE_HIT]", cache_key[:12])
+        return copy.deepcopy(cached)
+
+    def _store_cached_payload(self, cache_key: str, payload: dict[str, Any]) -> None:
+        if not self._cache_enabled or self._cache_size <= 0:
+            return
+
+        self._payload_cache[cache_key] = copy.deepcopy(payload)
+
+        if cache_key in self._cache_order:
+            self._cache_order.remove(cache_key)
+        self._cache_order.append(cache_key)
+
+        while len(self._cache_order) > self._cache_size:
+            evicted_key = self._cache_order.pop(0)
+            self._payload_cache.pop(evicted_key, None)
 
     def _get_client(self) -> Any:
         if self._client is not None:
@@ -227,6 +284,11 @@ class LlmExtractionClient:
     def extract(self, text: str) -> dict[str, Any]:
         if not text.strip():
             raise LlmExtractionError("llm_empty_input", "LLM extraction input text is empty")
+
+        cache_key = self._build_cache_key(text)
+        cached_payload = self._get_cached_payload(cache_key)
+        if cached_payload is not None:
+            return cached_payload
 
         client = self._get_client()
         if os.getenv("FILTER_DEBUG"):
@@ -251,13 +313,15 @@ class LlmExtractionClient:
             "- Every object must include a 'children' field.\n"
             "- Child objects must have 'children': [].\n"
             "- Do not create hierarchy unless explicitly indicated in text.\n"
-            "- Do not assume equal splits.\n\n"
+            "- Do not assume equal splits.\n"
+            "- Keep assessment titles concise and copied from the outline when possible.\n\n"
             "MULTIPLICATIVE METADATA:\n"
             "- Extract total_count only if a total number of items is explicitly written.\n"
             "- Extract unit_weight only if a per-item weight is explicitly written.\n"
             "- Extract effective_count only if text explicitly states that only some items count.\n"
             "- Set rule_type = 'pure_multiplicative' only if all items count and per-item weight is explicit.\n"
-            "- Set rule_type = 'best_of' only if text explicitly states drop-lowest, best-of, or subset counting.\n"
+            "- Set rule_type = 'best_of' only if text explicitly states best-of or subset-counting logic.\n"
+            "- Set rule_type = 'drop_lowest' only if text explicitly states drop-lowest logic.\n"
             "- If multiplicative structure is not explicitly stated, set total_count, effective_count, "
             "unit_weight, and rule_type to null.\n"
             "- Do NOT compute, divide, infer, or derive values.\n"
@@ -406,6 +470,8 @@ class LlmExtractionClient:
                 ) from retry_parse_exc
         if not isinstance(payload, dict):
             raise LlmExtractionError("llm_invalid_schema", "LLM JSON root must be an object")
+
+        self._store_cached_payload(cache_key, payload)
         return payload
 
     def _log_payload_counts(self, payload: Any, *, attempt: int) -> None:

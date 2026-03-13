@@ -10,21 +10,37 @@ import {
   Plus,
   Lightbulb,
   ChevronDown,
+  Sigma,
 } from "lucide-react";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
 import {
   checkTarget,
+  computeCgpa,
+  getCourseGpa,
+  getDashboardSummary,
+  getLearningStrategies,
   getMinimumRequired,
+  listDeadlines as listDeadlinesApi,
   listCourses,
+  type CgpaResponse,
   type Course,
   type CourseAssessment,
+  type CourseGpaResponse,
+  type DashboardSummaryResponse,
+  type DashboardWhatIfResponse,
+  type Deadline as ApiDeadline,
+  type LearningStrategySuggestion,
   type TargetCheckResponse,
+  runDashboardWhatIf,
 } from "@/lib/api";
 
 const DEFAULT_TARGET_GRADE = 85;
 const TARGET_STORAGE_KEY = "evalio_target_grade";
 const CONFIRMED_DEADLINES_KEY = "evalio_deadlines_confirmed_v1";
+const GPA_SCALES = ["4.0", "9.0", "10.0"] as const;
+
+type GpaScale = (typeof GPA_SCALES)[number];
 
 type AssessmentRow = {
   name: string;
@@ -41,6 +57,9 @@ type DashboardDeadline = {
   title: string;
   due_date: string;
   due_time?: string;
+  assessment_name?: string | null;
+  minimum_required?: number | null;
+  source?: string;
 };
 
 function resolveCurrentGrade(result: TargetCheckResponse | null): number {
@@ -144,6 +163,30 @@ function getEffectiveWeight(assessment: CourseAssessment): number {
   return Math.min(parentWeight, topWeightSum);
 }
 
+function normalizeTermKey(term?: string | null): string {
+  return (term ?? "").trim().toLowerCase();
+}
+
+function formatPriorityLabel(priority: string): string {
+  if (!priority) return "Medium";
+  return priority.charAt(0).toUpperCase() + priority.slice(1).toLowerCase();
+}
+
+function getPriorityRank(priority: string): number {
+  switch (priority.toLowerCase()) {
+    case "critical":
+      return 4;
+    case "high":
+      return 3;
+    case "medium":
+      return 2;
+    case "low":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 export function Dashboard() {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -156,8 +199,22 @@ export function Dashboard() {
   const [currentContribution, setCurrentContribution] = useState(0);
   const [targetGrade, setTargetGrade] = useState(DEFAULT_TARGET_GRADE);
   const [assumedPerformance, setAssumedPerformance] = useState(75);
+  const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [deadlines, setDeadlines] = useState<DashboardDeadline[]>([]);
+  const [gpaScale, setGpaScale] = useState<GpaScale>("4.0");
+  const [termGpa, setTermGpa] = useState<CgpaResponse | null>(null);
+  const [termGpaCourses, setTermGpaCourses] = useState<CourseGpaResponse[]>([]);
+  const [cumulativeGpa, setCumulativeGpa] = useState<CgpaResponse | null>(null);
+  const [dashboardSummary, setDashboardSummary] =
+    useState<DashboardSummaryResponse | null>(null);
+  const [whatIfResult, setWhatIfResult] =
+    useState<DashboardWhatIfResponse | null>(null);
+  const [learningStrategies, setLearningStrategies] =
+    useState<LearningStrategySuggestion[]>([]);
+  const [expandedStrategy, setExpandedStrategy] = useState<string | null>(null);
+  const [showBoundaryMath, setShowBoundaryMath] = useState(false);
+  const [showProjectionMath, setShowProjectionMath] = useState(false);
   const { ensureCourseIdFromList } = useSetupCourse();
 
   useEffect(() => {
@@ -178,10 +235,18 @@ export function Dashboard() {
         const courses = await listCourses();
         setCourses(courses);
         const resolvedCourseId = ensureCourseIdFromList(courses);
+        setActiveCourseId(resolvedCourseId);
         if (!resolvedCourseId) {
           setError("No course found. Complete setup first.");
           setAssessments([]);
           setTargetResult(null);
+          setDashboardSummary(null);
+          setWhatIfResult(null);
+          setTermGpa(null);
+          setTermGpaCourses([]);
+          setCumulativeGpa(null);
+          setLearningStrategies([]);
+          setDeadlines([]);
           return;
         }
 
@@ -192,25 +257,28 @@ export function Dashboard() {
           setError("No course found. Complete setup first.");
           setAssessments([]);
           setTargetResult(null);
+          setDashboardSummary(null);
+          setWhatIfResult(null);
+          setTermGpa(null);
+          setTermGpaCourses([]);
+          setCumulativeGpa(null);
+          setLearningStrategies([]);
+          setDeadlines([]);
           return;
         }
+
+        const sameTermCourses = (() => {
+          const termKey = normalizeTermKey(latest.term);
+          if (!termKey) return [latest];
+          const grouped = courses.filter(
+            (course) => normalizeTermKey(course.term) === termKey
+          );
+          return grouped.length ? grouped : [latest];
+        })();
 
         const graded = latest.assessments.filter(
           (a) => !a.is_bonus && hasGrade(a)
         );
-
-        const confirmedMap =
-          safeParse<Record<string, DashboardDeadline[]>>(
-            window.localStorage.getItem(CONFIRMED_DEADLINES_KEY)
-          ) ?? {};
-        const allDeadlines = Object.entries(confirmedMap).flatMap(
-          ([storedCourseId, courseDeadlines]) =>
-            (courseDeadlines ?? []).map((deadline) => ({
-              ...deadline,
-              course_id: deadline.course_id || storedCourseId,
-            }))
-        );
-        setDeadlines(allDeadlines);
 
         const gradedW = graded.reduce(
           (sum, a) => sum + getEffectiveWeight(a),
@@ -225,69 +293,220 @@ export function Dashboard() {
         setGradedWeight(Math.min(100, Math.max(0, gradedW)));
         setCurrentContribution(contribution);
 
-        const target = await checkTarget(resolvedCourseId, {
-          target: resolvedTarget,
-        });
-        setTargetResult(target);
+        const [
+          target,
+          rows,
+          strategyResponse,
+          termCourseResults,
+          allCourseResults,
+          summary,
+          deadlineResponse,
+        ] =
+          await Promise.all([
+            checkTarget(resolvedCourseId, {
+              target: resolvedTarget,
+            }),
+            Promise.all(
+              latest.assessments.map(async (assessment) => {
+                const actualPercent = getPercent(assessment);
+                if (actualPercent !== null) {
+                  const percentValue = actualPercent;
+                  const contributionPoints =
+                    (percentValue * assessment.weight) / 100;
+                  return {
+                    name: assessment.name,
+                    rowType: "graded",
+                    weightLabel: `${assessment.weight}% of final grade`,
+                    neededLabel: "Actual Performance",
+                    needed: `${percentValue.toFixed(
+                      1
+                    )}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
+                      assessment.weight
+                    )})`,
+                    contrib: `+${contributionPoints.toFixed(2)}%`,
+                  } satisfies AssessmentRow;
+                }
 
-        const rows = await Promise.all(
-          latest.assessments.map(async (assessment) => {
-            const actualPercent = getPercent(assessment);
-            if (actualPercent !== null) {
-              const percentValue = actualPercent;
-              const contributionPoints =
-                (percentValue * assessment.weight) / 100;
+                const minimum = await getMinimumRequired(resolvedCourseId, {
+                  target: resolvedTarget,
+                  assessment_name: assessment.name,
+                });
+                const percentValue = minimum.minimum_required;
+                const contributionPoints =
+                  (percentValue * assessment.weight) / 100;
+
+                return {
+                  name: assessment.name,
+                  rowType: "ungraded",
+                  weightLabel: `${assessment.weight}% of final grade`,
+                  neededLabel: "Minimum Needed",
+                  needed: `${percentValue.toFixed(
+                    1
+                  )}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
+                    assessment.weight
+                  )})`,
+                  contrib: `+${contributionPoints.toFixed(2)}%`,
+                } satisfies AssessmentRow;
+              })
+            ),
+            getLearningStrategies(resolvedCourseId).catch(() => ({
+              course_name: latest.name,
+              suggestions: [],
+            })),
+            Promise.all(
+              sameTermCourses.map(async (course) => {
+                try {
+                  return await getCourseGpa(course.course_id, gpaScale);
+                } catch {
+                  return null;
+                }
+              })
+            ),
+            Promise.all(
+              courses.map(async (course) => {
+                try {
+                  return await getCourseGpa(course.course_id, gpaScale);
+                } catch {
+                  return null;
+                }
+              })
+            ),
+            getDashboardSummary(resolvedCourseId),
+            listDeadlinesApi(resolvedCourseId).catch(() => ({
+              deadlines: [],
+              count: 0,
+            })),
+          ]);
+
+        setTargetResult(target);
+        setAssessments(rows);
+        setDashboardSummary(summary);
+        setGradedWeight(summary.graded_weight);
+        setCurrentContribution(summary.current_grade);
+        setLearningStrategies(strategyResponse.suggestions ?? []);
+
+        const decoratedDeadlines = await Promise.all(
+          (deadlineResponse.deadlines ?? []).map(async (deadline: ApiDeadline) => {
+            if (!deadline.assessment_name) {
               return {
-                name: assessment.name,
-                rowType: "graded",
-                weightLabel: `${assessment.weight}% of final grade`,
-                neededLabel: "Actual Performance",
-                needed: `${percentValue.toFixed(
-                  1
-                )}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
-                  assessment.weight
-                )})`,
-                contrib: `+${contributionPoints.toFixed(2)}%`,
-              } satisfies AssessmentRow;
+                id: deadline.deadline_id,
+                course_id: deadline.course_id,
+                title: deadline.title,
+                due_date: deadline.due_date,
+                due_time: deadline.due_time ?? undefined,
+                assessment_name: deadline.assessment_name,
+                source: deadline.source,
+                minimum_required: null,
+              } satisfies DashboardDeadline;
             }
 
-            const minimum = await getMinimumRequired(resolvedCourseId, {
-              target: resolvedTarget,
-              assessment_name: assessment.name,
-            });
-            const percentValue = minimum.minimum_required;
-            const contributionPoints = (percentValue * assessment.weight) / 100;
-
-            return {
-              name: assessment.name,
-              rowType: "ungraded",
-              weightLabel: `${assessment.weight}% of final grade`,
-              neededLabel: "Minimum Needed",
-              needed: `${percentValue.toFixed(
-                1
-              )}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
-                assessment.weight
-              )})`,
-              contrib: `+${contributionPoints.toFixed(2)}%`,
-            } satisfies AssessmentRow;
+            try {
+              const minimum = await getMinimumRequired(resolvedCourseId, {
+                target: resolvedTarget,
+                assessment_name: deadline.assessment_name,
+              });
+              return {
+                id: deadline.deadline_id,
+                course_id: deadline.course_id,
+                title: deadline.title,
+                due_date: deadline.due_date,
+                due_time: deadline.due_time ?? undefined,
+                assessment_name: deadline.assessment_name,
+                source: deadline.source,
+                minimum_required: Number.isFinite(minimum.minimum_required)
+                  ? minimum.minimum_required
+                  : null,
+              } satisfies DashboardDeadline;
+            } catch {
+              return {
+                id: deadline.deadline_id,
+                course_id: deadline.course_id,
+                title: deadline.title,
+                due_date: deadline.due_date,
+                due_time: deadline.due_time ?? undefined,
+                assessment_name: deadline.assessment_name,
+                source: deadline.source,
+                minimum_required: null,
+              } satisfies DashboardDeadline;
+            }
           })
         );
-        setAssessments(rows);
+        setDeadlines(decoratedDeadlines);
+
+        const validTermCourseResults = termCourseResults.filter(
+          (item): item is CourseGpaResponse => item !== null
+        );
+        const validAllCourseResults = allCourseResults.filter(
+          (item): item is CourseGpaResponse => item !== null
+        );
+        setTermGpaCourses(validTermCourseResults);
+
+        const [termSummary, cumulativeSummary] = await Promise.all([
+          validTermCourseResults.length
+            ? computeCgpa({
+                scale: gpaScale,
+                courses: validTermCourseResults.map((course) => ({
+                  name: course.course_name,
+                  percentage: course.percentage,
+                  credits: 1,
+                })),
+              })
+            : Promise.resolve(null),
+          validAllCourseResults.length
+            ? computeCgpa({
+                scale: gpaScale,
+                courses: validAllCourseResults.map((course) => ({
+                  name: course.course_name,
+                  percentage: course.percentage,
+                  credits: 1,
+                })),
+              })
+            : Promise.resolve(null),
+        ]);
+
+        setTermGpa(termSummary);
+        setCumulativeGpa(cumulativeSummary);
         setError("");
       } catch (e) {
         setError(getApiErrorMessage(e, "Failed to load dashboard."));
         setCurrentContribution(0);
+        setDashboardSummary(null);
+        setWhatIfResult(null);
+        setTermGpa(null);
+        setTermGpaCourses([]);
+        setCumulativeGpa(null);
+        setLearningStrategies([]);
+        setDeadlines([]);
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, [ensureCourseIdFromList]);
+  }, [ensureCourseIdFromList, gpaScale]);
 
-  const currentGrade = resolveCurrentGrade(targetResult);
+  const currentGrade = dashboardSummary
+    ? dashboardSummary.normalisation_applied
+      ? dashboardSummary.current_normalised
+      : dashboardSummary.current_grade
+    : resolveCurrentGrade(targetResult);
+  const boundaryWorstCase = dashboardSummary
+    ? dashboardSummary.normalisation_applied
+      ? dashboardSummary.min_normalised
+      : dashboardSummary.min_grade
+    : currentGrade;
+  const boundaryBestCase = dashboardSummary
+    ? dashboardSummary.normalisation_applied
+      ? dashboardSummary.max_normalised
+      : dashboardSummary.max_grade
+    : currentGrade;
   const requiredAverage = targetResult?.required_average_display ?? "0.0%";
-  const workCompleted = `${gradedWeight.toFixed(0)}%`;
-  const remainingWeight = Math.max(0, Math.min(100, 100 - gradedWeight));
+  const workCompleted = `${(
+    dashboardSummary?.graded_weight ?? gradedWeight
+  ).toFixed(0)}%`;
+  const remainingWeight = Math.max(
+    0,
+    Math.min(100, dashboardSummary?.remaining_weight ?? 100 - gradedWeight)
+  );
   const progressWidth = `${Math.max(0, Math.min(targetGrade, 100))}%`;
   const clampedPerformanceAssumption = Math.max(
     0,
@@ -334,11 +553,37 @@ export function Dashboard() {
     "Your target is possible but will require strong performance.";
 
   const projectedFinal = useMemo(() => {
+    if (whatIfResult) {
+      if (whatIfResult.normalisation_applied) {
+        return (
+          whatIfResult.projected_normalised ?? whatIfResult.projected_grade
+        );
+      }
+      return whatIfResult.projected_grade;
+    }
     return (
       currentContribution +
       (remainingWeight * clampedPerformanceAssumption) / 100
     );
-  }, [currentContribution, remainingWeight, clampedPerformanceAssumption]);
+  }, [
+    clampedPerformanceAssumption,
+    currentContribution,
+    remainingWeight,
+    whatIfResult,
+  ]);
+
+  const projectedMaximum = useMemo(() => {
+    if (whatIfResult) {
+      if (whatIfResult.normalisation_applied) {
+        return (
+          whatIfResult.maximum_possible_normalised ??
+          whatIfResult.maximum_possible
+        );
+      }
+      return whatIfResult.maximum_possible;
+    }
+    return boundaryBestCase;
+  }, [boundaryBestCase, whatIfResult]);
 
   const shortfall = targetGrade - projectedFinal;
   const belowTarget = shortfall > 0;
@@ -378,26 +623,92 @@ export function Dashboard() {
       .slice(0, 3);
   }, [deadlines]);
 
-  const learningStrategies = [
-    {
-      name: "Final Exam",
-      weight: 40,
-      priority: "High",
-      tags: ["80/20 Rule", "Active Recall", "Spaced Repetition"],
-    },
-    {
-      name: "Assignments",
-      weight: 20,
-      priority: "Medium",
-      tags: ["Feynman Technique", "Time Blocking"],
-    },
-    {
-      name: "Participation",
-      weight: 10,
-      priority: "Low",
-      tags: ["Consistency Plan"],
-    },
-  ];
+  const boundaryBreakdown = dashboardSummary?.breakdown ?? [];
+  const projectionBreakdown = whatIfResult?.breakdown ?? [];
+
+  const activeCourse = useMemo(
+    () => courses.find((course) => course.course_id === activeCourseId) ?? null,
+    [activeCourseId, courses]
+  );
+
+  useEffect(() => {
+    if (!activeCourseId || !activeCourse) {
+      setWhatIfResult(null);
+      return;
+    }
+
+    const scenarios = activeCourse.assessments
+      .filter((assessment) => !assessment.is_bonus && !hasGrade(assessment))
+      .map((assessment) => ({
+        assessment_name: assessment.name,
+        score: clampedPerformanceAssumption,
+      }));
+
+    if (!scenarios.length) {
+      setWhatIfResult(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    runDashboardWhatIf(activeCourseId, { scenarios })
+      .then((response) => {
+        if (!cancelled) {
+          setWhatIfResult(response);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWhatIfResult(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCourse, activeCourseId, clampedPerformanceAssumption]);
+
+  const termLabel = activeCourse?.term?.trim() || "Current selection";
+
+  const totalTerms = useMemo(() => {
+    const termKeys = new Set(
+      courses
+        .map((course) => normalizeTermKey(course.term))
+        .filter((value) => value.length > 0)
+    );
+    return termKeys.size || (courses.length ? 1 : 0);
+  }, [courses]);
+
+  const cumulativeAveragePercent = useMemo(() => {
+    if (!cumulativeGpa?.courses.length) return 0;
+    return (
+      cumulativeGpa.courses.reduce((sum, course) => sum + course.percentage, 0) /
+      cumulativeGpa.courses.length
+    );
+  }, [cumulativeGpa]);
+
+  const cumulativePerformancePercent = useMemo(() => {
+    if (!cumulativeGpa) return 0;
+    const maxPoint = Number.parseFloat(gpaScale);
+    if (!Number.isFinite(maxPoint) || maxPoint <= 0) return 0;
+    return Math.max(0, Math.min(100, (cumulativeGpa.cgpa / maxPoint) * 100));
+  }, [cumulativeGpa, gpaScale]);
+
+  const strategyCards = useMemo(
+    () =>
+      learningStrategies.map((item) => {
+        const sortedTechniques = [...item.techniques].sort(
+          (a, b) => getPriorityRank(b.priority) - getPriorityRank(a.priority)
+        );
+        const topPriority = sortedTechniques[0]?.priority ?? "medium";
+        return {
+          ...item,
+          topPriority,
+          sortedTechniques,
+        };
+      }),
+    [learningStrategies]
+  );
 
   return (
     <div className="mx-auto max-w-4xl space-y-10 px-4 pb-20">
@@ -488,7 +799,17 @@ export function Dashboard() {
                         })}
                         {deadline.due_time ? `, ${deadline.due_time}` : ""}
                       </span>
+                      {deadline.source ? (
+                        <span className="rounded-full border border-[#D7E7F0] bg-[#EEF6FB] px-2 py-0.5 text-[10px] font-medium text-[#5D737E]">
+                          {deadline.source}
+                        </span>
+                      ) : null}
                     </div>
+                    {typeof deadline.minimum_required === "number" ? (
+                      <div className="mt-1 text-[11px] text-gray-500">
+                        Need at least {deadline.minimum_required.toFixed(1)}% to hit your target.
+                      </div>
+                    ) : null}
                   </div>
                   <div
                     className={`text-sm font-semibold ${
@@ -535,12 +856,128 @@ export function Dashboard() {
         </div>
       </div>
 
+      {/* 4b. Boundary Modeling */}
+      <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+        <div className="mb-6 flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-bold text-gray-800">Grade Boundaries</h3>
+            <p className="mt-1 text-xs text-gray-500">
+              Live minimum and maximum outcomes based on saved grades and remaining work.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowBoundaryMath((value) => !value)}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#F6F1EA] px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-[#ECE6DD]"
+          >
+            <Sigma size={14} />
+            {showBoundaryMath ? "Hide Math" : "Show Math"}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-red-100 bg-red-50 p-5">
+            <p className="text-[10px] uppercase tracking-wider text-red-500">
+              Worst Case
+            </p>
+            <p className="mt-2 text-3xl font-bold text-red-700">
+              {boundaryWorstCase.toFixed(1)}%
+            </p>
+            <p className="mt-1 text-xs text-red-600">
+              Current grade if remaining work scores 0%.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Current
+            </p>
+            <p className="mt-2 text-3xl font-bold text-slate-800">
+              {currentGrade.toFixed(1)}%
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              Based on currently saved grades.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-green-100 bg-green-50 p-5">
+            <p className="text-[10px] uppercase tracking-wider text-green-500">
+              Best Case
+            </p>
+            <p className="mt-2 text-3xl font-bold text-green-700">
+              {boundaryBestCase.toFixed(1)}%
+            </p>
+            <p className="mt-1 text-xs text-green-600">
+              Maximum reachable if remaining work scores 100%.
+            </p>
+          </div>
+        </div>
+
+        {dashboardSummary?.normalisation_applied ? (
+          <p className="mt-4 text-xs text-gray-500">
+            Normalisation is applied because the current core syllabus weight totals {dashboardSummary.core_weight.toFixed(1)}%.
+          </p>
+        ) : null}
+
+        {showBoundaryMath ? (
+          <div className="mt-6 space-y-3 border-t border-[#E6E2DB] pt-6">
+            {boundaryBreakdown.map((entry) => (
+              <div
+                key={`${entry.name}-boundary`}
+                className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">{entry.name}</p>
+                    <p className="text-[11px] text-gray-500">
+                      Weight {formatCompactNumber(entry.weight)}% {entry.is_bonus ? "• Bonus" : ""}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-right text-xs">
+                    <div>
+                      <p className="uppercase text-gray-400">Current</p>
+                      <p className="font-semibold text-gray-800">
+                        {entry.current_contribution.toFixed(2)}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="uppercase text-gray-400">Max</p>
+                      <p className="font-semibold text-gray-800">
+                        {entry.max_contribution.toFixed(2)}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="uppercase text-gray-400">Remaining</p>
+                      <p className="font-semibold text-gray-800">
+                        {entry.remaining_potential.toFixed(2)}%
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                {typeof entry.score_percent === "number" ? (
+                  <p className="mt-2 text-xs text-gray-500">
+                    Saved score: {entry.score_percent.toFixed(1)}%.
+                  </p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
       {/* 5. Performance Assumption */}
       <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
-        <h3 className="mb-2 font-bold text-gray-800">Performance Assumption</h3>
+        <div className="mb-2 flex items-center justify-between gap-4">
+          <h3 className="font-bold text-gray-800">Performance Assumption</h3>
+          <button
+            type="button"
+            onClick={() => setShowProjectionMath((value) => !value)}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#F6F1EA] px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-[#ECE6DD]"
+          >
+            <Sigma size={14} />
+            {showProjectionMath ? "Hide Math" : "Show Math"}
+          </button>
+        </div>
         <p className="mb-6 text-xs text-gray-400">
-          Adjust the slider to see how different performance levels affect your
-          projected grade.
+          Adjust the slider to apply a temporary what-if score to every remaining assessment.
         </p>
         <div className="mb-8 flex items-center gap-6">
           <input
@@ -563,6 +1000,9 @@ export function Dashboard() {
             <p className="text-4xl font-bold text-gray-800">
               {projectedFinal.toFixed(1)}%
             </p>
+            <p className="mt-2 text-[10px] text-gray-400 uppercase">
+              Max reachable under this plan: {projectedMaximum.toFixed(1)}%
+            </p>
           </div>
           <div className="text-right">
             {belowTarget ? (
@@ -579,6 +1019,49 @@ export function Dashboard() {
             </p>
           </div>
         </div>
+
+        {showProjectionMath ? (
+          <div className="mt-6 space-y-3 border-t border-[#E6E2DB] pt-6">
+            {projectionBreakdown.length === 0 ? (
+              <div className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-4 text-sm text-gray-500">
+                No hypothetical scores applied yet.
+              </div>
+            ) : (
+              projectionBreakdown.map((entry) => (
+                <div
+                  key={`${entry.name}-projection`}
+                  className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{entry.name}</p>
+                      <p className="text-[11px] text-gray-500">
+                        Source: {entry.source}
+                        {typeof entry.hypothetical_score === "number"
+                          ? ` • What-if ${entry.hypothetical_score.toFixed(0)}%`
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-right text-xs">
+                      <div>
+                        <p className="uppercase text-gray-400">Projected</p>
+                        <p className="font-semibold text-gray-800">
+                          {entry.contribution.toFixed(2)}%
+                        </p>
+                      </div>
+                      <div>
+                        <p className="uppercase text-gray-400">Max</p>
+                        <p className="font-semibold text-gray-800">
+                          {entry.max_contribution.toFixed(2)}%
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : null}
       </div>
 
       {/* 6. Breakdown List */}
@@ -631,9 +1114,17 @@ export function Dashboard() {
           <h3 className="text-xl font-bold text-gray-800">Learning Strategy</h3>
         </div>
         <div className="space-y-4">
-          {learningStrategies.map((item) => (
-            <div key={item.name} className="bg-[#FAF7F2] p-5 rounded-2xl">
-              <h4 className="font-bold text-gray-700">{item.name}</h4>
+          {strategyCards.length === 0 ? (
+            <div className="rounded-2xl bg-[#F9F8F6] py-10 text-center text-sm text-gray-500">
+              No live strategy suggestions yet. Add remaining assessments and deadlines to generate them.
+            </div>
+          ) : (
+            strategyCards.map((item) => (
+            <div
+              key={item.assessment_name}
+              className="bg-[#FAF7F2] p-5 rounded-2xl"
+            >
+              <h4 className="font-bold text-gray-700">{item.assessment_name}</h4>
               <p className="text-xs text-gray-400 mb-4">
                 {item.weight}% of final grade
               </p>
@@ -641,29 +1132,57 @@ export function Dashboard() {
                 <span
                   className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider
                   ${
-                    item.priority === "High"
+                    item.topPriority === "critical" || item.topPriority === "high"
                       ? "bg-red-100 text-red-600"
-                      : item.priority === "Medium"
+                      : item.topPriority === "medium"
                       ? "bg-orange-100 text-orange-600"
                       : "bg-green-100 text-green-600"
                   }`}
                 >
-                  {item.priority} Priority
+                  {formatPriorityLabel(item.topPriority)} Priority
                 </span>
-                {item.tags.map((tag) => (
+                {item.sortedTechniques.map((technique) => (
                   <span
-                    key={tag}
+                    key={`${item.assessment_name}-${technique.name}`}
                     className="px-3 py-1 bg-blue-50 border border-blue-100 text-[#5D737E] rounded-lg text-[10px] font-medium"
                   >
-                    {tag}
+                    {technique.name}
                   </span>
                 ))}
               </div>
-              <button className="mt-4 flex items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-gray-600 uppercase tracking-tight">
+              <button
+                onClick={() =>
+                  setExpandedStrategy((current) =>
+                    current === item.assessment_name ? null : item.assessment_name
+                  )
+                }
+                className="mt-4 flex items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-gray-600 uppercase tracking-tight"
+              >
                 <ChevronDown size={12} /> Why this strategy
               </button>
+              {expandedStrategy === item.assessment_name ? (
+                <div className="mt-4 space-y-3 border-t border-[#E9E2D9] pt-4">
+                  {item.sortedTechniques.map((technique) => (
+                    <div
+                      key={`${item.assessment_name}-${technique.name}-details`}
+                      className="rounded-xl bg-white p-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-gray-800">
+                          {technique.name}
+                        </p>
+                        <span className="text-[10px] font-bold uppercase text-gray-400">
+                          {formatPriorityLabel(technique.priority)}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs text-gray-600">{technique.reason}</p>
+                      <p className="mt-2 text-xs text-gray-500">{technique.description}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
-          ))}
+          ))) }
         </div>
       </div>
 
@@ -683,35 +1202,54 @@ export function Dashboard() {
               <h3 className="font-bold text-gray-800">Term GPA</h3>
             </div>
             <div className="text-center py-6">
-              <div className="text-5xl font-bold text-gray-800">4.00</div>
+              <div className="text-5xl font-bold text-gray-800">
+                {termGpa ? termGpa.cgpa.toFixed(2) : "0.00"}
+              </div>
               <p className="text-[10px] text-gray-400 mt-1">
-                Based on courses in this semester
+                Equal-weight average for courses in this term
               </p>
               <span className="inline-block mt-2 rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-700">
-                A+
+                {termGpaCourses.length === 1
+                  ? termGpaCourses[0]?.gpa.letter ?? gpaScale
+                  : `${termGpaCourses.length} course${termGpaCourses.length === 1 ? "" : "s"}`}
               </span>
             </div>
             <div className="grid grid-cols-3 gap-2 border-t border-b border-gray-50 py-4 my-4">
-              <StatItem label="Courses" value="1" />
-              <StatItem label="Credits" value="3.0" />
-              <StatItem label="Scale" value="4.0" />
+              <StatItem label="Courses" value={String(termGpaCourses.length)} />
+              <StatItem label="Weighting" value="Equal" />
+              <StatItem label="Scale" value={gpaScale} />
             </div>
             <div className="space-y-2">
               <p className="text-[9px] font-bold uppercase text-gray-400">
-                Courses in Fall 2026
+                Courses in {termLabel}
               </p>
-              <div className="flex justify-between items-center rounded-xl bg-gray-50 p-3">
-                <div>
-                  <p className="text-xs font-bold text-gray-800">
-                    EECS 2311 – Software Design
-                  </p>
-                  <p className="text-[10px] text-gray-400">3 credits</p>
+              {termGpaCourses.length === 0 ? (
+                <div className="rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
+                  No GPA-ready course data yet.
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-green-600">90.0%</p>
-                  <p className="text-[10px] text-gray-400">4.00 GP</p>
-                </div>
-              </div>
+              ) : (
+                termGpaCourses.map((course) => (
+                  <div
+                    key={course.course_id}
+                    className="flex justify-between items-center rounded-xl bg-gray-50 p-3"
+                  >
+                    <div>
+                      <p className="text-xs font-bold text-gray-800">
+                        {course.course_name}
+                      </p>
+                      <p className="text-[10px] text-gray-400">Equal weight</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-bold text-green-600">
+                        {course.percentage.toFixed(1)}%
+                      </p>
+                      <p className="text-[10px] text-gray-400">
+                        {course.gpa.grade_point.toFixed(2)} GP
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -723,11 +1261,12 @@ export function Dashboard() {
             </div>
             <div className="flex justify-center mb-4">
               <div className="flex rounded-lg bg-gray-100 p-1">
-                {["4.0", "9.0", "10.0"].map((s) => (
+                {GPA_SCALES.map((s) => (
                   <button
                     key={s}
+                    onClick={() => setGpaScale(s)}
                     className={`px-4 py-1 text-[10px] rounded-md ${
-                      s === "4.0"
+                      s === gpaScale
                         ? "bg-white shadow-sm font-bold"
                         : "text-gray-400"
                     }`}
@@ -738,27 +1277,42 @@ export function Dashboard() {
               </div>
             </div>
             <div className="text-center py-2">
-              <div className="text-5xl font-bold text-gray-800">4.00</div>
-              <p className="text-[10px] text-gray-400 mt-1">Out of 4.0</p>
+              <div className="text-5xl font-bold text-gray-800">
+                {cumulativeGpa ? cumulativeGpa.cgpa.toFixed(2) : "0.00"}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1">Out of {gpaScale}</p>
               <span className="inline-block mt-2 rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-700">
-                A+
+                {cumulativeGpa?.courses.length === 1
+                  ? cumulativeGpa.courses[0]?.letter ?? gpaScale
+                  : `${cumulativeGpa?.courses.length ?? 0} courses`}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-4 mt-6">
-              <StatItem label="Total Courses" value="1" />
-              <StatItem label="Total Credits" value="3.0" />
-              <StatItem label="Average %" value="90.0%" />
-              <StatItem label="Terms" value="1" />
+              <StatItem
+                label="Total Courses"
+                value={String(cumulativeGpa?.courses.length ?? 0)}
+              />
+              <StatItem label="Weighting" value="Equal" />
+              <StatItem
+                label="Average %"
+                value={`${cumulativeAveragePercent.toFixed(1)}%`}
+              />
+              <StatItem label="Terms" value={String(totalTerms)} />
             </div>
             <div className="mt-6">
               <div className="flex justify-between text-[10px] mb-1">
                 <span className="text-gray-400 uppercase font-bold">
                   Performance
                 </span>
-                <span className="text-green-600 font-bold">100%</span>
+                <span className="text-green-600 font-bold">
+                  {cumulativePerformancePercent.toFixed(0)}%
+                </span>
               </div>
               <div className="h-1.5 w-full rounded-full bg-gray-100">
-                <div className="h-full w-full rounded-full bg-green-500" />
+                <div
+                  className="h-full rounded-full bg-green-500"
+                  style={{ width: `${cumulativePerformancePercent}%` }}
+                />
               </div>
             </div>
           </div>

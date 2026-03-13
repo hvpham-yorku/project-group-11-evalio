@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
@@ -15,7 +15,7 @@ function resolveNext(nextParam: string | null): string {
   return nextParam;
 }
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -203,5 +203,13 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-gradient-to-b from-[#F7F3ED] to-[#F3EEE7]" />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

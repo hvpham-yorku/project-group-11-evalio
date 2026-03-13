@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Upload, FileText, Loader2 } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/errors";
+import { API_BASE_URL } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 
 const PENDING_DEADLINES_KEY = "evalio_pending_deadlines_v1";
@@ -31,6 +32,7 @@ type ExtractionResponse = {
     confidence_level: string;
     trigger_gpt: boolean;
     trigger_reasons: string[];
+    parse_warnings?: string[];
     failure_reason?: string | null;
   };
 };
@@ -50,6 +52,49 @@ function inferDeadlineType(title: string): "Assignment" | "Test" | "Exam" | "Qui
     return "Test";
   }
   return "Other";
+}
+
+function toFriendlyExtractionMessage(message: string): string {
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("openai_api_key") || normalized.includes("llm_api_key_missing")) {
+    return "Extraction is unavailable right now because the backend OpenAI API key is not configured.";
+  }
+
+  if (normalized.includes("unsupported file type")) {
+    return "Unsupported file type. Please upload PDF, DOCX, TXT, PNG, JPG, or JPEG.";
+  }
+
+  if (normalized.includes("file too large")) {
+    return "That file is too large. Please upload a file under 10MB.";
+  }
+
+  if (normalized.includes("ocr dependencies not available") || normalized.includes("ocr")) {
+    return "This outline needs OCR, but OCR tools are missing on the backend (Tesseract/Poppler).";
+  }
+
+  if (normalized.includes("authentication required") || normalized.includes("invalid or expired authentication")) {
+    return "Your session has expired. Please log in again, then retry upload.";
+  }
+
+  if (normalized.includes("no text could be extracted") || normalized.includes("structure_valid")) {
+    return "No readable grading content was found. Try a clearer PDF or set up the course manually.";
+  }
+
+  return message;
+}
+
+function buildFailClosedMessage(response: ExtractionResponse): string {
+  const base = "Could not extract grading structure from this outline.";
+  const failureReason = response.diagnostics?.failure_reason?.trim();
+  const firstWarning = response.diagnostics?.trigger_reasons?.[0] ?? response.diagnostics?.parse_warnings?.[0];
+
+  const details = [failureReason, firstWarning]
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0)
+    .map((part) => toFriendlyExtractionMessage(part));
+
+  if (!details.length) return base;
+  return `${base} ${details.join(" ")}`;
 }
 
 export function UploadStep() {
@@ -111,7 +156,7 @@ export function UploadStep() {
       formData.append("file", selectedFile);
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/extraction/outline`,
+        `${API_BASE_URL}/extraction/outline`,
         {
           method: "POST",
           body: formData,
@@ -159,14 +204,15 @@ export function UploadStep() {
       setDiagnostics(body.diagnostics ?? null);
       if (body.structure_valid === false) {
         setExtractionResult(null);
-        setFailClosedMessage("Could not extract grading structure from this outline.");
+        setFailClosedMessage(buildFailClosedMessage(body));
         return;
       }
 
       setExtractionResult(body);
       router.push("/setup/structure");
     } catch (err) {
-      setError(getApiErrorMessage(err, "Extraction failed. Please try again."));
+      const apiMessage = getApiErrorMessage(err, "Extraction failed. Please try again.");
+      setError(toFriendlyExtractionMessage(apiMessage));
       setExtractionResult(null);
       setDiagnostics(null);
       window.localStorage.removeItem(PENDING_DEADLINES_KEY);
@@ -198,7 +244,7 @@ export function UploadStep() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg"
+          accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
           className="hidden"
           onChange={handleFileSelected}
           disabled={loading}
@@ -250,7 +296,7 @@ export function UploadStep() {
         ) : null}
 
         <p className="mt-4 text-xs text-gray-300">
-          Supports PDF, Word, text, and image files (PNG/JPG)
+          Supports PDF, DOCX, text, and image files (PNG/JPG)
         </p>
 
         <div className="my-10 h-[1px] bg-gray-100 w-full" />
