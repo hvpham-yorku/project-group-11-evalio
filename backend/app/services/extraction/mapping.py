@@ -11,6 +11,8 @@ from app.services.extraction.constants import (
     DROP_LOWEST_RULE_REGEX,
     EACH_PERCENT_REGEX,
     LEADING_COUNT_REGEX,
+    MANDATORY_PASS_RULE_REGEX,
+    MANDATORY_PASS_THRESHOLD_REGEX,
     TOTAL_COUNT_REGEX,
 )
 
@@ -116,6 +118,19 @@ def _derive_rule_metadata(raw_item: Any) -> tuple[str | None, dict[str, Any] | N
         if syllabus_each is not None:
             config["syllabus_each"] = float(syllabus_each)
         return "drop_lowest", config
+
+    if MANDATORY_PASS_RULE_REGEX.search(rule_text):
+        config: dict[str, Any] = {}
+        threshold_match = MANDATORY_PASS_THRESHOLD_REGEX.search(rule_text)
+        if threshold_match is not None:
+            try:
+                threshold = float(threshold_match.group(1))
+            except (TypeError, ValueError):
+                threshold = 50.0
+            config["pass_threshold"] = threshold
+        else:
+            config["pass_threshold"] = 50.0
+        return "mandatory_pass", config
 
     return None, None
 

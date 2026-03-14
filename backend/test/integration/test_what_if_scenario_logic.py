@@ -81,3 +81,33 @@ def test_what_if_rejects_unknown_or_already_graded_assessment(auth_client):
 
     r2 = auth_client.post(f"/courses/{course_id}/whatif", json={"assessment_name": "A1", "hypothetical_score": 50})
     assert r2.status_code == 400
+
+
+def test_what_if_supports_child_assessment_paths(auth_client):
+    payload = {
+        "name": "EECS Child WhatIf",
+        "term": "W26",
+        "assessments": [
+            {"name": "Midterm", "weight": 40, "raw_score": 70, "total_score": 100},
+            {
+                "name": "Labs",
+                "weight": 60,
+                "children": [
+                    {"name": "Lab 1", "weight": 30, "raw_score": 80, "total_score": 100},
+                    {"name": "Lab 2", "weight": 30},
+                ],
+            },
+        ],
+    }
+    created = auth_client.post("/courses/", json=payload)
+    assert created.status_code == 200
+    course_id = created.json()["course_id"]
+
+    response = auth_client.post(
+        f"/courses/{course_id}/whatif",
+        json={"assessment_name": "Labs::Lab 2", "hypothetical_score": 90},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["assessment_name"] == "Labs::Lab 2"
+    assert data["projected_grade"] == pytest.approx(79.0, abs=0.1)

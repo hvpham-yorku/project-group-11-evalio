@@ -95,6 +95,29 @@ def test_extraction_confirm_preserves_bonus_flag(auth_client):
     assert bonus_item["is_bonus"] is True
 
 
+def test_extraction_confirm_derives_mandatory_pass_rule(auth_client):
+    payload = {
+        "course_name": "EECS Mandatory Pass",
+        "term": "W27",
+        "extraction_result": {
+            "assessments": [
+                {
+                    "name": "Final Exam",
+                    "weight": 60,
+                    "rule": "Students must pass Final Exam with at least 50% to pass the course",
+                },
+                {"name": "Assignments", "weight": 40},
+            ],
+            "deadlines": [],
+        },
+    }
+
+    created = _confirm(auth_client, payload)
+    final_exam = next(item for item in created["course"]["assessments"] if item["name"] == "Final Exam")
+    assert final_exam["rule_type"] == "mandatory_pass"
+    assert final_exam["rule_config"]["pass_threshold"] == 50.0
+
+
 def test_extraction_confirm_without_children_still_creates_flat_course(auth_client):
     payload = {
         "course_name": "EECS Flat",

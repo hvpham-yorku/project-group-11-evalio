@@ -138,3 +138,54 @@ def test_min_required_rejects_unknown_or_already_graded_assessment(auth_client):
         "assessment_name": "A1",
     })
     assert r2.status_code == 400
+
+
+def test_min_required_supports_child_assessment_paths(auth_client):
+    payload = {
+        "name": "EECS Child Targets",
+        "term": "W26",
+        "assessments": [
+            {"name": "Coursework", "weight": 70, "raw_score": 70, "total_score": 100},
+            {
+                "name": "Labs",
+                "weight": 30,
+                "children": [
+                    {"name": "Lab 1", "weight": 15},
+                    {"name": "Lab 2", "weight": 15},
+                ],
+            },
+        ],
+    }
+    created = auth_client.post("/courses/", json=payload)
+    assert created.status_code == 200
+    course_id = created.json()["course_id"]
+
+    update = auth_client.put(
+        f"/courses/{course_id}/grades",
+        json={
+            "assessments": [
+                {
+                    "name": "Labs",
+                    "raw_score": None,
+                    "total_score": None,
+                    "children": [
+                        {"name": "Lab 1", "raw_score": 100, "total_score": 100},
+                    ],
+                }
+            ]
+        },
+    )
+    assert update.status_code == 200
+
+    response = auth_client.post(
+        f"/courses/{course_id}/minimum-required",
+        json={
+            "target": 70,
+            "assessment_name": "Labs::Lab 2",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["assessment_name"] == "Labs::Lab 2"
+    assert data["minimum_required"] == pytest.approx(40.0, abs=0.2)
+    assert data["is_achievable"] is True

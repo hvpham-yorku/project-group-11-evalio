@@ -139,6 +139,14 @@ LEADING_COUNT_REGEX = re.compile(r"^(\d+)\s+(.*)")
 DROP_LOWEST_RULE_REGEX = re.compile(r"\bdrop\s+lowest(?:\s+(\d+))?\b", re.IGNORECASE)
 DROP_LOWEST_ALT_RULE_REGEX = re.compile(r"\bdrop\s+(\d+)\s+lowest\b", re.IGNORECASE)
 TOTAL_COUNT_REGEX = re.compile(r"\b(?:out\s+of|of)\s+(\d+)\b", re.IGNORECASE)
+MANDATORY_PASS_RULE_REGEX = re.compile(
+    r"\b(?:must\s+pass|required\s+to\s+pass|pass\s+requirement|mandatory\s+pass)\b",
+    re.IGNORECASE,
+)
+MANDATORY_PASS_THRESHOLD_REGEX = re.compile(
+    r"\b(?:must\s+pass|required\s+to\s+pass|pass\s+requirement|mandatory\s+pass)[^\n]*?(\d+(?:\.\d+)?)\s*%",
+    re.IGNORECASE,
+)
 COURSE_CODE_REGEX = re.compile(r"\b[A-Z]{2,6}\s?-?\s?\d{3,4}[A-Z]?\b")
 COURSE_CODE_ALT_REGEX = re.compile(r"\b[A-Z]{2,6}\s?-?\s?\d[A-Z]\d{2}\b")
 FILENAME_COURSE_CODE_REGEX = re.compile(r"(?<![A-Z0-9])([A-Z]{1,6})[\s-]?(\d{4})(?![A-Z0-9])")

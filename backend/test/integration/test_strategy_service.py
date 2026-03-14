@@ -117,6 +117,24 @@ class TestMultiWhatIf:
         assert result["projected_grade"] == 80.0
         assert result["scenarios_applied"] == 2
 
+    def test_child_assessment_scenario_path(self):
+        course = _make_course([
+            {"name": "Midterm", "weight": 40, "raw_score": 70, "total_score": 100},
+            {
+                "name": "Labs",
+                "weight": 60,
+                "children": [
+                    {"name": "Lab 1", "weight": 30, "raw_score": 80, "total_score": 100},
+                    {"name": "Lab 2", "weight": 30},
+                ],
+            },
+        ])
+        result = compute_multi_whatif(course, [
+            {"assessment_name": "Labs::Lab 2", "score": 90},
+        ])
+        assert result["projected_grade"] == 79.0
+        assert result["scenarios_applied"] == 1
+
     def test_unknown_assessment_raises(self):
         course = _make_course([
             {"name": "Final", "weight": 100},
@@ -250,6 +268,34 @@ class TestDashboardEndpoints:
         assert "projected_grade" in data
         # 40*80/100 + 60*85/100 = 32 + 51 = 83
         assert data["projected_grade"] == 83.0
+
+    def test_multi_whatif_endpoint_supports_child_paths(self, auth_client):
+        payload = {
+            "name": "EECS Child Dashboard",
+            "term": "F25",
+            "assessments": [
+                {"name": "Midterm", "weight": 40, "raw_score": 70, "total_score": 100},
+                {
+                    "name": "Labs",
+                    "weight": 60,
+                    "children": [
+                        {"name": "Lab 1", "weight": 30, "raw_score": 80, "total_score": 100},
+                        {"name": "Lab 2", "weight": 30},
+                    ],
+                },
+            ],
+        }
+        created = auth_client.post("/courses/", json=payload)
+        assert created.status_code == 200
+        course_id = created.json()["course_id"]
+
+        resp = auth_client.post(
+            f"/courses/{course_id}/dashboard/whatif",
+            json={"scenarios": [{"assessment_name": "Labs::Lab 2", "score": 90}]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["projected_grade"] == 79.0
 
     def test_strategies_endpoint(self, auth_client):
         r = self._create_course(auth_client)

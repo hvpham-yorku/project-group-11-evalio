@@ -23,12 +23,14 @@ from typing import Any
 
 from app.models import Assessment, CourseCreate
 from app.services.grading_service import (
+    apply_hypothetical_score,
     calculate_course_totals,
     compute_assessment_contribution,
-    _compute_remaining_potential,
+    fill_remaining_ungraded_scores,
     _is_assessment_fully_graded,
     calculate_assessment_percent,
     get_york_grade,
+    resolve_assessment_target,
 )
 from app.services.gpa_service import convert_percentage_all_scales
 
@@ -148,19 +150,28 @@ def compute_multi_whatif(
     assessments not covered by the scenarios.
     """
     scenario_map: dict[str, float] = {}
-    for s in scenarios:
-        name = s.get("assessment_name", "")
-        score = s.get("score", 0.0)
+    for scenario in scenarios:
+        name = str(scenario.get("assessment_name", "")).strip()
+        score = float(scenario.get("score", 0.0))
         if not name:
             continue
-        # Validate name exists
-        if not any(a.name == name for a in course.assessments):
-            raise ValueError(f"Assessment '{name}' not found in course '{course.name}'")
-        scenario_map[name] = score
+        resolve_assessment_target(course, name)
+        scenario_map[name] = max(0.0, min(100.0, score))
 
-    # ── Compute projected grade ──
-    projected = 0.0
-    max_possible = 0.0
+    projected_course = course.model_copy(deep=True)
+    for assessment_name, score in scenario_map.items():
+        apply_hypothetical_score(projected_course, assessment_name, score)
+
+    max_course = projected_course.model_copy(deep=True)
+    fill_remaining_ungraded_scores(max_course, missing_percent=100.0)
+
+    projected_totals = calculate_course_totals(projected_course)
+    max_totals = calculate_course_totals(max_course)
+    current_totals = calculate_course_totals(course)
+
+    projected = projected_totals["final_total"]
+    max_possible = max_totals["final_total"]
+
     whatif_breakdown: list[dict[str, Any]] = []
     core_weight = sum(
         a.weight for a in course.assessments if not getattr(a, "is_bonus", False)
@@ -169,47 +180,54 @@ def compute_multi_whatif(
         a.weight for a in course.assessments if getattr(a, "is_bonus", False)
     )
 
-    for a in course.assessments:
-        is_bonus = getattr(a, "is_bonus", False)
-        graded = _is_assessment_fully_graded(a)
+    projected_lookup = {
+        assessment.name: assessment for assessment in projected_course.assessments
+    }
+    max_lookup = {
+        assessment.name: assessment for assessment in max_course.assessments
+    }
 
-        if a.name in scenario_map:
-            # Apply hypothetical score
-            hyp_pct = scenario_map[a.name]
-            contribution = compute_assessment_contribution(a, missing_percent=hyp_pct)
-            max_contribution = compute_assessment_contribution(a, missing_percent=hyp_pct)
+    for assessment in course.assessments:
+        is_bonus = getattr(assessment, "is_bonus", False)
+        graded = _is_assessment_fully_graded(assessment)
+        projected_assessment = projected_lookup[assessment.name]
+        max_assessment = max_lookup[assessment.name]
+        contribution = compute_assessment_contribution(projected_assessment)
+        max_contribution = compute_assessment_contribution(max_assessment)
+
+        scenario_applied = any(
+            scenario_name == assessment.name
+            or scenario_name.startswith(f"{assessment.name}::")
+            for scenario_name in scenario_map
+        )
+        if scenario_applied:
             source = "whatif"
         elif graded:
-            # Already graded — use actual
-            contribution = compute_assessment_contribution(a, missing_percent=0.0)
-            max_contribution = contribution
             source = "actual"
         else:
-            # Ungraded, not in scenario — 0 for projected, 100 for max
-            contribution = 0.0
-            max_contribution = compute_assessment_contribution(a, missing_percent=100.0)
             source = "remaining"
 
-        projected += contribution
-        max_possible += max_contribution
-
         whatif_breakdown.append({
-            "name": a.name,
-            "weight": a.weight,
+            "name": assessment.name,
+            "weight": assessment.weight,
             "is_bonus": is_bonus,
             "source": source,
             "contribution": round(contribution, 4),
             "max_contribution": round(max_contribution, 4),
-            "hypothetical_score": scenario_map.get(a.name),
+            "hypothetical_score": scenario_map.get(assessment.name),
         })
-
-    current_totals = calculate_course_totals(course)
 
     if 0 < core_weight < 100:
         norm_factor = 100.0 / core_weight
-        projected_normalised = round(projected * norm_factor, 2)
-        maximum_possible_normalised = round(max_possible * norm_factor, 2)
-        current_normalised = round(current_totals["final_total"] * norm_factor, 2)
+        projected_normalised = round(
+            projected_totals["core_total"] * norm_factor + projected_totals["bonus_total"], 2
+        )
+        maximum_possible_normalised = round(
+            max_totals["core_total"] * norm_factor + max_totals["bonus_total"], 2
+        )
+        current_normalised = round(
+            current_totals["core_total"] * norm_factor + current_totals["bonus_total"], 2
+        )
     else:
         projected_normalised = round(projected, 2)
         maximum_possible_normalised = round(max_possible, 2)

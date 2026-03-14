@@ -56,6 +56,10 @@ function parseNumberOrNull(value?: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function hasValidGradePair(raw: number | null, total: number | null): boolean {
+  return raw !== null && total !== null && total > 0;
+}
+
 function isPartial(raw: number | null, total: number | null): boolean {
   return (raw === null) !== (total === null);
 }
@@ -206,9 +210,17 @@ function distributeParentToChildren(assessment: Assessment): Assessment {
 }
 
 function isAssessmentGraded(assessment: Assessment): boolean {
+  if (assessment.children.length) {
+    return assessment.children.every((child) => {
+      const childRaw = parseNumberOrNull(child.raw_score);
+      const childTotal = parseNumberOrNull(child.total_score);
+      return hasValidGradePair(childRaw, childTotal);
+    });
+  }
+
   const raw = parseNumberOrNull(assessment.raw_score);
   const total = parseNumberOrNull(assessment.total_score);
-  return raw !== null && total !== null && total > 0;
+  return hasValidGradePair(raw, total);
 }
 
 function getEffectiveAssessmentWeight(assessment: Assessment): number {
@@ -668,11 +680,17 @@ export function GradesStep() {
           {assessments.map((a) => {
             const raw = parseNumberOrNull(a.raw_score);
             const total = parseNumberOrNull(a.total_score);
-            const hasGrade = raw !== null && total !== null && total > 0;
-            const percent = hasGrade ? toPercentage(raw, total) : 0;
+            const hasChildren = a.children.length > 0;
+            const hasGrade = isAssessmentGraded(a);
+            const percent = hasGrade
+              ? hasChildren
+                ? (computeParentPercentFromChildren(a) ?? 0)
+                : raw !== null && total !== null
+                  ? toPercentage(raw, total)
+                  : 0
+              : 0;
             const effectiveWeight = getEffectiveAssessmentWeight(a);
             const contribution = hasGrade ? (percent * effectiveWeight) / 100 : 0;
-            const hasChildren = a.children.length > 0;
             const isExpanded = !!expandedByKey[String(a.id)];
             const childWeightSum = a.children.reduce((sum, child) => sum + child.weight, 0);
             const bestOfEffectiveCount = getBestOfEffectiveCount(a);

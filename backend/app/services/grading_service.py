@@ -1,5 +1,7 @@
 from app.models import CourseCreate
 
+CHILD_ASSESSMENT_SEPARATOR = "::"
+
 YORKU_SCALE = [
     {"letter": "A+", "min": 90, "point": 9, "desc": "Exceptional"},
     {"letter": "A", "min": 80, "point": 8, "desc": "Excellent"},
@@ -22,6 +24,136 @@ def _resolve_percent(raw_score: float | None, total_score: float | None, *, miss
     if raw_score is None or total_score is None:
         return missing_percent
     return calculate_assessment_percent(raw_score, total_score)
+
+
+def _normalize_assessment_name(assessment_name: str) -> str:
+    return assessment_name.strip()
+
+
+def _split_assessment_path(assessment_name: str) -> tuple[str, str | None]:
+    normalized = _normalize_assessment_name(assessment_name)
+    if CHILD_ASSESSMENT_SEPARATOR not in normalized:
+        return normalized, None
+
+    parent_name, child_name = normalized.split(CHILD_ASSESSMENT_SEPARATOR, 1)
+    parent_name = parent_name.strip()
+    child_name = child_name.strip()
+    if not parent_name or not child_name:
+        raise ValueError(
+            f"Invalid assessment path '{assessment_name}'. "
+            f"Use '{CHILD_ASSESSMENT_SEPARATOR}' as Parent{CHILD_ASSESSMENT_SEPARATOR}Child."
+        )
+    return parent_name, child_name
+
+
+def _target_label(parent_name: str, child_name: str | None) -> str:
+    if child_name is None:
+        return parent_name
+    return f"{parent_name}{CHILD_ASSESSMENT_SEPARATOR}{child_name}"
+
+
+def resolve_assessment_target(course: CourseCreate, assessment_name: str):
+    parent_name, child_name = _split_assessment_path(assessment_name)
+
+    if child_name is not None:
+        for assessment in course.assessments:
+            if assessment.name != parent_name:
+                continue
+            for child in assessment.children or []:
+                if child.name == child_name:
+                    return assessment, child
+            raise ValueError(
+                f"Child assessment '{child_name}' not found under '{parent_name}'"
+            )
+        raise ValueError(f"Assessment '{parent_name}' not found")
+
+    for assessment in course.assessments:
+        if assessment.name == parent_name:
+            return assessment, None
+
+    child_matches: list[tuple] = []
+    for assessment in course.assessments:
+        for child in assessment.children or []:
+            if child.name == parent_name:
+                child_matches.append((assessment, child))
+
+    if len(child_matches) == 1:
+        return child_matches[0]
+    if len(child_matches) > 1:
+        raise ValueError(
+            f"Assessment name '{assessment_name}' is ambiguous across multiple parent assessments. "
+            f"Use '{CHILD_ASSESSMENT_SEPARATOR}' path syntax (Parent{CHILD_ASSESSMENT_SEPARATOR}Child)."
+        )
+
+    raise ValueError(f"Assessment '{assessment_name}' not found")
+
+
+def _is_target_fully_graded(parent, child) -> bool:
+    if child is not None:
+        return child.raw_score is not None and child.total_score is not None
+    return _is_assessment_fully_graded(parent)
+
+
+def _get_target_weight(parent, child) -> float:
+    if child is not None:
+        return float(child.weight)
+    return float(parent.weight)
+
+
+def apply_hypothetical_score(course: CourseCreate, assessment_name: str, score: float):
+    parent, child = resolve_assessment_target(course, assessment_name)
+    safe_score = max(0.0, min(100.0, float(score)))
+
+    if child is not None:
+        child.raw_score = safe_score
+        child.total_score = 100.0
+        return
+
+    if parent.children:
+        for child_assessment in parent.children:
+            child_assessment.raw_score = safe_score
+            child_assessment.total_score = 100.0
+
+    parent.raw_score = safe_score
+    parent.total_score = 100.0
+
+
+def fill_remaining_ungraded_scores(
+    course: CourseCreate,
+    *,
+    missing_percent: float,
+    exclude_assessment_name: str | None = None,
+):
+    safe_percent = max(0.0, min(100.0, float(missing_percent)))
+    excluded_parent: str | None = None
+    excluded_child: str | None = None
+
+    if exclude_assessment_name and exclude_assessment_name.strip():
+        excluded_parent, excluded_child = _split_assessment_path(exclude_assessment_name)
+
+    for assessment in course.assessments:
+        if excluded_parent is not None and assessment.name == excluded_parent and excluded_child is None:
+            continue
+
+        children = assessment.children or []
+        if children:
+            for child in children:
+                if (
+                    excluded_parent is not None
+                    and excluded_child is not None
+                    and assessment.name == excluded_parent
+                    and child.name == excluded_child
+                ):
+                    continue
+
+                if child.raw_score is None or child.total_score is None:
+                    child.raw_score = safe_percent
+                    child.total_score = 100.0
+            continue
+
+        if assessment.raw_score is None or assessment.total_score is None:
+            assessment.raw_score = safe_percent
+            assessment.total_score = 100.0
 
 
 def _get_best_count(assessment) -> int:
@@ -271,57 +403,78 @@ def calculate_minimum_required_score(
     Calculate the minimum score needed on ONE specific assessment to achieve
     the target grade, assuming 100% on all OTHER remaining assessments.
     """
-    target_assessment = None
-    for assessment in course.assessments:
-        if assessment.name == assessment_name:
-            target_assessment = assessment
-            break
+    target_assessment, target_child = resolve_assessment_target(course, assessment_name)
+    target_path = _target_label(
+        target_assessment.name,
+        target_child.name if target_child is not None else None,
+    )
 
-    if target_assessment is None:
-        raise ValueError(f"Assessment '{assessment_name}' not found")
-
-    if _is_assessment_fully_graded(target_assessment):
+    if _is_target_fully_graded(target_assessment, target_child):
         raise ValueError(f"Assessment '{assessment_name}' is already graded")
 
     current_standing = calculate_current_standing(course)
 
-    other_remaining_max = 0.0
-    for assessment in course.assessments:
-        if assessment.name == assessment_name:
-            continue
-        other_remaining_max += _compute_remaining_potential(assessment)
+    optimistic_course = course.model_copy(deep=True)
+    fill_remaining_ungraded_scores(
+        optimistic_course,
+        missing_percent=100.0,
+        exclude_assessment_name=target_path,
+    )
+    totals_without_target = calculate_course_totals(optimistic_course)
+    points_after_others = totals_without_target["final_total"]
+    other_remaining_max = max(0.0, points_after_others - current_standing)
 
-    points_after_others = current_standing + other_remaining_max
     points_needed = target - points_after_others
-    target_remaining_capacity = _compute_remaining_potential(target_assessment)
+
+    maximum_course = optimistic_course.model_copy(deep=True)
+    apply_hypothetical_score(maximum_course, target_path, 100.0)
+    maximum_totals = calculate_course_totals(maximum_course)
+    max_possible = maximum_totals["final_total"]
 
     if points_needed <= 0:
         minimum_required = 0.0
         is_achievable = True
-    elif target_remaining_capacity <= 0:
-        minimum_required = float("inf")
+    elif max_possible + 1e-9 < target:
+        target_capacity = max(0.0, max_possible - points_after_others)
+        if target_capacity <= 0:
+            minimum_required = 101.0
+        else:
+            minimum_required = (points_needed / target_capacity) * 100
         is_achievable = False
     else:
-        minimum_required = (points_needed / target_remaining_capacity) * 100
-        is_achievable = minimum_required <= 100
+        low = 0.0
+        high = 100.0
+        for _ in range(30):
+            mid = (low + high) / 2
+            candidate_course = optimistic_course.model_copy(deep=True)
+            apply_hypothetical_score(candidate_course, target_path, mid)
+            candidate_total = calculate_course_totals(candidate_course)["final_total"]
+            if candidate_total >= target:
+                high = mid
+            else:
+                low = mid
+        minimum_required = high
+        is_achievable = True
+
+    display_name = target_path if target_path != assessment_name else assessment_name
 
     return {
         "course_name": course.name,
-        "assessment_name": assessment_name,
-        "assessment_weight": target_assessment.weight,
+        "assessment_name": display_name,
+        "assessment_weight": _get_target_weight(target_assessment, target_child),
         "minimum_required": round(minimum_required, 1),
         "is_achievable": is_achievable,
         "current_standing": round(current_standing, 2),
         "other_remaining_assumed_max": round(other_remaining_max, 2),
         "target": target,
         "explanation": (
-            f"You need at least {round(minimum_required, 1)}% on {assessment_name} "
+            f"You need at least {round(minimum_required, 1)}% on {display_name} "
             f"to reach {target}% (assuming 100% on all other remaining assessments)."
             if is_achievable
             else (
                 f"Target {target}% is not achievable. Even with 100% on "
-                f"{assessment_name} and all other remaining assessments, "
-                f"maximum is {round(points_after_others + target_assessment.weight, 1)}%."
+                f"{display_name} and all other remaining assessments, "
+                f"maximum is {round(max_possible, 1)}%."
             )
         )
     }
@@ -336,39 +489,39 @@ def calculate_whatif_scenario(
     Calculate the resulting final grade if a hypothetical score is achieved
     on ONE remaining assessment. This is read-only and does NOT persist.
     """
-    target_assessment = None
-    for assessment in course.assessments:
-        if assessment.name == assessment_name:
-            target_assessment = assessment
-            break
+    target_assessment, target_child = resolve_assessment_target(course, assessment_name)
+    target_path = _target_label(
+        target_assessment.name,
+        target_child.name if target_child is not None else None,
+    )
 
-    if target_assessment is None:
-        raise ValueError(f"Assessment '{assessment_name}' not found")
-
-    if _is_assessment_fully_graded(target_assessment):
+    if _is_target_fully_graded(target_assessment, target_child):
         raise ValueError(f"Assessment '{assessment_name}' is already graded")
 
     current_standing = calculate_current_standing(course)
-    current_target_contribution = compute_assessment_contribution(target_assessment)
-    hypothetical_target_contribution = compute_assessment_contribution(
-        target_assessment,
-        missing_percent=hypothetical_score,
-    )
-    hypothetical_contribution = hypothetical_target_contribution
 
-    remaining_potential = sum(
-        _compute_remaining_potential(assessment)
-        for assessment in course.assessments
-        if assessment.name != assessment_name
-    )
+    projected_course = course.model_copy(deep=True)
+    apply_hypothetical_score(projected_course, target_path, hypothetical_score)
+    projected_totals = calculate_course_totals(projected_course)
+    projected_grade = projected_totals["final_total"]
 
-    projected_grade = current_standing - current_target_contribution + hypothetical_target_contribution
-    maximum_possible = projected_grade + remaining_potential
+    baseline_target_course = course.model_copy(deep=True)
+    apply_hypothetical_score(baseline_target_course, target_path, 0.0)
+    baseline_target_total = calculate_course_totals(baseline_target_course)["final_total"]
+    hypothetical_contribution = projected_grade - baseline_target_total
+
+    maximum_course = projected_course.model_copy(deep=True)
+    fill_remaining_ungraded_scores(maximum_course, missing_percent=100.0)
+    maximum_totals = calculate_course_totals(maximum_course)
+    maximum_possible = maximum_totals["final_total"]
+    remaining_potential = max(0.0, maximum_possible - projected_grade)
+
+    display_name = target_path if target_path != assessment_name else assessment_name
 
     return {
         "course_name": course.name,
-        "assessment_name": assessment_name,
-        "assessment_weight": target_assessment.weight,
+        "assessment_name": display_name,
+        "assessment_weight": _get_target_weight(target_assessment, target_child),
         "hypothetical_score": hypothetical_score,
         "hypothetical_contribution": round(hypothetical_contribution, 2),
         "current_standing": round(current_standing, 2),
@@ -377,7 +530,7 @@ def calculate_whatif_scenario(
         "maximum_possible": round(maximum_possible, 2),
         "york_equivalent": get_york_grade(projected_grade),
         "explanation": (
-            f"If you score {hypothetical_score}% on {assessment_name} ({target_assessment.weight}% weight), "
+            f"If you score {hypothetical_score}% on {display_name} ({_get_target_weight(target_assessment, target_child)}% weight), "
             f"your grade will be {round(projected_grade, 2)}%. "
             f"With {remaining_potential}% weight remaining, your maximum possible is {round(maximum_possible, 2)}%."
         )

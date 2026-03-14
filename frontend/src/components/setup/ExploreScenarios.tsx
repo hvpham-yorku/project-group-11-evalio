@@ -21,8 +21,26 @@ import {
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
 
-type Assessment = CourseAssessment & {
+const CHILD_ASSESSMENT_SEPARATOR = "::";
+
+type ScenarioAssessment = {
   id: number;
+  key: string;
+  displayName: string;
+  name: string;
+  weight: number;
+  raw_score?: number | null;
+  total_score?: number | null;
+  parentName?: string;
+  childName?: string;
+  is_bonus?: boolean;
+};
+
+type GradeUpdate = {
+  name: string;
+  raw_score: number | null;
+  total_score: number | null;
+  children?: Array<{ name: string; raw_score: number | null; total_score: number | null }>;
 };
 
 function clampPercent(value: number): number {
@@ -30,8 +48,51 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(value, 100));
 }
 
-function hasPersistedGrade(a: CourseAssessment): boolean {
+function hasPersistedGrade(a: ScenarioAssessment): boolean {
   return typeof a.raw_score === "number" && typeof a.total_score === "number";
+}
+
+function flattenScenarioAssessments(
+  assessments: CourseAssessment[]
+): ScenarioAssessment[] {
+  const flattened: ScenarioAssessment[] = [];
+  let nextId = 1;
+
+  for (const assessment of assessments) {
+    const children = Array.isArray(assessment.children) ? assessment.children : [];
+    if (children.length) {
+      for (const child of children) {
+        flattened.push({
+          id: nextId++,
+          key: `${assessment.name}${CHILD_ASSESSMENT_SEPARATOR}${child.name}`,
+          displayName: `${assessment.name} — ${child.name}`,
+          name: child.name,
+          weight: child.weight,
+          raw_score: child.raw_score,
+          total_score: child.total_score,
+          parentName: assessment.name,
+          childName: child.name,
+          is_bonus: Boolean(assessment.is_bonus),
+        });
+      }
+      continue;
+    }
+
+    flattened.push({
+      id: nextId++,
+      key: assessment.name,
+      displayName: assessment.name,
+      name: assessment.name,
+      weight: assessment.weight,
+      raw_score: assessment.raw_score,
+      total_score: assessment.total_score,
+      parentName: assessment.name,
+      childName: undefined,
+      is_bonus: Boolean(assessment.is_bonus),
+    });
+  }
+
+  return flattened;
 }
 
 function formatCompactNumber(value: number): string {
@@ -43,7 +104,8 @@ function formatCompactNumber(value: number): string {
 export function ExploreScenarios() {
   const router = useRouter();
 
-  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [assessments, setAssessments] = useState<ScenarioAssessment[]>([]);
+  const [courseAssessments, setCourseAssessments] = useState<CourseAssessment[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -92,13 +154,11 @@ export function ExploreScenarios() {
           return;
         }
 
-        const normalized = (latest.assessments ?? []).map((a, i) => ({
-          ...a,
-          id: i + 1,
-        }));
+        const normalized = flattenScenarioAssessments(latest.assessments ?? []);
         const summary = await getDashboardSummary(resolvedCourseId);
 
         setAssessments(normalized);
+        setCourseAssessments(latest.assessments ?? []);
         setDashboardSummary(summary);
         await fetchSavedScenarios(resolvedCourseId);
         setError("");
@@ -110,7 +170,7 @@ export function ExploreScenarios() {
     loadCourse();
   }, [ensureCourseIdFromList]);
 
-  const getActualGrade = useCallback((a: Assessment): number | undefined => {
+  const getActualGrade = useCallback((a: ScenarioAssessment): number | undefined => {
     const raw = a.raw_score;
     const total = a.total_score;
     if (typeof raw !== "number" || typeof total !== "number") return undefined;
@@ -119,8 +179,8 @@ export function ExploreScenarios() {
     return clampPercent((raw / total) * 100);
   }, []);
 
-  const getScenarioValue = useCallback((a: Assessment) => {
-    const override = activeScenario[a.name];
+  const getScenarioValue = useCallback((a: ScenarioAssessment) => {
+    const override = activeScenario[a.key];
     if (typeof override === "number") return clampPercent(override);
 
     const actual = getActualGrade(a);
@@ -136,10 +196,10 @@ export function ExploreScenarios() {
       .filter(
         (assessment) =>
           !hasPersistedGrade(assessment) ||
-          typeof activeScenario[assessment.name] === "number"
+          typeof activeScenario[assessment.key] === "number"
       )
       .map((assessment) => ({
-        assessment_name: assessment.name,
+        assessment_name: assessment.key,
         score: clampPercent(getScenarioValue(assessment)),
       }));
 
@@ -216,11 +276,11 @@ export function ExploreScenarios() {
     }
 
     const scenarios = assessments
-      .filter((assessment) => typeof activeScenario[assessment.name] === "number")
+      .filter((assessment) => typeof activeScenario[assessment.key] === "number")
       .map((assessment) => {
-        const score = clampPercent(activeScenario[assessment.name]);
+        const score = clampPercent(activeScenario[assessment.key]);
         const actual = getActualGrade(assessment);
-        return { assessment_name: assessment.name, score, actual };
+        return { assessment_name: assessment.key, score, actual };
       })
       .filter(
         ({ score, actual }) =>
@@ -258,18 +318,82 @@ export function ExploreScenarios() {
       return;
     }
 
-    // Apply scenario values to all assessments that have a scenario value set
-    // This includes overwriting already-graded assessments
-    const updates = assessments
-      .filter((a) => activeScenario[a.name] !== undefined || !hasPersistedGrade(a))
-      .map((a) => {
-        const percent = clampPercent(getScenarioValue(a));
+    const updates = courseAssessments
+      .map((assessment): GradeUpdate | null => {
+        const children = Array.isArray(assessment.children) ? assessment.children : [];
+
+        if (children.length) {
+          const childUpdates = children
+            .map((child) => {
+              const key = `${assessment.name}${CHILD_ASSESSMENT_SEPARATOR}${child.name}`;
+              const hasOverride = typeof activeScenario[key] === "number";
+              const hasGrade =
+                typeof child.raw_score === "number" &&
+                typeof child.total_score === "number" &&
+                child.total_score > 0;
+
+              if (!hasOverride && hasGrade) {
+                return null;
+              }
+
+              const actual =
+                hasGrade && child.total_score
+                  ? clampPercent((child.raw_score! / child.total_score) * 100)
+                  : undefined;
+              const percent = hasOverride
+                ? clampPercent(activeScenario[key])
+                : typeof actual === "number"
+                  ? actual
+                  : 75;
+
+              return {
+                name: child.name,
+                raw_score: percent,
+                total_score: 100,
+              };
+            })
+            .filter((item): item is { name: string; raw_score: number; total_score: number } => item !== null);
+
+          if (!childUpdates.length) {
+            return null;
+          }
+
+          return {
+            name: assessment.name,
+            raw_score: null,
+            total_score: null,
+            children: childUpdates,
+          };
+        }
+
+        const key = assessment.name;
+        const hasOverride = typeof activeScenario[key] === "number";
+        const hasGrade =
+          typeof assessment.raw_score === "number" &&
+          typeof assessment.total_score === "number" &&
+          assessment.total_score > 0;
+
+        if (!hasOverride && hasGrade) {
+          return null;
+        }
+
+        const actual =
+          hasGrade && assessment.total_score
+            ? clampPercent((assessment.raw_score! / assessment.total_score) * 100)
+            : undefined;
+        const percent = hasOverride
+          ? clampPercent(activeScenario[key])
+          : typeof actual === "number"
+            ? actual
+            : 75;
+
         return {
-          name: a.name,
+          name: assessment.name,
           raw_score: percent,
           total_score: 100,
         };
-      });
+      })
+      .filter((item): item is GradeUpdate => item !== null);
 
     if (updates.length === 0) {
       setError("No scenarios to apply.");
@@ -278,19 +402,9 @@ export function ExploreScenarios() {
 
     try {
       setSaving(true);
-      const response = await updateCourseGrades(courseId, {
+      await updateCourseGrades(courseId, {
         assessments: updates,
       });
-
-      setAssessments(
-        response.assessments.map((a, i) => ({
-          id: i + 1,
-          name: a.name,
-          weight: a.weight,
-          raw_score: a.raw_score,
-          total_score: a.total_score,
-        }))
-      );
       setActiveScenario({});
       setActiveAssessmentName(null);
       setError("");
@@ -404,7 +518,7 @@ export function ExploreScenarios() {
                 const value = getScenarioValue(a);
                 const contribution = (value * a.weight) / 100;
 
-                const isModified = typeof activeScenario[a.name] === "number";
+                const isModified = typeof activeScenario[a.key] === "number";
 
                 return (
                   <div
@@ -417,7 +531,7 @@ export function ExploreScenarios() {
                   >
                     <div className="flex items-start justify-between gap-6 mb-4">
                       <div>
-                        <h4 className="font-semibold text-gray-800">{a.name}</h4>
+                        <h4 className="font-semibold text-gray-800">{a.displayName}</h4>
                         <p className="text-sm text-gray-500">
                           {formatCompactNumber(a.weight)}% •{" "}
                           {typeof actual === "number"
@@ -439,7 +553,7 @@ export function ExploreScenarios() {
                       step={1}
                       value={value}
                       onChange={(e) =>
-                        handleSliderChange(a.name, Number(e.target.value))
+                        handleSliderChange(a.key, Number(e.target.value))
                       }
                       className="mt-4 w-full h-2 rounded-full appearance-none cursor-pointer"
                       style={{
@@ -563,23 +677,22 @@ export function ExploreScenarios() {
             <div className="mt-8 space-y-4">
               {(projectionBreakdown.length > 0 ? projectionBreakdown : assessments).map(
                 (entry) => {
-                  const label = "source" in entry ? entry.name : entry.name;
-                  const contribution =
-                    "contribution" in entry
-                      ? entry.contribution
-                      : (getScenarioValue(entry) * entry.weight) / 100;
-                  const sourceLabel =
-                    "source" in entry
-                      ? entry.source === "scenario"
-                        ? "Scenario"
-                        : entry.source === "graded"
-                          ? "Graded"
-                          : "Remaining"
-                      : typeof activeScenario[entry.name] === "number"
-                        ? "Scenario"
-                        : hasPersistedGrade(entry)
-                          ? "Graded"
-                          : "Default";
+                  const isProjectionEntry = "source" in entry;
+                  const label = isProjectionEntry ? entry.name : entry.displayName;
+                  const contribution = isProjectionEntry
+                    ? entry.contribution
+                    : (getScenarioValue(entry) * entry.weight) / 100;
+                  const sourceLabel = isProjectionEntry
+                    ? entry.source === "scenario" || entry.source === "whatif"
+                      ? "Scenario"
+                      : entry.source === "graded" || entry.source === "actual"
+                        ? "Graded"
+                        : "Remaining"
+                    : typeof activeScenario[entry.key] === "number"
+                      ? "Scenario"
+                      : hasPersistedGrade(entry)
+                        ? "Graded"
+                        : "Default";
 
                   return (
                     <div

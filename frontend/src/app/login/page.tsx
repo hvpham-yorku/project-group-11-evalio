@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 import { getApiErrorMessage } from "@/lib/errors";
-import { getMe, login, register } from "@/lib/api";
+import { getMe, listCourses, login, register } from "@/lib/api";
 
 type AuthMode = "login" | "register";
 
@@ -13,6 +13,15 @@ function resolveNext(nextParam: string | null): string {
   if (!nextParam) return "/setup/upload";
   if (!nextParam.startsWith("/")) return "/setup/upload";
   return nextParam;
+}
+
+async function resolveDefaultPostLoginRoute(): Promise<string> {
+  try {
+    const courses = await listCourses();
+    return courses.length > 0 ? "/setup/dashboard" : "/setup/upload";
+  } catch {
+    return "/setup/upload";
+  }
 }
 
 function LoginPageContent() {
@@ -34,6 +43,18 @@ function LoginPageContent() {
     [searchParams]
   );
 
+  const nextParam = useMemo(() => searchParams.get("next"), [searchParams]);
+
+  async function navigateAfterAuth() {
+    if (nextParam && nextParam.startsWith("/")) {
+      router.replace(nextRoute);
+      return;
+    }
+
+    const postLoginRoute = await resolveDefaultPostLoginRoute();
+    router.replace(postLoginRoute);
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
@@ -53,7 +74,7 @@ function LoginPageContent() {
         setMode("login");
       } else {
         await login({ email, password });
-        router.replace(nextRoute);
+        await navigateAfterAuth();
       }
     } catch (err) {
       setError(getApiErrorMessage(err, "Authentication failed"));
@@ -69,7 +90,7 @@ function LoginPageContent() {
 
     try {
       await getMe();
-      router.replace(nextRoute);
+      await navigateAfterAuth();
     } catch (err) {
       setError(getApiErrorMessage(err, "No active session found"));
     } finally {

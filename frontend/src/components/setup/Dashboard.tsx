@@ -39,6 +39,7 @@ const DEFAULT_TARGET_GRADE = 85;
 const TARGET_STORAGE_KEY = "evalio_target_grade";
 const CONFIRMED_DEADLINES_KEY = "evalio_deadlines_confirmed_v1";
 const GPA_SCALES = ["4.0", "9.0", "10.0"] as const;
+const CHILD_ASSESSMENT_SEPARATOR = "::";
 
 type GpaScale = (typeof GPA_SCALES)[number];
 
@@ -49,6 +50,15 @@ type AssessmentRow = {
   neededLabel: string;
   needed: string;
   contrib: string;
+};
+
+type AssessmentTarget = {
+  assessmentName: string;
+  displayName: string;
+  weight: number;
+  isBonus: boolean;
+  percent: number | null;
+  graded: boolean;
 };
 
 type DashboardDeadline = {
@@ -79,6 +89,16 @@ function StatItem({ label, value }: { label: string; value: string }) {
 
 // --- Logic Helpers ---
 function hasGrade(assessment: CourseAssessment): boolean {
+  const children = Array.isArray(assessment.children) ? assessment.children : [];
+  if (children.length) {
+    return children.every(
+      (child) =>
+        typeof child.raw_score === "number" &&
+        typeof child.total_score === "number" &&
+        child.total_score > 0
+    );
+  }
+
   return (
     typeof assessment.raw_score === "number" &&
     typeof assessment.total_score === "number" &&
@@ -87,12 +107,73 @@ function hasGrade(assessment: CourseAssessment): boolean {
 }
 
 function getPercent(assessment: CourseAssessment): number | null {
+  const children = Array.isArray(assessment.children) ? assessment.children : [];
+  if (children.length) {
+    if (!hasGrade(assessment)) return null;
+    const contribution = children.reduce((sum, child) => {
+      if (
+        typeof child.raw_score !== "number" ||
+        typeof child.total_score !== "number" ||
+        child.total_score <= 0
+      ) {
+        return sum;
+      }
+      return sum + ((child.raw_score / child.total_score) * 100 * child.weight) / 100;
+    }, 0);
+    const effectiveWeight = children.reduce((sum, child) => sum + child.weight, 0);
+    if (effectiveWeight <= 0) return null;
+    return Math.max(0, Math.min((contribution / effectiveWeight) * 100, 100));
+  }
+
   if (!hasGrade(assessment)) return null;
   const percent =
     ((assessment.raw_score as number) / (assessment.total_score as number)) *
     100;
   if (!Number.isFinite(percent)) return null;
   return Math.max(0, Math.min(percent, 100));
+}
+
+function buildAssessmentTargets(assessments: CourseAssessment[]): AssessmentTarget[] {
+  const targets: AssessmentTarget[] = [];
+
+  for (const assessment of assessments) {
+    const children = Array.isArray(assessment.children) ? assessment.children : [];
+    const isBonus = Boolean(assessment.is_bonus);
+
+    if (children.length) {
+      for (const child of children) {
+        const childHasGrade =
+          typeof child.raw_score === "number" &&
+          typeof child.total_score === "number" &&
+          child.total_score > 0;
+        const percent = childHasGrade
+          ? Math.max(0, Math.min((child.raw_score! / child.total_score!) * 100, 100))
+          : null;
+
+        targets.push({
+          assessmentName: `${assessment.name}${CHILD_ASSESSMENT_SEPARATOR}${child.name}`,
+          displayName: `${assessment.name} — ${child.name}`,
+          weight: Number.isFinite(child.weight) ? child.weight : 0,
+          isBonus,
+          percent,
+          graded: childHasGrade,
+        });
+      }
+      continue;
+    }
+
+    const percent = getPercent(assessment);
+    targets.push({
+      assessmentName: assessment.name,
+      displayName: assessment.name,
+      weight: Number.isFinite(assessment.weight) ? assessment.weight : 0,
+      isBonus,
+      percent,
+      graded: percent !== null,
+    });
+  }
+
+  return targets;
 }
 
 function formatCompactNumber(value: number): string {
@@ -275,23 +356,7 @@ export function Dashboard() {
           );
           return grouped.length ? grouped : [latest];
         })();
-
-        const graded = latest.assessments.filter(
-          (a) => !a.is_bonus && hasGrade(a)
-        );
-
-        const gradedW = graded.reduce(
-          (sum, a) => sum + getEffectiveWeight(a),
-          0
-        );
-        const contribution = graded.reduce((sum, assessment) => {
-          const percent = getPercent(assessment);
-          if (percent === null) return sum;
-          const effectiveWeight = getEffectiveWeight(assessment);
-          return sum + (percent * effectiveWeight) / 100;
-        }, 0);
-        setGradedWeight(Math.min(100, Math.max(0, gradedW)));
-        setCurrentContribution(contribution);
+        const assessmentTargets = buildAssessmentTargets(latest.assessments);
 
         const [
           target,
@@ -307,14 +372,14 @@ export function Dashboard() {
               target: resolvedTarget,
             }),
             Promise.all(
-              latest.assessments.map(async (assessment) => {
-                const actualPercent = getPercent(assessment);
+              assessmentTargets.map(async (assessment) => {
+                const actualPercent = assessment.percent;
                 if (actualPercent !== null) {
                   const percentValue = actualPercent;
                   const contributionPoints =
                     (percentValue * assessment.weight) / 100;
                   return {
-                    name: assessment.name,
+                    name: assessment.displayName,
                     rowType: "graded",
                     weightLabel: `${assessment.weight}% of final grade`,
                     neededLabel: "Actual Performance",
@@ -329,14 +394,14 @@ export function Dashboard() {
 
                 const minimum = await getMinimumRequired(resolvedCourseId, {
                   target: resolvedTarget,
-                  assessment_name: assessment.name,
+                  assessment_name: assessment.assessmentName,
                 });
                 const percentValue = minimum.minimum_required;
                 const contributionPoints =
                   (percentValue * assessment.weight) / 100;
 
                 return {
-                  name: assessment.name,
+                  name: assessment.displayName,
                   rowType: "ungraded",
                   weightLabel: `${assessment.weight}% of final grade`,
                   neededLabel: "Minimum Needed",
@@ -637,10 +702,10 @@ export function Dashboard() {
       return;
     }
 
-    const scenarios = activeCourse.assessments
-      .filter((assessment) => !assessment.is_bonus && !hasGrade(assessment))
+    const scenarios = buildAssessmentTargets(activeCourse.assessments)
+      .filter((assessment) => !assessment.isBonus && !assessment.graded)
       .map((assessment) => ({
-        assessment_name: assessment.name,
+        assessment_name: assessment.assessmentName,
         score: clampedPerformanceAssumption,
       }));
 
