@@ -5,6 +5,7 @@ Used as fallback when Postgres is not available.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from app.repositories.base import StoredCalendarConnection
@@ -19,7 +20,7 @@ class InMemoryCalendarRepository:
         user_id: UUID,
         provider: str,
         access_token: str,
-        refresh_token: str,
+        refresh_token: str | None,
         token_expiry: datetime | None = None,
         calendar_id: str | None = None,
     ) -> StoredCalendarConnection:
@@ -84,7 +85,7 @@ class InMemoryCalendarRepository:
         user_id: UUID,
         provider: str,
         access_token: str,
-        refresh_token: str,
+        refresh_token: str | None,
         token_expiry: datetime | None = None,
     ) -> StoredCalendarConnection | None:
         key = (user_id, provider)
@@ -104,6 +105,17 @@ class InMemoryCalendarRepository:
             is_connected=data["is_connected"],
             created_at=data["created_at"],
         )
+
+    def get_tokens(self, user_id: UUID, provider: str) -> dict[str, Any] | None:
+        key = (user_id, provider)
+        data = self._connections.get(key)
+        if data is None or not data.get("is_connected"):
+            return None
+        return {
+            "access_token": data.get("access_token"),
+            "refresh_token": data.get("refresh_token"),
+            "token_expiry": data.get("token_expiry"),
+        }
 
     def disconnect(self, user_id: UUID, provider: str) -> bool:
         key = (user_id, provider)

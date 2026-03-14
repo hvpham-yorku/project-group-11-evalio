@@ -71,3 +71,20 @@ class TestLearningStrategies:
         suggestions = suggest_learning_strategies(course)
         technique_names = [t["name"] for t in suggestions[0]["techniques"]]
         assert "80/20 Rule (Pareto Principle)" in technique_names
+
+    def test_target_gap_and_weakest_area_are_included(self):
+        course = _make_course([
+            {"name": "Midterm Exam", "weight": 40, "raw_score": 62, "total_score": 100},
+            {"name": "Final Exam", "weight": 60},
+        ])
+
+        suggestions = suggest_learning_strategies(
+            course,
+            deadlines=[{"assessment_name": "Final Exam", "due_date": "2099-01-01"}],
+            target_grade=85,
+            current_grade=24.8,
+        )
+
+        assert suggestions[0]["target_gap"] == 60.2
+        assert suggestions[0]["weakest_area"]["name"] == "Midterm Exam"
+        assert any("85.0% target" in t["reason"] for t in suggestions[0]["techniques"])

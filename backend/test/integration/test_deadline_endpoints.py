@@ -13,6 +13,7 @@ import pytest
 from types import SimpleNamespace
 
 from app.dependencies import get_deadline_service, get_extraction_service
+from app.dependencies import get_calendar_repo
 from app.routes import deadlines as deadline_routes
 from app.services import deadline_service as deadline_service_module
 from app.models_deadline import DeadlineCreate
@@ -355,6 +356,7 @@ class TestDeadlineEndpoints:
     ):
         service = get_deadline_service()
         service._google_tokens.clear()
+        get_calendar_repo().clear()
 
         monkeypatch.setattr(
             deadline_routes,
@@ -377,6 +379,10 @@ class TestDeadlineEndpoints:
         assert len(service._google_tokens) == 1
         assert next(iter(service._google_tokens.values()))["access_token"] == "access-token"
 
+        status = auth_client.get("/deadlines/google/status")
+        assert status.status_code == 200
+        assert status.json()["connected"] is True
+
     def test_google_export_unconfigured_returns_501(self, auth_client, monkeypatch):
         course_id = self._create_course(auth_client)
         monkeypatch.setattr(
@@ -393,6 +399,7 @@ class TestDeadlineEndpoints:
     def test_google_export_skips_duplicates(self, auth_client, monkeypatch):
         service = get_deadline_service()
         service._google_tokens.clear()
+        get_calendar_repo().clear()
 
         course_id = self._create_course(auth_client)
         created = auth_client.post(
@@ -443,6 +450,7 @@ class TestDeadlineEndpoints:
     def test_google_export_includes_min_grade_text(self, auth_client, monkeypatch):
         service = get_deadline_service()
         service._google_tokens.clear()
+        get_calendar_repo().clear()
 
         course_id = self._create_course(auth_client)
         created = auth_client.post(

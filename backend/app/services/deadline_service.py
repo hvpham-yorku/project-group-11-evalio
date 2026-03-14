@@ -28,13 +28,14 @@ import urllib.parse
 import urllib.request
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
+from urllib.error import HTTPError
 from uuid import UUID, uuid4
 
 from app.models_deadline import (
     Deadline,
     DeadlineCreate,
 )
-from app.repositories.base import DeadlineRepository
+from app.repositories.base import CalendarConnectionRepository, DeadlineRepository
 
 # ─── Date-parsing regexes (shared with extraction_service) ────────────────────
 
@@ -451,6 +452,22 @@ def exchange_google_code(code: str) -> dict[str, Any]:
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        details = ""
+        try:
+            payload = json.loads(body)
+            err = payload.get("error")
+            err_desc = payload.get("error_description")
+            if err and err_desc:
+                details = f" ({err}: {err_desc})"
+            elif err:
+                details = f" ({err})"
+        except Exception:
+            details = ""
+        raise GoogleCalendarError(
+            f"Token exchange failed: HTTP {exc.code}{details}"
+        ) from exc
     except Exception as exc:
         raise GoogleCalendarError(f"Token exchange failed: {exc}") from exc
 
@@ -517,10 +534,14 @@ class DeadlineService:
     Injected via FastAPI ``Depends()`` — see ``dependencies.py``.
     """
 
-    def __init__(self, repository: DeadlineRepository) -> None:
+    def __init__(
+        self,
+        repository: DeadlineRepository,
+        calendar_repository: CalendarConnectionRepository | None = None,
+    ) -> None:
         self._repo = repository
+        self._calendar_repo = calendar_repository
         # In-memory Google token storage per user_id (for dev).
-        # TODO (SCRUM-85): move to DB when deadline schema lands.
         self._google_tokens: dict[UUID, dict[str, Any]] = {}
 
     # ── CRUD ──
@@ -592,10 +613,56 @@ class DeadlineService:
 
     def store_google_tokens(self, user_id: UUID, tokens: dict[str, Any]) -> None:
         self._google_tokens[user_id] = tokens
+        if self._calendar_repo is None:
+            return
+
+        access_token = tokens.get("access_token")
+        if not isinstance(access_token, str) or not access_token:
+            return
+
+        existing_tokens = self._calendar_repo.get_tokens(user_id, "google") or {}
+        refresh_token = tokens.get("refresh_token")
+        if refresh_token is None:
+            refresh_token = existing_tokens.get("refresh_token")
+        token_expiry = tokens.get("token_expiry")
+        if token_expiry is None:
+            token_expiry = existing_tokens.get("token_expiry")
+
+        existing_connection = self._calendar_repo.get_by_user_and_provider(user_id, "google")
+        if existing_connection is None:
+            self._calendar_repo.create(
+                user_id=user_id,
+                provider="google",
+                access_token=access_token,
+                refresh_token=refresh_token,
+                token_expiry=token_expiry,
+            )
+            return
+
+        self._calendar_repo.update_tokens(
+            user_id=user_id,
+            provider="google",
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_expiry=token_expiry,
+        )
 
     def get_google_access_token(self, user_id: UUID) -> str | None:
         tokens = self._google_tokens.get(user_id)
-        return tokens.get("access_token") if tokens else None
+        if tokens and tokens.get("access_token"):
+            return tokens.get("access_token")
+
+        if self._calendar_repo is not None:
+            persisted = self._calendar_repo.get_tokens(user_id, "google")
+            if persisted and persisted.get("access_token"):
+                self._google_tokens[user_id] = {
+                    "access_token": persisted.get("access_token"),
+                    "refresh_token": persisted.get("refresh_token"),
+                    "token_expiry": persisted.get("token_expiry"),
+                }
+                return persisted.get("access_token")
+
+        return None
 
     def export_to_google_calendar(
         self,

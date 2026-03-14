@@ -18,18 +18,21 @@ import os
 from typing import Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 
+from app.config import AUTH_COOKIE_NAME
 # Frontend URL for OAuth callback redirect
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 from app.dependencies import (
+    get_auth_service,
     get_course_service,
     get_current_user,
     get_deadline_service,
     get_extraction_service,
+    get_user_repo,
 )
 from app.models_deadline import (
     Deadline,
@@ -37,10 +40,12 @@ from app.models_deadline import (
     DeadlineExportRequest,
     DeadlineExportResponse,
     DeadlineListResponse,
+    GoogleConnectionStatusResponse,
     DeadlineUpdate,
     GoogleAuthUrlResponse,
 )
-from app.services.auth_service import AuthenticatedUser
+from app.repositories.base import UserRepository
+from app.services.auth_service import AuthService, AuthenticatedUser, AuthenticationError
 from app.services.course_service import CourseNotFoundError, CourseService
 from app.services.deadline_service import (
     DeadlineService,
@@ -65,6 +70,44 @@ def _ensure_course_exists(service: CourseService, user_id: UUID, course_id: UUID
         return service._get_course_or_raise(user_id=user_id, course_id=course_id)
     except CourseNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def _resolve_google_callback_user(
+    request: Request,
+    state: str,
+    auth_service: AuthService,
+    user_repo: UserRepository,
+) -> AuthenticatedUser:
+    """Resolve the user for the OAuth callback from cookie first, then state."""
+    token = request.cookies.get(AUTH_COOKIE_NAME)
+    if token:
+        try:
+            return auth_service.get_current_user(token)
+        except AuthenticationError:
+            pass
+
+    if state:
+        try:
+            return auth_service.get_current_user(state)
+        except AuthenticationError:
+            pass
+
+        try:
+            user_id = UUID(state)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required to complete Google Calendar connection",
+            ) from exc
+
+        stored_user = user_repo.get_by_id(user_id)
+        if stored_user is not None:
+            return AuthenticatedUser(user_id=stored_user.user_id, email=stored_user.email)
+
+    raise HTTPException(
+        status_code=401,
+        detail="Authentication required to complete Google Calendar connection",
+    )
 
 
 # ─── Extraction ────────────────────────────────────────────────────────────────
@@ -270,6 +313,7 @@ def export_ics(
 
 @router.get("/deadlines/google/authorize", response_model=GoogleAuthUrlResponse)
 def google_authorize(
+    request: Request,
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
     """
@@ -279,23 +323,44 @@ def google_authorize(
     Returns 501 if ``GOOGLE_CLIENT_ID`` is not configured.
     """
     try:
-        return get_google_auth_url(state=str(current_user.user_id))
+        return get_google_auth_url(
+            state=request.cookies.get(AUTH_COOKIE_NAME, str(current_user.user_id))
+        )
     except GoogleCalendarError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
 
 
+@router.get("/deadlines/google/status", response_model=GoogleConnectionStatusResponse)
+def google_status(
+    dl_service: DeadlineService = Depends(get_deadline_service),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
+    return GoogleConnectionStatusResponse(
+        connected=bool(dl_service.get_google_access_token(current_user.user_id))
+    )
+
+
 @router.get("/deadlines/google/callback")
 def google_callback(
+    request: Request,
     code: str = Query(...),
     state: str = Query(default=""),
     dl_service: DeadlineService = Depends(get_deadline_service),
-    current_user: AuthenticatedUser = Depends(get_current_user),
+    auth_service: AuthService = Depends(get_auth_service),
+    user_repo: UserRepository = Depends(get_user_repo),
 ):
     """
     Handle the Google OAuth2 callback.  Exchanges the authorization code
     for tokens and stores them (in-memory, per user).
     Redirects back to frontend after success.
     """
+    current_user = _resolve_google_callback_user(
+        request=request,
+        state=state,
+        auth_service=auth_service,
+        user_repo=user_repo,
+    )
+
     try:
         tokens = exchange_google_code(code)
     except GoogleCalendarError as exc:

@@ -5,6 +5,7 @@ Manages OAuth tokens and calendar integrations per user.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, delete
@@ -36,7 +37,7 @@ class PostgresCalendarRepository:
         user_id: UUID,
         provider: str,
         access_token: str,
-        refresh_token: str,
+        refresh_token: str | None,
         token_expiry: datetime | None = None,
         calendar_id: str | None = None,
     ) -> StoredCalendarConnection:
@@ -91,7 +92,7 @@ class PostgresCalendarRepository:
         user_id: UUID,
         provider: str,
         access_token: str,
-        refresh_token: str,
+        refresh_token: str | None,
         token_expiry: datetime | None = None,
     ) -> StoredCalendarConnection | None:
         with self._session_factory() as session:
@@ -113,6 +114,22 @@ class PostgresCalendarRepository:
             session.commit()
             session.refresh(row)
             return self._to_stored(row)
+
+    def get_tokens(self, user_id: UUID, provider: str) -> dict[str, Any] | None:
+        with self._session_factory() as session:
+            row = session.scalar(
+                select(CalendarConnectionDB).where(
+                    CalendarConnectionDB.user_id == user_id,
+                    CalendarConnectionDB.provider == provider,
+                )
+            )
+            if row is None or not row.is_connected:
+                return None
+            return {
+                "access_token": row.access_token,
+                "refresh_token": row.refresh_token,
+                "token_expiry": row.token_expiry,
+            }
 
     def disconnect(self, user_id: UUID, provider: str) -> bool:
         with self._session_factory() as session:

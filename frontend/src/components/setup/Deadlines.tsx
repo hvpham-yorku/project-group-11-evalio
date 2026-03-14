@@ -17,6 +17,7 @@ import {
 import {
   listCourses,
   getGoogleAuthUrl,
+  getGoogleCalendarStatus,
   exportToGoogleCalendar,
   getMinimumRequired,
   listDeadlines as listDeadlinesApi,
@@ -53,6 +54,7 @@ const PENDING_DEADLINES_KEY = "evalio_pending_deadlines_v1"; // upload step can 
 const CONFIRMED_DEADLINES_KEY = "evalio_deadlines_confirmed_v1"; // { [course_id]: Deadline[] }
 const TARGET_STORAGE_KEY = "evalio_target_grade";
 const DEFAULT_TARGET_GRADE = 85;
+const GCAL_CONNECTED_KEY = "evalio_gcal_connected";
 
 function safeParse<T>(raw: string | null): T | null {
   if (!raw) return null;
@@ -180,6 +182,21 @@ export default function DeadlinesPage() {
 
   const [error, setError] = useState<string>("");
 
+  const refreshGoogleCalendarStatus = useCallback(async () => {
+    try {
+      const { connected } = await getGoogleCalendarStatus();
+      setIsCalendarConnected(connected);
+      if (connected) {
+        window.localStorage.setItem(GCAL_CONNECTED_KEY, "true");
+      } else {
+        window.localStorage.removeItem(GCAL_CONNECTED_KEY);
+      }
+      return connected;
+    } catch {
+      return false;
+    }
+  }, []);
+
   // Check for Google Calendar OAuth callback
   useEffect(() => {
     const gcalConnected = searchParams.get("gcal_connected");
@@ -188,22 +205,31 @@ export default function DeadlinesPage() {
     if (gcalConnected === "true") {
       setIsCalendarConnected(true);
       // Store in localStorage so it persists
-      window.localStorage.setItem("evalio_gcal_connected", "true");
+      window.localStorage.setItem(GCAL_CONNECTED_KEY, "true");
+      void refreshGoogleCalendarStatus();
       // Clear the query param from URL
       router.replace("/setup/deadlines", { scroll: false });
     }
 
     if (gcalError) {
-      setError(`Google Calendar connection failed: ${gcalError}`);
+      const normalizedError = decodeURIComponent(gcalError);
+      if (normalizedError.toLowerCase().includes("invalid_client")) {
+        setError(
+          "Google Calendar OAuth credentials are invalid on the backend (invalid_client). Update GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET in backend/.env and restart backend."
+        );
+      } else {
+        setError(`Google Calendar connection failed: ${normalizedError}`);
+      }
       router.replace("/setup/deadlines", { scroll: false });
     }
 
     // Check localStorage for previous connection
-    const storedConnection = window.localStorage.getItem("evalio_gcal_connected");
+    const storedConnection = window.localStorage.getItem(GCAL_CONNECTED_KEY);
     if (storedConnection === "true") {
       setIsCalendarConnected(true);
     }
-  }, [searchParams, router]);
+    void refreshGoogleCalendarStatus();
+  }, [searchParams, router, refreshGoogleCalendarStatus]);
 
   const refreshDeadlines = useCallback(async (resolvedCourseId: string) => {
     const response = await listDeadlinesApi(resolvedCourseId);
@@ -246,7 +272,6 @@ export default function DeadlinesPage() {
 
         setExtractedDeadlines(extracted);
         setHasConfirmed(extracted.length === 0); // if no extracted, show confirmed mode
-        setError("");
       } catch (e) {
         setError(getApiErrorMessage(e, "Failed to load deadlines."));
       }
@@ -419,7 +444,7 @@ export default function DeadlinesPage() {
 
   const handleDisconnectCalendar = () => {
     setIsCalendarConnected(false);
-    window.localStorage.removeItem("evalio_gcal_connected");
+    window.localStorage.removeItem(GCAL_CONNECTED_KEY);
   };
 
   const handleExport = async () => {
@@ -499,7 +524,7 @@ export default function DeadlinesPage() {
       } else if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
         setError("Google Calendar authorization expired. Please reconnect.");
         setIsCalendarConnected(false);
-        window.localStorage.removeItem("evalio_gcal_connected");
+        window.localStorage.removeItem(GCAL_CONNECTED_KEY);
       } else {
         setError(msg);
       }

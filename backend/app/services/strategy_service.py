@@ -297,6 +297,13 @@ _TECHNIQUE_DB: dict[str, dict[str, Any]] = {
     },
 }
 
+_PRIORITY_RANK = {
+    "critical": 4,
+    "high": 3,
+    "medium": 2,
+    "low": 1,
+}
+
 
 def _classify_assessment_type(name: str) -> str:
     """Heuristic: classify an assessment by its name into a broad type."""
@@ -305,6 +312,10 @@ def _classify_assessment_type(name: str) -> str:
         if any(kw in lower for kw in keywords):
             return atype
     return "general"
+
+
+def _priority_rank(priority: str) -> int:
+    return _PRIORITY_RANK.get(priority, 0)
 
 
 def _days_until(due_date_str: str | None) -> int | None:
@@ -318,9 +329,230 @@ def _days_until(due_date_str: str | None) -> int | None:
         return None
 
 
+def _summarise_weakest_graded_assessment(course: CourseCreate) -> dict[str, Any] | None:
+    weakest: dict[str, Any] | None = None
+    for assessment in course.assessments:
+        if not _is_assessment_fully_graded(assessment):
+            continue
+        if getattr(assessment, "is_bonus", False):
+            continue
+        if assessment.raw_score is None or assessment.total_score is None:
+            continue
+
+        percent = round(
+            calculate_assessment_percent(assessment.raw_score, assessment.total_score),
+            1,
+        )
+        candidate = {
+            "name": assessment.name,
+            "percent": percent,
+            "type": _classify_assessment_type(assessment.name),
+            "weight": assessment.weight,
+        }
+        if weakest is None or percent < weakest["percent"]:
+            weakest = candidate
+    return weakest
+
+
+def _merge_unique_techniques(techniques: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[str, dict[str, Any]] = {}
+    for technique in techniques:
+        key = technique["name"]
+        existing = deduped.get(key)
+        if existing is None:
+            deduped[key] = technique
+            continue
+
+        existing_rank = _priority_rank(existing.get("priority", ""))
+        candidate_rank = _priority_rank(technique.get("priority", ""))
+        if candidate_rank > existing_rank:
+            deduped[key] = technique
+            continue
+        if candidate_rank == existing_rank and len(technique.get("reason", "")) > len(existing.get("reason", "")):
+            deduped[key] = technique
+
+    return sorted(
+        deduped.values(),
+        key=lambda technique: (
+            -_priority_rank(technique.get("priority", "")),
+            technique.get("name", ""),
+        ),
+    )
+
+
+def _build_deadline_fallback_suggestions(
+    deadlines: list[dict[str, Any]] | None,
+    target_grade: float | None = None,
+    current_grade: float | None = None,
+    weakest_graded: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    if not deadlines:
+        course_review_reason = "No ungraded assessments were detected, so use retrieval practice to keep core material fresh."
+        if target_grade is not None and current_grade is not None and target_grade > current_grade:
+            gap = round(target_grade - current_grade, 1)
+            course_review_reason = (
+                f"You are about {gap} points below your {target_grade:.1f}% target, so keep reviewing core material to stay ready for the next graded opportunity."
+            )
+        return [
+            {
+                "assessment_name": "General Course Review",
+                "assessment_type": "general",
+                "weight": 0.0,
+                "days_until_due": None,
+                "due_date": None,
+                "target_grade": target_grade,
+                "current_grade": current_grade,
+                "target_gap": round(max((target_grade or 0) - (current_grade or 0), 0), 1)
+                if target_grade is not None and current_grade is not None
+                else None,
+                "weakest_area": weakest_graded,
+                "techniques": [
+                    {
+                        **_TECHNIQUE_DB["active_recall"],
+                        "reason": course_review_reason,
+                        "priority": "medium",
+                    },
+                    {
+                        **_TECHNIQUE_DB["spaced_repetition"],
+                        "reason": "Use spaced review to retain the most important course concepts over time.",
+                        "priority": "medium",
+                    },
+                    {
+                        **_TECHNIQUE_DB["pomodoro"],
+                        "reason": "Short focused sessions help rebuild momentum when there is no single urgent assessment driving the plan.",
+                        "priority": "low",
+                    },
+                ],
+            }
+        ]
+
+    normalized_deadlines: list[dict[str, Any]] = []
+    for item in deadlines:
+        title = (item.get("assessment_name") or item.get("title") or "Upcoming deadline").strip()
+        due_date = item.get("due_date")
+        days_left = _days_until(due_date)
+        normalized_deadlines.append(
+            {
+                "title": title,
+                "due_date": due_date,
+                "days_left": days_left,
+                "type": _classify_assessment_type(title),
+            }
+        )
+
+    normalized_deadlines.sort(
+        key=lambda item: item["days_left"] if item["days_left"] is not None else 10**9
+    )
+    nearest = normalized_deadlines[0]
+    days_left = nearest["days_left"]
+    target_gap = None
+    if target_grade is not None and current_grade is not None:
+        target_gap = round(max(target_grade - current_grade, 0), 1)
+
+    techniques: list[dict[str, Any]] = []
+    if days_left is not None and days_left <= 3:
+        techniques.append(
+            {
+                **_TECHNIQUE_DB["pareto_80_20"],
+                "reason": f"'{nearest['title']}' is due in {days_left} day(s) — focus only on the highest-yield material right now.",
+                "priority": "critical",
+            }
+        )
+        techniques.append(
+            {
+                **_TECHNIQUE_DB["pomodoro"],
+                "reason": "Use short, intense work blocks to finish preparation without burning out.",
+                "priority": "high",
+            }
+        )
+    elif days_left is not None and days_left <= 7:
+        techniques.append(
+            {
+                **_TECHNIQUE_DB["active_recall"],
+                "reason": f"'{nearest['title']}' is coming up in {days_left} days — rapid retrieval practice gives the best short-term payoff.",
+                "priority": "high",
+            }
+        )
+        techniques.append(
+            {
+                **_TECHNIQUE_DB["practice_problems"],
+                "reason": "Timed drills and worked examples are the fastest way to expose weak spots before the deadline.",
+                "priority": "medium",
+            }
+        )
+    else:
+        techniques.append(
+            {
+                **_TECHNIQUE_DB["spaced_repetition"],
+                "reason": "There is still enough runway to use spaced review instead of cramming.",
+                "priority": "medium",
+            }
+        )
+        techniques.append(
+            {
+                **_TECHNIQUE_DB["pomodoro"],
+                "reason": "Break the work into regular study blocks to build consistent progress.",
+                "priority": "low",
+            }
+        )
+
+    if nearest["type"] in {"exam", "quiz"}:
+        techniques.append(
+            {
+                **_TECHNIQUE_DB["active_recall"],
+                "reason": f"'{nearest['title']}' looks assessment-heavy, so self-testing should be a core part of prep.",
+                "priority": "high",
+            }
+        )
+    elif nearest["type"] in {"assignment", "project", "presentation"}:
+        techniques.append(
+            {
+                **_TECHNIQUE_DB["feynman_technique"],
+                "reason": f"'{nearest['title']}' likely rewards explanation and understanding more than memorisation.",
+                "priority": "high",
+            }
+        )
+
+    if target_gap is not None and target_gap >= 5:
+        techniques.append(
+            {
+                **_TECHNIQUE_DB["pareto_80_20"],
+                "reason": f"You are roughly {target_gap} points below your target, so prioritise only the highest-yield tasks tied to '{nearest['title']}'.",
+                "priority": "high" if target_gap < 12 else "critical",
+            }
+        )
+
+    if weakest_graded is not None:
+        techniques.append(
+            {
+                **_TECHNIQUE_DB["active_recall"],
+                "reason": f"Your weakest completed area so far was {weakest_graded['name']} ({weakest_graded['percent']}%), so revisit those mistakes before the next deadline.",
+                "priority": "medium",
+            }
+        )
+    unique_techniques = _merge_unique_techniques(techniques)
+
+    return [
+        {
+            "assessment_name": nearest["title"],
+            "assessment_type": nearest["type"],
+            "weight": 0.0,
+            "days_until_due": nearest["days_left"],
+            "due_date": nearest["due_date"],
+            "target_grade": target_grade,
+            "current_grade": current_grade,
+            "target_gap": target_gap,
+            "weakest_area": weakest_graded,
+            "techniques": unique_techniques,
+        }
+    ]
+
+
 def suggest_learning_strategies(
     course: CourseCreate,
     deadlines: list[dict[str, Any]] | None = None,
+    target_grade: float | None = None,
+    current_grade: float | None = None,
 ) -> list[dict[str, Any]]:
     """
     Return per-assessment learning technique suggestions based on:
@@ -335,6 +567,14 @@ def suggest_learning_strategies(
             ddate = d.get("due_date")
             if aname and ddate:
                 deadline_map[aname.lower()] = ddate
+
+    if current_grade is None:
+        current_grade = round(calculate_course_totals(course)["final_total"], 2)
+
+    weakest_graded = _summarise_weakest_graded_assessment(course)
+    target_gap = None
+    if target_grade is not None:
+        target_gap = round(max(target_grade - current_grade, 0), 1)
 
     suggestions: list[dict[str, Any]] = []
 
@@ -354,6 +594,14 @@ def suggest_learning_strategies(
                 **_TECHNIQUE_DB["pareto_80_20"],
                 "reason": f"High weight ({a.weight}%) — focus on highest-yield topics first.",
                 "priority": "high",
+            })
+
+        if target_gap is not None and target_gap >= 5:
+            pressure_priority = "critical" if target_gap >= 12 and a.weight >= 20 else "high"
+            techniques.append({
+                **_TECHNIQUE_DB["pareto_80_20"],
+                "reason": f"You are about {target_gap} points below your {target_grade:.1f}% target, so '{a.name}' is a strong place to recover marks.",
+                "priority": pressure_priority,
             })
 
         # ── Type-based suggestions ──
@@ -380,6 +628,23 @@ def suggest_learning_strategies(
                 "reason": "Explaining concepts simply is the core of a good presentation.",
                 "priority": "high",
             })
+
+        if weakest_graded is not None:
+            weakest_reason = (
+                f"Your weakest completed assessment so far was {weakest_graded['name']} ({weakest_graded['percent']}%), so use '{a.name}' to correct that pattern early."
+            )
+            if atype in ("exam", "quiz") or weakest_graded["type"] in ("exam", "quiz"):
+                techniques.append({
+                    **_TECHNIQUE_DB["active_recall"],
+                    "reason": weakest_reason,
+                    "priority": "high" if weakest_graded["percent"] < 70 else "medium",
+                })
+            else:
+                techniques.append({
+                    **_TECHNIQUE_DB["feynman_technique"],
+                    "reason": weakest_reason,
+                    "priority": "medium",
+                })
 
         # ── Time-based suggestions ──
         if days_left is not None:
@@ -421,13 +686,7 @@ def suggest_learning_strategies(
                 "priority": "low",
             })
 
-        # De-duplicate by technique name (keep highest priority)
-        seen: set[str] = set()
-        unique_techniques: list[dict[str, Any]] = []
-        for t in techniques:
-            if t["name"] not in seen:
-                seen.add(t["name"])
-                unique_techniques.append(t)
+        unique_techniques = _merge_unique_techniques(techniques)
 
         suggestions.append({
             "assessment_name": a.name,
@@ -435,7 +694,27 @@ def suggest_learning_strategies(
             "weight": a.weight,
             "days_until_due": days_left,
             "due_date": due_date_str,
+            "target_grade": target_grade,
+            "current_grade": current_grade,
+            "target_gap": target_gap,
+            "weakest_area": weakest_graded,
             "techniques": unique_techniques,
         })
 
-    return suggestions
+    if suggestions:
+        return sorted(
+            suggestions,
+            key=lambda item: (
+                item["days_until_due"] is None,
+                item["days_until_due"] if item["days_until_due"] is not None else 10**9,
+                -item["weight"],
+                item["assessment_name"].lower(),
+            ),
+        )
+
+    return _build_deadline_fallback_suggestions(
+        deadlines,
+        target_grade=target_grade,
+        current_grade=current_grade,
+        weakest_graded=weakest_graded,
+    )

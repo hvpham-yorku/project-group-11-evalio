@@ -82,3 +82,7 @@ class DeadlineExportResponse(BaseModel):
 class GoogleAuthUrlResponse(BaseModel):
     authorization_url: str
     state: str
+
+
+class GoogleConnectionStatusResponse(BaseModel):
+    connected: bool

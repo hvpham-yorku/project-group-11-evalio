@@ -188,6 +188,28 @@ class TestLearningStrategies:
         assert suggestions[0]["days_until_due"] is not None
         assert suggestions[0]["days_until_due"] > 0
 
+    def test_all_graded_falls_back_to_deadline_strategy(self):
+        course = _make_course([
+            {"name": "Midterm", "weight": 40, "raw_score": 80, "total_score": 100},
+        ])
+        deadlines = [
+            {"title": "Final Exam", "due_date": "2099-01-01"},
+        ]
+
+        suggestions = suggest_learning_strategies(course, deadlines)
+
+        assert len(suggestions) == 1
+        assert suggestions[0]["assessment_name"] == "Final Exam"
+        assert suggestions[0]["techniques"]
+
+    def test_empty_course_gets_general_review_strategy(self):
+        course = _make_course([])
+
+        suggestions = suggest_learning_strategies(course)
+
+        assert len(suggestions) == 1
+        assert suggestions[0]["assessment_name"] == "General Course Review"
+
 
 # ─── Dashboard Endpoint Integration ──────────────────────────────────────────
 
@@ -237,3 +259,20 @@ class TestDashboardEndpoints:
         assert resp.status_code == 200
         data = resp.json()
         assert "suggestions" in data
+
+    def test_strategies_endpoint_uses_saved_target(self, auth_client):
+        r = self._create_course(auth_client)
+        course_id = r.json()["course_id"]
+
+        target_resp = auth_client.post(
+            f"/courses/{course_id}/target",
+            json={"target": 85},
+        )
+        assert target_resp.status_code == 200
+
+        resp = auth_client.get(f"/courses/{course_id}/dashboard/strategies")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["suggestions"]
+        assert data["suggestions"][0]["target_grade"] == 85
+        assert data["suggestions"][0]["target_gap"] is not None

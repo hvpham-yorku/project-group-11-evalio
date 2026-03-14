@@ -175,6 +175,15 @@ export type LearningStrategySuggestion = {
   weight: number;
   days_until_due?: number | null;
   due_date?: string | null;
+  target_grade?: number | null;
+  current_grade?: number | null;
+  target_gap?: number | null;
+  weakest_area?: {
+    name: string;
+    percent: number;
+    type: string;
+    weight: number;
+  } | null;
   techniques: LearningStrategyTechnique[];
 };
 
@@ -558,6 +567,10 @@ export type GoogleAuthUrlResponse = {
   state: string;
 };
 
+export type GoogleCalendarStatusResponse = {
+  connected: boolean;
+};
+
 export type DeadlineExportResponse = {
   exported_count: number;
   skipped_duplicates: number;
@@ -613,6 +626,10 @@ export function deleteDeadline(courseId: string, deadlineId: string) {
 
 export function getGoogleAuthUrl() {
   return request("/deadlines/google/authorize") as Promise<GoogleAuthUrlResponse>;
+}
+
+export function getGoogleCalendarStatus() {
+  return request("/deadlines/google/status") as Promise<GoogleCalendarStatusResponse>;
 }
 
 export function exchangeGoogleCode(code: string, state: string) {

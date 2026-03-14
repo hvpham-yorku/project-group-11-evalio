@@ -5,7 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.dependencies import get_course_service, get_current_user
+from app.dependencies import get_course_service, get_current_user, get_grade_target_repo
+from app.repositories.base import GradeTargetRepository
 from app.models import CourseCreate
 from app.services.auth_service import AuthenticatedUser
 from app.services.course_service import (
@@ -160,14 +161,21 @@ def check_target_feasibility(
     course_id: UUID,
     payload: TargetGradeRequest,
     service: CourseService = Depends(get_course_service),
+    grade_target_repo: GradeTargetRepository = Depends(get_grade_target_repo),
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
     try:
-        return service.check_target_feasibility(
+        result = service.check_target_feasibility(
             user_id=current_user.user_id,
             course_id=course_id,
             target=payload.target,
         )
+        grade_target_repo.set_target(
+            user_id=current_user.user_id,
+            course_id=course_id,
+            target_percentage=payload.target,
+        )
+        return result
     except CourseNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

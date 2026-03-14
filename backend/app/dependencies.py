@@ -155,7 +155,7 @@ _grade_target_repo = _build_grade_target_repo()
 _course_service = CourseService(_course_repo)
 _auth_service = AuthService(_user_repo)
 _extraction_service = ExtractionService()
-_deadline_service = DeadlineService(_deadline_repo)
+_deadline_service = DeadlineService(_deadline_repo, _calendar_repo)
 _scenario_service = ScenarioService(_scenario_repo, _course_service)
 
 

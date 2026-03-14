@@ -14,7 +14,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from app.dependencies import get_course_service, get_current_user
+from app.dependencies import get_course_service, get_current_user, get_grade_target_repo
+from app.repositories.base import GradeTargetRepository
 from app.services.auth_service import AuthenticatedUser
 from app.services.course_service import CourseNotFoundError, CourseService
 from app.services.strategy_service import (
@@ -94,6 +95,7 @@ def multi_whatif(
 def get_strategies(
     course_id: UUID,
     service: CourseService = Depends(get_course_service),
+    grade_target_repo: GradeTargetRepository = Depends(get_grade_target_repo),
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
     """
@@ -119,7 +121,20 @@ def get_strategies(
     except Exception:
         raw_deadlines = None
 
+    target_record = grade_target_repo.get_target(current_user.user_id, course_id)
+    boundaries = compute_grade_boundaries(stored.course)
+    current_grade = (
+        boundaries["current_normalised"]
+        if boundaries.get("normalisation_applied")
+        else boundaries["current_grade"]
+    )
+
     return {
         "course_name": stored.course.name,
-        "suggestions": suggest_learning_strategies(stored.course, raw_deadlines),
+        "suggestions": suggest_learning_strategies(
+            stored.course,
+            raw_deadlines,
+            target_grade=target_record.target_percentage if target_record else None,
+            current_grade=current_grade,
+        ),
     }

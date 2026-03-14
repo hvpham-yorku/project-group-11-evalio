@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from app.models import CourseCreate
@@ -155,7 +155,7 @@ class CalendarConnectionRepository(Protocol):
         user_id: UUID,
         provider: str,
         access_token: str,
-        refresh_token: str,
+        refresh_token: str | None,
         token_expiry: datetime | None = None,
         calendar_id: str | None = None,
     ) -> StoredCalendarConnection:
@@ -172,9 +172,12 @@ class CalendarConnectionRepository(Protocol):
         user_id: UUID,
         provider: str,
         access_token: str,
-        refresh_token: str,
+        refresh_token: str | None,
         token_expiry: datetime | None = None,
     ) -> StoredCalendarConnection | None:
+        ...
+
+    def get_tokens(self, user_id: UUID, provider: str) -> dict[str, Any] | None:
         ...
 
     def disconnect(self, user_id: UUID, provider: str) -> bool:
