@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -41,6 +42,11 @@ app.include_router(gpa_router)
 app.include_router(dashboard_router)
 app.include_router(deadlines_router)
 app.include_router(scenarios_router)
+
+_persistence_mode = (
+    "postgres" if os.getenv("USE_POSTGRES", "").strip().lower() in {"1", "true", "yes", "on"} else "in-memory"
+)
+print(f"[evalio] persistence_mode={_persistence_mode}", flush=True)
 
 @app.get("/health")
 def health():

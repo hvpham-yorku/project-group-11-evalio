@@ -34,7 +34,7 @@ def _is_truthy_env(value: str | None) -> bool:
 def _allow_postgres_fallback() -> bool:
     raw = os.getenv("POSTGRES_FALLBACK_TO_MEMORY")
     if raw is None:
-        return True
+        return False
     return _is_truthy_env(raw)
 
 

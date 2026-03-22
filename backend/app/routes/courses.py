@@ -180,6 +180,52 @@ def check_target_feasibility(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.get("/{course_id}/target")
+def get_saved_target(
+    course_id: UUID,
+    service: CourseService = Depends(get_course_service),
+    grade_target_repo: GradeTargetRepository = Depends(get_grade_target_repo),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
+    try:
+        service.get_course(user_id=current_user.user_id, course_id=course_id)
+    except CourseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    record = grade_target_repo.get_target(
+        user_id=current_user.user_id,
+        course_id=course_id,
+    )
+    if record is None or record.target_percentage is None:
+        raise HTTPException(status_code=404, detail="No target set for this course")
+
+    return {
+        "course_id": str(record.course_id),
+        "target_percentage": float(record.target_percentage),
+        "created_at": record.created_at.isoformat(),
+    }
+
+
+@router.delete("/{course_id}/target", status_code=204)
+def delete_saved_target(
+    course_id: UUID,
+    service: CourseService = Depends(get_course_service),
+    grade_target_repo: GradeTargetRepository = Depends(get_grade_target_repo),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
+    try:
+        service.get_course(user_id=current_user.user_id, course_id=course_id)
+    except CourseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    deleted = grade_target_repo.delete_target(
+        user_id=current_user.user_id,
+        course_id=course_id,
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="No target set for this course")
+
+
 @router.post("/{course_id}/minimum-required")
 def get_minimum_required_score(
     course_id: UUID,
