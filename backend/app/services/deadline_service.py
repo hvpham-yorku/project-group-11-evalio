@@ -409,6 +409,10 @@ class GoogleCalendarError(Exception):
     pass
 
 
+class DeadlineValidationError(Exception):
+    pass
+
+
 def get_google_auth_url(state: str = "") -> dict[str, str]:
     """Return the Google OAuth2 consent URL.  Raises if not configured."""
     if not google_calendar_configured():
@@ -552,7 +556,7 @@ class DeadlineService:
         return self._repo.create(user_id, course_id, data)
 
     def list_deadlines(self, user_id: UUID, course_id: UUID) -> list[Deadline]:
-        return self._repo.list_all(user_id, course_id)
+        return self._sort_deadlines(self._repo.list_all(user_id, course_id))
 
     def get_deadline(
         self, user_id: UUID, course_id: UUID, deadline_id: UUID
@@ -579,7 +583,17 @@ class DeadlineService:
     ) -> list[Deadline]:
         """Save a batch of extracted deadline dicts to the repo."""
         created: list[Deadline] = []
+        seen_keys: set[tuple[str, str, str | None, str | None]] = set()
         for raw in raw_deadlines:
+            dedupe_key = (
+                str(raw.get("title", "Untitled")).strip().casefold(),
+                str(raw.get("due_date", date.today().isoformat())).strip(),
+                raw.get("due_time"),
+                raw.get("assessment_name"),
+            )
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
             dl_create = DeadlineCreate(
                 title=raw.get("title", "Untitled"),
                 deadline_type=raw.get("deadline_type"),
@@ -603,10 +617,11 @@ class DeadlineService:
         min_grade_info: dict[str, Any] | None = None,
     ) -> str:
         """Generate .ics content for selected (or all) deadlines."""
-        all_dls = self._repo.list_all(user_id, course_id)
-        if deadline_ids is not None:
-            id_set = set(deadline_ids)
-            all_dls = [d for d in all_dls if d.deadline_id in id_set]
+        all_dls = self._select_deadlines(
+            user_id=user_id,
+            course_id=course_id,
+            deadline_ids=deadline_ids,
+        )
         return generate_ics(all_dls, course_name, min_grade_info)
 
     # ── Google Calendar Export ──
@@ -682,10 +697,11 @@ class DeadlineService:
                 "No Google access token found. Complete OAuth flow first."
             )
 
-        all_dls = self._repo.list_all(user_id, course_id)
-        if deadline_ids is not None:
-            id_set = set(deadline_ids)
-            all_dls = [d for d in all_dls if d.deadline_id in id_set]
+        all_dls = self._select_deadlines(
+            user_id=user_id,
+            course_id=course_id,
+            deadline_ids=deadline_ids,
+        )
 
         exported = 0
         skipped = 0
@@ -731,3 +747,38 @@ class DeadlineService:
             "skipped_duplicates": skipped,
             "events": events,
         }
+
+    def _select_deadlines(
+        self,
+        *,
+        user_id: UUID,
+        course_id: UUID,
+        deadline_ids: list[UUID] | None,
+    ) -> list[Deadline]:
+        all_deadlines = self.list_deadlines(user_id, course_id)
+        if deadline_ids is None:
+            return all_deadlines
+
+        requested_ids = list(dict.fromkeys(deadline_ids))
+        deadline_lookup = {deadline.deadline_id: deadline for deadline in all_deadlines}
+        missing_ids = [str(deadline_id) for deadline_id in requested_ids if deadline_id not in deadline_lookup]
+        if missing_ids:
+            raise DeadlineValidationError(
+                "One or more selected deadlines were not found for this course: "
+                + ", ".join(missing_ids)
+            )
+
+        return [deadline_lookup[deadline_id] for deadline_id in requested_ids]
+
+    @staticmethod
+    def _sort_deadlines(deadlines: list[Deadline]) -> list[Deadline]:
+        def _sort_key(deadline: Deadline) -> tuple[str, str, str, str]:
+            due_time = deadline.due_time or "23:59"
+            return (
+                deadline.due_date,
+                due_time,
+                deadline.title.casefold(),
+                str(deadline.deadline_id),
+            )
+
+        return sorted(deadlines, key=_sort_key)

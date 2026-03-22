@@ -48,6 +48,7 @@ from app.repositories.base import UserRepository
 from app.services.auth_service import AuthService, AuthenticatedUser, AuthenticationError
 from app.services.course_service import CourseNotFoundError, CourseService
 from app.services.deadline_service import (
+    DeadlineValidationError,
     DeadlineService,
     GoogleCalendarError,
     extract_deadlines_from_text,
@@ -291,13 +292,16 @@ def export_ics(
     Works with Google Calendar, Apple Calendar, Outlook, etc.
     """
     stored = _ensure_course_exists(course_service, current_user.user_id, course_id)
-    ics_content = dl_service.export_ics(
-        user_id=current_user.user_id,
-        course_id=course_id,
-        course_name=stored.course.name,
-        deadline_ids=payload.deadline_ids,
-        min_grade_info=payload.min_grade_info,
-    )
+    try:
+        ics_content = dl_service.export_ics(
+            user_id=current_user.user_id,
+            course_id=course_id,
+            course_name=stored.course.name,
+            deadline_ids=payload.deadline_ids,
+            min_grade_info=payload.min_grade_info,
+        )
+    except DeadlineValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return Response(
         content=ics_content,
         media_type="text/calendar",
@@ -415,6 +419,8 @@ def export_to_google_calendar(
         )
     except GoogleCalendarError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except DeadlineValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return DeadlineExportResponse(
         exported_count=result["exported_count"],

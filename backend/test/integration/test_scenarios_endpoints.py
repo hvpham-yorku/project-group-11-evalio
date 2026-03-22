@@ -117,6 +117,46 @@ def test_scenario_validation_assessment_not_found(auth_client):
     assert "not found in course" in r.json()["detail"]
 
 
+def test_scenario_validation_rejects_already_graded_assessment(auth_client):
+    course_id = _create_course(auth_client)
+
+    grade_response = auth_client.put(
+        f"/courses/{course_id}/grades",
+        json={"assessments": [{"name": "A1", "raw_score": 80, "total_score": 100}]},
+    )
+    assert grade_response.status_code == 200
+
+    payload = {
+        "name": "Unsafe scenario",
+        "scenarios": [{"assessment_name": "A1", "score": 95}],
+    }
+    response = auth_client.post(f"/courses/{course_id}/scenarios", json=payload)
+    assert response.status_code == 400
+    assert "already graded" in response.json()["detail"]
+
+
+def test_run_saved_scenario_returns_simulation_safety_metadata(auth_client):
+    course_id = _create_course(auth_client)
+
+    created = auth_client.post(
+        f"/courses/{course_id}/scenarios",
+        json={
+            "name": "Final 92",
+            "scenarios": [{"assessment_name": "Final", "score": 92}],
+        },
+    )
+    assert created.status_code == 200
+    scenario_id = created.json()["scenario"]["scenario_id"]
+
+    run = auth_client.get(f"/courses/{course_id}/scenarios/{scenario_id}/run")
+    assert run.status_code == 200
+    body = run.json()
+
+    assert body["execution_mode"] == "simulation"
+    assert body["mutates_real_grades"] is False
+    assert body["persistence"]["supported"] is False
+
+
 def test_scenario_score_out_of_range_rejected_by_schema(auth_client):
     course_id = _create_course(auth_client)
 

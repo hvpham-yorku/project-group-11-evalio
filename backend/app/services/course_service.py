@@ -52,6 +52,9 @@ class CourseService:
             for stored in stored_courses
         ]
 
+    def list_stored_courses(self, user_id: UUID) -> list[StoredCourse]:
+        return self._repository.list_all(user_id=user_id)
+
     def update_course_weights(self, user_id: UUID, course_id: UUID, assessments: list[dict]) -> dict:
         if not assessments:
             raise CourseValidationError("At least one assessment weight update is required")
@@ -337,9 +340,6 @@ class CourseService:
         except ValueError as exc:
             raise CourseValidationError(str(exc)) from exc
         return {"course_id": course_id, **result}
-
-    def get_course(self, user_id: UUID, course_id: UUID) -> StoredCourse:
-        return self._get_course_or_raise(user_id=user_id, course_id=course_id)
 
     def _get_course_or_raise(self, user_id: UUID, course_id: UUID) -> StoredCourse:
         stored = self._repository.get_by_id(user_id=user_id, course_id=course_id)

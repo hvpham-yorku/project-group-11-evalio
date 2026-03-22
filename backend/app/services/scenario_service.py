@@ -8,6 +8,7 @@ from app.services.course_service import (
     CourseService,
     CourseValidationError,
 )
+from app.services.grading_service import _is_assessment_fully_graded
 from app.services.strategy_service import compute_multi_whatif
 
 
@@ -44,6 +45,9 @@ class ScenarioService:
         top_level_assessment_names = {
             assessment.name for assessment in stored_course.course.assessments
         }
+        assessments_by_name = {
+            assessment.name: assessment for assessment in stored_course.course.assessments
+        }
 
         seen_names: set[str] = set()
         normalized_entries: list[StoredScenarioEntry] = []
@@ -59,6 +63,10 @@ class ScenarioService:
             if assessment_name not in top_level_assessment_names:
                 raise ScenarioValidationError(
                     f"Assessment '{assessment_name}' not found in course"
+                )
+            if _is_assessment_fully_graded(assessments_by_name[assessment_name]):
+                raise ScenarioValidationError(
+                    f"Assessment '{assessment_name}' is already graded and cannot be simulated"
                 )
 
             score = entry.get("score")
@@ -184,6 +192,12 @@ class ScenarioService:
         return {
             "scenario": self._to_dict(scenario),
             "result": result,
+            "execution_mode": "simulation",
+            "mutates_real_grades": False,
+            "persistence": {
+                "supported": False,
+                "reason": "Saved scenarios are read-only previews and do not update stored grades.",
+            },
         }
 
     @staticmethod

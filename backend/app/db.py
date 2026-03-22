@@ -23,7 +23,21 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/evalio"
 )
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+def _build_engine():
+    engine_kwargs: dict[str, object] = {"pool_pre_ping": True}
+
+    if DATABASE_URL.startswith("postgresql"):
+        raw_timeout = os.getenv("POSTGRES_CONNECT_TIMEOUT_SECONDS", "3")
+        try:
+            connect_timeout = max(1, int(raw_timeout))
+        except ValueError:
+            connect_timeout = 3
+        engine_kwargs["connect_args"] = {"connect_timeout": connect_timeout}
+
+    return create_engine(DATABASE_URL, **engine_kwargs)
+
+
+engine = _build_engine()
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 

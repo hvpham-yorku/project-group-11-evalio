@@ -28,6 +28,8 @@ from app.services.grading_service import (
     compute_assessment_contribution,
     fill_remaining_ungraded_scores,
     _is_assessment_fully_graded,
+    _is_target_fully_graded,
+    _target_label,
     calculate_assessment_percent,
     get_york_grade,
     resolve_assessment_target,
@@ -155,8 +157,16 @@ def compute_multi_whatif(
         score = float(scenario.get("score", 0.0))
         if not name:
             continue
-        resolve_assessment_target(course, name)
-        scenario_map[name] = max(0.0, min(100.0, score))
+        target_assessment, target_child = resolve_assessment_target(course, name)
+        if _is_target_fully_graded(target_assessment, target_child):
+            raise ValueError(f"Assessment '{name}' is already graded")
+        target_path = _target_label(
+            target_assessment.name,
+            target_child.name if target_child is not None else None,
+        )
+        if target_path in scenario_map:
+            raise ValueError(f"Duplicate assessment '{target_path}' in scenario payload")
+        scenario_map[target_path] = max(0.0, min(100.0, score))
 
     projected_course = course.model_copy(deep=True)
     for assessment_name, score in scenario_map.items():

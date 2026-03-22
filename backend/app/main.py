@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -13,6 +12,7 @@ from app.routes.extraction import router as extraction_router
 from app.routes.gpa import router as gpa_router
 from app.routes.dashboard import router as dashboard_router
 from app.routes.deadlines import router as deadlines_router
+from app.routes.planning import router as planning_router
 from app.routes.scenarios import router as scenarios_router
 
 app = FastAPI(title="Evalio API", version="0.1.0")
@@ -41,12 +41,8 @@ app.include_router(extraction_router)
 app.include_router(gpa_router)
 app.include_router(dashboard_router)
 app.include_router(deadlines_router)
+app.include_router(planning_router)
 app.include_router(scenarios_router)
-
-_persistence_mode = (
-    "postgres" if os.getenv("USE_POSTGRES", "").strip().lower() in {"1", "true", "yes", "on"} else "in-memory"
-)
-print(f"[evalio] persistence_mode={_persistence_mode}", flush=True)
 
 @app.get("/health")
 def health():

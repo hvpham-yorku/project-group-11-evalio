@@ -297,6 +297,17 @@ class TestDashboardEndpoints:
         data = resp.json()
         assert data["projected_grade"] == 79.0
 
+    def test_multi_whatif_endpoint_rejects_already_graded_assessment(self, auth_client):
+        r = self._create_course(auth_client)
+        course_id = r.json()["course_id"]
+
+        resp = auth_client.post(
+            f"/courses/{course_id}/dashboard/whatif",
+            json={"scenarios": [{"assessment_name": "Midterm", "score": 95}]},
+        )
+        assert resp.status_code == 400
+        assert "already graded" in resp.json()["detail"]
+
     def test_strategies_endpoint(self, auth_client):
         r = self._create_course(auth_client)
         course_id = r.json()["course_id"]

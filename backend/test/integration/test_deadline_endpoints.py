@@ -319,6 +319,21 @@ class TestDeadlineEndpoints:
         assert "BEGIN:VCALENDAR" in r.text
         assert r.headers["content-type"] == "text/calendar; charset=utf-8"
 
+    def test_export_rejects_unknown_selected_deadline(self, auth_client):
+        course_id = self._create_course(auth_client)
+        auth_client.post(
+            f"/courses/{course_id}/deadlines",
+            json={"title": "Final Exam", "due_date": "2026-04-15"},
+        )
+
+        response = auth_client.post(
+            f"/courses/{course_id}/deadlines/export/ics",
+            json={"deadline_ids": [str(uuid4())]},
+        )
+
+        assert response.status_code == 400
+        assert "not found for this course" in response.json()["detail"]
+
     def test_google_authorize_unconfigured(self, auth_client, monkeypatch):
         def _raise(state: str = ""):
             raise deadline_routes.GoogleCalendarError(

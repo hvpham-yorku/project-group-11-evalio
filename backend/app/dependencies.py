@@ -22,6 +22,7 @@ from app.services.auth_service import AuthService, AuthenticatedUser, Authentica
 from app.services.course_service import CourseService
 from app.services.deadline_service import DeadlineService
 from app.services.extraction_service import ExtractionService
+from app.services.planning_service import PlanningService
 from app.services.scenario_service import ScenarioService
 
 
@@ -34,7 +35,7 @@ def _is_truthy_env(value: str | None) -> bool:
 def _allow_postgres_fallback() -> bool:
     raw = os.getenv("POSTGRES_FALLBACK_TO_MEMORY")
     if raw is None:
-        return False
+        return True
     return _is_truthy_env(raw)
 
 
@@ -157,6 +158,11 @@ _auth_service = AuthService(_user_repo)
 _extraction_service = ExtractionService()
 _deadline_service = DeadlineService(_deadline_repo, _calendar_repo)
 _scenario_service = ScenarioService(_scenario_repo, _course_service)
+_planning_service = PlanningService(
+    _course_service,
+    _deadline_service,
+    _grade_target_repo,
+)
 
 
 def get_course_repo() -> CourseRepository:
@@ -193,6 +199,10 @@ def get_scenario_repo() -> ScenarioRepository:
 
 def get_scenario_service() -> ScenarioService:
     return _scenario_service
+
+
+def get_planning_service() -> PlanningService:
+    return _planning_service
 
 
 def get_calendar_repo() -> CalendarConnectionRepository:
