@@ -1211,3 +1211,71 @@ The team successfully delivered:
 Overall, Iteration 2 introduced significantly more architectural complexity than Iteration 1, especially through persistence, extraction, authentication, and multi-feature integration. Despite this, the main ITR2 goals were completed and the project progressed toward a more realistic end-to-end system.
 
 The system is now substantially more complete than in ITR1, with stronger persistence, richer workflows, and better support for real student planning across multiple sessions and multiple courses.
+
+# Iteration 3 Log (ITR3)
+
+## 3. Task Assignment & Work Breakdown (ITR3)
+
+### ITR3-1 — Returning User Smart Resume + Persistent Course State
+
+([SCRUM-139](https://rimaaa.atlassian.net/browse/SCRUM-139))
+
+**Story Owner:** Shivam Gupta  
+**Planned Effort:** 4–5 days  
+**Actual Effort:** In Progress
+
+#### Story Description
+
+As a returning student, I want Evalio to reopen into my saved academic workspace and dashboard, so that I can continue planning without repeating setup or losing course-specific goal state.
+
+#### Scope (ITR3)
+
+* Detect whether an authenticated user already has one or more saved courses.
+* Route returning users directly to the appropriate dashboard/workspace instead of forcing setup.
+* Persist and restore the active course selection.
+* Persist and restore target-grade state per course.
+* Ensure dashboard data loads consistently after refresh/relogin.
+* Make persistence behavior truthful and reliable for demo use.
+* Remove inconsistent target-state behavior caused by scattered localStorage handling.
+
+#### Out of Scope (Future Iterations)
+
+* Broader cross-device synchronization beyond the configured persistence mode.
+* Advanced profile/workspace personalization not required for resume correctness.
+* Non-essential UX refinements unrelated to resume-state correctness.
+
+#### Development Subtasks & Assignments
+
+1. DB: Target persistence and persistence-mode truthfulness  
+   * Assignee: Shivam ([SCRUM-142](https://rimaaa.atlassian.net/browse/SCRUM-142)) — **DONE**
+
+2. Backend: Persist and restore returning-user planning state  
+   * Assignee: Shivam ([SCRUM-141](https://rimaaa.atlassian.net/browse/SCRUM-141)) — **DONE**
+
+3. Frontend: Returning user dashboard resume flow  
+   * Assignee: Rima ([SCRUM-140](https://rimaaa.atlassian.net/browse/SCRUM-140)) — **TO DO**
+
+4. Testing: Integration and customer tests for resume flow  
+   * Assignee: Bardiya ([SCRUM-143](https://rimaaa.atlassian.net/browse/SCRUM-143)) — **TO DO**
+
+5. Docs: Update README/log/demo notes for truthful persistence behavior  
+   * Assignee: Shivam ([SCRUM-144](https://rimaaa.atlassian.net/browse/SCRUM-144)) — **TO DO**
+
+#### Acceptance Criteria
+
+* Authenticated users with existing courses are taken directly to the correct dashboard/workspace on login/revisit.
+* Authenticated users with no saved courses follow setup/new-course flow.
+* Selected/active course restores correctly after refresh/relogin.
+* Target grade is stored and restored correctly in a course-scoped way.
+* Switching between courses shows the correct saved target and course context.
+* Dashboard data loads correctly for the restored course without manual re-entry.
+* Conflicting global vs per-course localStorage target behavior is removed.
+* Persistence behavior is documented truthfully in README/log/demo notes.
+* At least one integration test covers resume behavior.
+* At least one customer/system test covers login → resume → course switch → refresh.
+
+#### Notes / Reflection
+
+* Backend and DB persistence-path hardening were completed first to make resume behavior trustworthy.
+* Frontend resume flow and system-test coverage remain tracked under dedicated subtasks.
+* Story progress is intentionally split by layer to keep ownership and validation clear.

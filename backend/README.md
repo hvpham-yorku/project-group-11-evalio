@@ -82,7 +82,7 @@ FILTER_DEBUG=1
 ```bash
 USE_POSTGRES=true
 DATABASE_URL=postgresql+psycopg://localhost:5432/evalio
-POSTGRES_FALLBACK_TO_MEMORY=true
+POSTGRES_FALLBACK_TO_MEMORY=false
 ```
 
 ## PostgreSQL Local Setup (Recommended)
@@ -201,6 +201,9 @@ All `/courses/*`, `/gpa/*`, `/dashboard/*`, `/deadlines/*`, and extraction endpo
 
 - Default mode uses in-memory repositories.
 - If `USE_POSTGRES=true`, courses/users/deadlines/scenarios use PostgreSQL repositories.
+- If `USE_POSTGRES=true` and Postgres is unavailable, startup fails by default.
+- Set `POSTGRES_FALLBACK_TO_MEMORY=true` only when fallback is intentionally desired.
+- On startup, backend logs the active mode as `[evalio] persistence_mode=postgres|in-memory`.
 
 ## Testing
 

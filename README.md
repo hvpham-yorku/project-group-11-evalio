@@ -38,6 +38,8 @@ Storage behavior today:
 
 - Default is in-memory repositories.
 - Optional PostgreSQL repositories can be enabled via `USE_POSTGRES=true` (courses, users, deadlines, scenarios).
+- When `USE_POSTGRES=true`, startup is fail-fast by default if Postgres is unavailable.
+- Set `POSTGRES_FALLBACK_TO_MEMORY=true` only if you explicitly want fallback behavior.
 
 ## Repository Layout
 
@@ -202,7 +204,7 @@ OPENAI_TIMEOUT_SECONDS=20
 ```bash
 USE_POSTGRES=true
 DATABASE_URL=postgresql+psycopg://localhost:5432/evalio
-POSTGRES_FALLBACK_TO_MEMORY=true
+POSTGRES_FALLBACK_TO_MEMORY=false
 FILTER_DEBUG=1
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
