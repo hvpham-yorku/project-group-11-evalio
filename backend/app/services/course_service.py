@@ -341,6 +341,9 @@ class CourseService:
             raise CourseValidationError(str(exc)) from exc
         return {"course_id": course_id, **result}
 
+    def get_course(self, user_id: UUID, course_id: UUID) -> StoredCourse:
+        return self._get_course_or_raise(user_id=user_id, course_id=course_id)
+
     def _get_course_or_raise(self, user_id: UUID, course_id: UUID) -> StoredCourse:
         stored = self._repository.get_by_id(user_id=user_id, course_id=course_id)
         if stored is None:
