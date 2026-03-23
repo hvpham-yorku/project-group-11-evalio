@@ -37,15 +37,16 @@ import {
 
 const DEFAULT_TARGET_GRADE = 85;
 const TARGET_STORAGE_KEY = "evalio_target_grade";
-const CONFIRMED_DEADLINES_KEY = "evalio_deadlines_confirmed_v1";
 const GPA_SCALES = ["4.0", "9.0", "10.0"] as const;
 const CHILD_ASSESSMENT_SEPARATOR = "::";
 
 type GpaScale = (typeof GPA_SCALES)[number];
 
-type AssessmentRow = {
+type AssessmentBreakdownRow = {
+  key: string;
   name: string;
   rowType: "graded" | "ungraded";
+  weight: number;
   weightLabel: string;
   neededLabel: string;
   needed: string;
@@ -53,12 +54,25 @@ type AssessmentRow = {
 };
 
 type AssessmentTarget = {
+  key: string;
   assessmentName: string;
   displayName: string;
   weight: number;
   isBonus: boolean;
   percent: number | null;
   graded: boolean;
+};
+
+type AssessmentTargetGroup = {
+  key: string;
+  parent: AssessmentTarget;
+  children: AssessmentTarget[];
+};
+
+type AssessmentBreakdownGroup = {
+  key: string;
+  parent: AssessmentBreakdownRow;
+  children: AssessmentBreakdownRow[];
 };
 
 type DashboardDeadline = {
@@ -133,14 +147,28 @@ function getPercent(assessment: CourseAssessment): number | null {
   return Math.max(0, Math.min(percent, 100));
 }
 
-function buildAssessmentTargets(assessments: CourseAssessment[]): AssessmentTarget[] {
-  const targets: AssessmentTarget[] = [];
+function buildAssessmentTargetGroups(
+  assessments: CourseAssessment[]
+): AssessmentTargetGroup[] {
+  const targets: AssessmentTargetGroup[] = [];
 
   for (const assessment of assessments) {
     const children = Array.isArray(assessment.children) ? assessment.children : [];
     const isBonus = Boolean(assessment.is_bonus);
+    const parentPercent = getPercent(assessment);
+
+    const parentTarget: AssessmentTarget = {
+      key: assessment.name,
+      assessmentName: assessment.name,
+      displayName: assessment.name,
+      weight: Number.isFinite(assessment.weight) ? assessment.weight : 0,
+      isBonus,
+      percent: parentPercent,
+      graded: parentPercent !== null,
+    };
 
     if (children.length) {
+      const childTargets: AssessmentTarget[] = [];
       for (const child of children) {
         const childHasGrade =
           typeof child.raw_score === "number" &&
@@ -150,7 +178,8 @@ function buildAssessmentTargets(assessments: CourseAssessment[]): AssessmentTarg
           ? Math.max(0, Math.min((child.raw_score! / child.total_score!) * 100, 100))
           : null;
 
-        targets.push({
+        childTargets.push({
+          key: `${assessment.name}${CHILD_ASSESSMENT_SEPARATOR}${child.name}`,
           assessmentName: `${assessment.name}${CHILD_ASSESSMENT_SEPARATOR}${child.name}`,
           displayName: `${assessment.name} — ${child.name}`,
           weight: Number.isFinite(child.weight) ? child.weight : 0,
@@ -159,17 +188,18 @@ function buildAssessmentTargets(assessments: CourseAssessment[]): AssessmentTarg
           graded: childHasGrade,
         });
       }
+      targets.push({
+        key: assessment.name,
+        parent: parentTarget,
+        children: childTargets,
+      });
       continue;
     }
 
-    const percent = getPercent(assessment);
     targets.push({
-      assessmentName: assessment.name,
-      displayName: assessment.name,
-      weight: Number.isFinite(assessment.weight) ? assessment.weight : 0,
-      isBonus,
-      percent,
-      graded: percent !== null,
+      key: assessment.name,
+      parent: parentTarget,
+      children: [],
     });
   }
 
@@ -182,15 +212,6 @@ function formatCompactNumber(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
-function safeParse<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
 function getDaysLeft(isoDate: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -199,49 +220,47 @@ function getDaysLeft(isoDate: string): number {
   return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function getBestOfEffectiveCount(assessment: CourseAssessment): number {
-  if (
-    typeof assessment.effective_count === "number" &&
-    assessment.effective_count > 0
-  ) {
-    return Math.max(1, Math.floor(assessment.effective_count));
+async function buildBreakdownRow(
+  courseId: string,
+  target: number,
+  assessment: AssessmentTarget
+): Promise<AssessmentBreakdownRow> {
+  const actualPercent = assessment.percent;
+  if (actualPercent !== null) {
+    const contributionPoints = (actualPercent * assessment.weight) / 100;
+    return {
+      key: assessment.key,
+      name: assessment.displayName,
+      rowType: "graded",
+      weight: assessment.weight,
+      weightLabel: `${assessment.weight}% of final grade`,
+      neededLabel: "Actual Performance",
+      needed: `${actualPercent.toFixed(1)}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
+        assessment.weight
+      )})`,
+      contrib: `+${contributionPoints.toFixed(2)}%`,
+    };
   }
-  const config = assessment.rule_config ?? {};
-  const bestCountRaw =
-    typeof config.best_count === "number"
-      ? config.best_count
-      : typeof config.best === "number"
-      ? config.best
-      : null;
-  if (typeof bestCountRaw === "number" && bestCountRaw > 0) {
-    return Math.max(1, Math.floor(bestCountRaw));
-  }
-  return 1;
-}
 
-function getEffectiveWeight(assessment: CourseAssessment): number {
-  const parentWeight = Number.isFinite(assessment.weight)
-    ? Math.max(0, assessment.weight)
-    : 0;
-  if (assessment.rule_type !== "best_of") return parentWeight;
-  const children = Array.isArray(assessment.children)
-    ? assessment.children
-    : [];
-  if (!children.length) return parentWeight;
-  const effectiveCount = Math.min(
-    getBestOfEffectiveCount(assessment),
-    children.length
-  );
-  if (effectiveCount <= 0) return parentWeight;
-  const topWeightSum = [...children]
-    .map((child) =>
-      Number.isFinite(child.weight) ? Math.max(0, child.weight) : 0
-    )
-    .sort((a, b) => b - a)
-    .slice(0, effectiveCount)
-    .reduce((sum, value) => sum + value, 0);
-  if (!Number.isFinite(topWeightSum) || topWeightSum <= 0) return parentWeight;
-  return Math.min(parentWeight, topWeightSum);
+  const minimum = await getMinimumRequired(courseId, {
+    target,
+    assessment_name: assessment.assessmentName,
+  });
+  const percentValue = minimum.minimum_required;
+  const contributionPoints = (percentValue * assessment.weight) / 100;
+
+  return {
+    key: assessment.key,
+    name: assessment.displayName,
+    rowType: "ungraded",
+    weight: assessment.weight,
+    weightLabel: `${assessment.weight}% of final grade`,
+    neededLabel: "Minimum Needed",
+    needed: `${percentValue.toFixed(1)}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
+      assessment.weight
+    )})`,
+    contrib: `+${contributionPoints.toFixed(2)}%`,
+  };
 }
 
 function normalizeTermKey(term?: string | null): string {
@@ -275,7 +294,12 @@ export function Dashboard() {
   const [targetResult, setTargetResult] = useState<TargetCheckResponse | null>(
     null
   );
-  const [assessments, setAssessments] = useState<AssessmentRow[]>([]);
+  const [assessmentGroups, setAssessmentGroups] = useState<
+    AssessmentBreakdownGroup[]
+  >([]);
+  const [expandedAssessments, setExpandedAssessments] = useState<
+    Record<string, boolean>
+  >({});
   const [gradedWeight, setGradedWeight] = useState(0);
   const [currentContribution, setCurrentContribution] = useState(0);
   const [targetGrade, setTargetGrade] = useState(DEFAULT_TARGET_GRADE);
@@ -319,7 +343,8 @@ export function Dashboard() {
         setActiveCourseId(resolvedCourseId);
         if (!resolvedCourseId) {
           setError("No course found. Complete setup first.");
-          setAssessments([]);
+          setAssessmentGroups([]);
+          setExpandedAssessments({});
           setTargetResult(null);
           setDashboardSummary(null);
           setWhatIfResult(null);
@@ -336,7 +361,8 @@ export function Dashboard() {
         ) as Course | undefined;
         if (!latest) {
           setError("No course found. Complete setup first.");
-          setAssessments([]);
+          setAssessmentGroups([]);
+          setExpandedAssessments({});
           setTargetResult(null);
           setDashboardSummary(null);
           setWhatIfResult(null);
@@ -356,7 +382,9 @@ export function Dashboard() {
           );
           return grouped.length ? grouped : [latest];
         })();
-        const assessmentTargets = buildAssessmentTargets(latest.assessments);
+        const assessmentTargetGroups = buildAssessmentTargetGroups(
+          latest.assessments
+        );
 
         const [
           target,
@@ -372,46 +400,22 @@ export function Dashboard() {
               target: resolvedTarget,
             }),
             Promise.all(
-              assessmentTargets.map(async (assessment) => {
-                const actualPercent = assessment.percent;
-                if (actualPercent !== null) {
-                  const percentValue = actualPercent;
-                  const contributionPoints =
-                    (percentValue * assessment.weight) / 100;
-                  return {
-                    name: assessment.displayName,
-                    rowType: "graded",
-                    weightLabel: `${assessment.weight}% of final grade`,
-                    neededLabel: "Actual Performance",
-                    needed: `${percentValue.toFixed(
-                      1
-                    )}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
-                      assessment.weight
-                    )})`,
-                    contrib: `+${contributionPoints.toFixed(2)}%`,
-                  } satisfies AssessmentRow;
-                }
-
-                const minimum = await getMinimumRequired(resolvedCourseId, {
-                  target: resolvedTarget,
-                  assessment_name: assessment.assessmentName,
-                });
-                const percentValue = minimum.minimum_required;
-                const contributionPoints =
-                  (percentValue * assessment.weight) / 100;
-
+              assessmentTargetGroups.map(async (group) => {
+                const parent = await buildBreakdownRow(
+                  resolvedCourseId,
+                  resolvedTarget,
+                  group.parent
+                );
+                const children = await Promise.all(
+                  group.children.map((child) =>
+                    buildBreakdownRow(resolvedCourseId, resolvedTarget, child)
+                  )
+                );
                 return {
-                  name: assessment.displayName,
-                  rowType: "ungraded",
-                  weightLabel: `${assessment.weight}% of final grade`,
-                  neededLabel: "Minimum Needed",
-                  needed: `${percentValue.toFixed(
-                    1
-                  )}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
-                    assessment.weight
-                  )})`,
-                  contrib: `+${contributionPoints.toFixed(2)}%`,
-                } satisfies AssessmentRow;
+                  key: group.key,
+                  parent,
+                  children,
+                } satisfies AssessmentBreakdownGroup;
               })
             ),
             getLearningStrategies(resolvedCourseId).catch(() => ({
@@ -444,7 +448,8 @@ export function Dashboard() {
           ]);
 
         setTargetResult(target);
-        setAssessments(rows);
+        setAssessmentGroups(rows);
+        setExpandedAssessments({});
         setDashboardSummary(summary);
         setGradedWeight(summary.graded_weight);
         setCurrentContribution(summary.current_grade);
@@ -534,6 +539,8 @@ export function Dashboard() {
         setError("");
       } catch (e) {
         setError(getApiErrorMessage(e, "Failed to load dashboard."));
+        setAssessmentGroups([]);
+        setExpandedAssessments({});
         setCurrentContribution(0);
         setDashboardSummary(null);
         setWhatIfResult(null);
@@ -702,7 +709,8 @@ export function Dashboard() {
       return;
     }
 
-    const scenarios = buildAssessmentTargets(activeCourse.assessments)
+    const scenarios = buildAssessmentTargetGroups(activeCourse.assessments)
+      .flatMap((group) => (group.children.length ? group.children : [group.parent]))
       .filter((assessment) => !assessment.isBonus && !assessment.graded)
       .map((assessment) => ({
         assessment_name: assessment.assessmentName,
@@ -1132,44 +1140,110 @@ export function Dashboard() {
       {/* 6. Breakdown List */}
       <div className="space-y-4">
         <h3 className="font-bold text-gray-800">Assessment Breakdown</h3>
-        {(loading ? [] : assessments).map((a) => (
-          <div
-            key={a.name}
-            className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
-          >
-            <div className="mb-4 flex items-center gap-3">
-              <div className="h-4 w-4 rounded-full border-2 border-orange-200" />
-              <div>
-                <p className="font-bold text-gray-800">{a.name}</p>
-                <p className="text-[10px] text-gray-400">{a.weightLabel}</p>
+        {(loading ? [] : assessmentGroups).map((group) => {
+          const parent = group.parent;
+          const hasChildren = group.children.length > 0;
+          const isExpanded = expandedAssessments[group.key] ?? false;
+
+          return (
+            <div
+              key={group.key}
+              className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {hasChildren ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedAssessments((prev) => ({
+                          ...prev,
+                          [group.key]: !prev[group.key],
+                        }))
+                      }
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#D4DDE1] bg-white text-[#5D737E] hover:bg-[#F1F5F7]"
+                      aria-label={`${isExpanded ? "Collapse" : "Expand"} ${parent.name}`}
+                    >
+                      <ChevronDown
+                        size={16}
+                        className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border-2 border-orange-200" />
+                  )}
+                  <div>
+                    <p className="font-bold text-gray-800">{parent.name}</p>
+                    <p className="text-[10px] text-gray-400">{parent.weightLabel}</p>
+                  </div>
+                </div>
+                {hasChildren ? (
+                  <span className="rounded-full bg-[#EEF3F5] px-3 py-1 text-[10px] font-semibold text-[#5D737E]">
+                    {group.children.length} {parent.name}
+                  </span>
+                ) : null}
               </div>
+
+              <div className="flex justify-between items-center rounded-xl p-4 border border-orange-100 bg-orange-50/50">
+                <div>
+                  <p className="text-[9px] uppercase text-gray-400">
+                    {parent.neededLabel}
+                  </p>
+                  <p
+                    className={`text-xl font-bold ${
+                      parent.rowType === "graded"
+                        ? "text-green-600"
+                        : "text-orange-600"
+                    }`}
+                  >
+                    {parent.needed}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[9px] uppercase text-gray-400">
+                    Would contribute
+                  </p>
+                  <p className="text-sm font-bold text-gray-700">
+                    {parent.contrib} to final
+                  </p>
+                </div>
+              </div>
+
+              {hasChildren && isExpanded ? (
+                <div className="mt-3 space-y-3 border-l border-[#D4DDE1] pl-5">
+                  {group.children.map((child) => (
+                    <div
+                      key={child.key}
+                      className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-4"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">{child.name}</p>
+                        <p className="text-[10px] text-gray-400">{child.weightLabel}</p>
+                        <p
+                          className={`mt-1 text-sm font-semibold ${
+                            child.rowType === "graded"
+                              ? "text-green-600"
+                              : "text-orange-600"
+                          }`}
+                        >
+                          {child.neededLabel}: {child.needed}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[9px] uppercase text-gray-400">
+                          Would contribute
+                        </p>
+                        <p className="text-sm font-bold text-gray-700">
+                          {child.contrib} to final
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
-            <div className="flex justify-between items-center rounded-xl p-4 border border-orange-100 bg-orange-50/50">
-              <div>
-                <p className="text-[9px] uppercase text-gray-400">
-                  {a.neededLabel}
-                </p>
-                <p
-                  className={`text-xl font-bold ${
-                    a.rowType === "graded"
-                      ? "text-green-600"
-                      : "text-orange-600"
-                  }`}
-                >
-                  {a.needed}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-[9px] uppercase text-gray-400">
-                  Would contribute
-                </p>
-                <p className="text-sm font-bold text-gray-700">
-                  {a.contrib} to final
-                </p>
-              </div>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* 7. Learning Strategy */}

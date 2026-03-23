@@ -46,7 +46,7 @@ class MultiWhatIfRequest(BaseModel):
 
 def _get_course(service: CourseService, user_id, course_id):
     try:
-        return service._get_course_or_raise(user_id=user_id, course_id=course_id)
+        return service.get_course(user_id=user_id, course_id=course_id)
     except CourseNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

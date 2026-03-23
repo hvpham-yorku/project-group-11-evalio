@@ -67,9 +67,30 @@ def compute_grade_boundaries(course: CourseCreate) -> dict[str, Any]:
             "current_contribution": round(current, 4),
             "max_contribution": round(maximum, 4),
             "remaining_potential": round(remaining, 4),
+            "has_children": bool(a.children),
         }
 
-        if graded and not a.children:
+        if a.children:
+            entry["rule_type"] = a.rule_type
+            entry["rule_config"] = a.rule_config
+            children_detail: list[dict[str, Any]] = []
+            for child in a.children:
+                child_graded = child.raw_score is not None and child.total_score is not None
+                child_entry: dict[str, Any] = {
+                    "name": child.name,
+                    "weight": child.weight,
+                    "graded": child_graded,
+                    "raw_score": child.raw_score,
+                    "total_score": child.total_score,
+                    "score_percent": (
+                        round(calculate_assessment_percent(child.raw_score, child.total_score), 2)
+                        if child_graded
+                        else None
+                    ),
+                }
+                children_detail.append(child_entry)
+            entry["children"] = children_detail
+        elif graded:
             assert a.raw_score is not None and a.total_score is not None
             entry["score_percent"] = round(
                 calculate_assessment_percent(a.raw_score, a.total_score), 2
@@ -217,7 +238,7 @@ def compute_multi_whatif(
         else:
             source = "remaining"
 
-        whatif_breakdown.append({
+        entry: dict[str, Any] = {
             "name": assessment.name,
             "weight": assessment.weight,
             "is_bonus": is_bonus,
@@ -225,7 +246,48 @@ def compute_multi_whatif(
             "contribution": round(contribution, 4),
             "max_contribution": round(max_contribution, 4),
             "hypothetical_score": scenario_map.get(assessment.name),
-        })
+            "has_children": bool(assessment.children),
+        }
+
+        if assessment.children:
+            entry["rule_type"] = assessment.rule_type
+            entry["rule_config"] = assessment.rule_config
+            projected_children = {
+                c.name: c for c in (projected_assessment.children or [])
+            }
+            child_entries: list[dict[str, Any]] = []
+            for child in assessment.children:
+                child_graded = child.raw_score is not None and child.total_score is not None
+                child_path = f"{assessment.name}::{child.name}"
+
+                if child_path in scenario_map:
+                    child_source = "whatif"
+                    child_hypo: float | None = scenario_map[child_path]
+                elif child_graded:
+                    child_source = "actual"
+                    child_hypo = None
+                else:
+                    child_source = "remaining"
+                    child_hypo = None
+
+                proj_child = projected_children.get(child.name)
+                child_score_pct: float | None = None
+                if proj_child and proj_child.raw_score is not None and proj_child.total_score is not None:
+                    child_score_pct = round(
+                        calculate_assessment_percent(proj_child.raw_score, proj_child.total_score), 2
+                    )
+
+                child_entries.append({
+                    "name": child.name,
+                    "weight": child.weight,
+                    "graded": child_graded,
+                    "source": child_source,
+                    "hypothetical_score": child_hypo,
+                    "score_percent": child_score_pct,
+                })
+            entry["children"] = child_entries
+
+        whatif_breakdown.append(entry)
 
     if 0 < core_weight < 100:
         norm_factor = 100.0 / core_weight

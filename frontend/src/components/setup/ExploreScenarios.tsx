@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Lightbulb, RotateCcw } from "lucide-react";
+import { ChevronDown, Lightbulb, RotateCcw } from "lucide-react";
 import {
   deleteSavedScenario,
   getDashboardSummary,
@@ -36,6 +36,27 @@ type ScenarioAssessment = {
   is_bonus?: boolean;
 };
 
+type ScenarioGroup = {
+  id: number;
+  key: string;
+  displayName: string;
+  name: string;
+  weight: number;
+  raw_score?: number | null;
+  total_score?: number | null;
+  is_bonus?: boolean;
+  children: ScenarioAssessment[];
+};
+
+type ScenarioLeafTarget = {
+  assessment_name: string;
+  score: number;
+  actual?: number;
+  graded: boolean;
+  overrideSelf: boolean;
+  overrideParent: boolean;
+};
+
 type GradeUpdate = {
   name: string;
   raw_score: number | null;
@@ -48,37 +69,47 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(value, 100));
 }
 
-function hasPersistedGrade(a: ScenarioAssessment): boolean {
+function hasPersistedGrade(a: { raw_score?: number | null; total_score?: number | null }): boolean {
   return typeof a.raw_score === "number" && typeof a.total_score === "number";
 }
 
-function flattenScenarioAssessments(
+function buildScenarioGroups(
   assessments: CourseAssessment[]
-): ScenarioAssessment[] {
-  const flattened: ScenarioAssessment[] = [];
+): ScenarioGroup[] {
+  const groups: ScenarioGroup[] = [];
   let nextId = 1;
 
   for (const assessment of assessments) {
     const children = Array.isArray(assessment.children) ? assessment.children : [];
     if (children.length) {
-      for (const child of children) {
-        flattened.push({
-          id: nextId++,
-          key: `${assessment.name}${CHILD_ASSESSMENT_SEPARATOR}${child.name}`,
-          displayName: `${assessment.name} — ${child.name}`,
-          name: child.name,
-          weight: child.weight,
-          raw_score: child.raw_score,
-          total_score: child.total_score,
-          parentName: assessment.name,
-          childName: child.name,
-          is_bonus: Boolean(assessment.is_bonus),
-        });
-      }
+      const childItems: ScenarioAssessment[] = children.map((child) => ({
+        id: nextId++,
+        key: `${assessment.name}${CHILD_ASSESSMENT_SEPARATOR}${child.name}`,
+        displayName: `${assessment.name} — ${child.name}`,
+        name: child.name,
+        weight: child.weight,
+        raw_score: child.raw_score,
+        total_score: child.total_score,
+        parentName: assessment.name,
+        childName: child.name,
+        is_bonus: Boolean(assessment.is_bonus),
+      }));
+
+      groups.push({
+        id: nextId++,
+        key: assessment.name,
+        displayName: assessment.name,
+        name: assessment.name,
+        weight: assessment.weight,
+        raw_score: assessment.raw_score,
+        total_score: assessment.total_score,
+        is_bonus: Boolean(assessment.is_bonus),
+        children: childItems,
+      });
       continue;
     }
 
-    flattened.push({
+    groups.push({
       id: nextId++,
       key: assessment.name,
       displayName: assessment.name,
@@ -86,13 +117,128 @@ function flattenScenarioAssessments(
       weight: assessment.weight,
       raw_score: assessment.raw_score,
       total_score: assessment.total_score,
-      parentName: assessment.name,
-      childName: undefined,
       is_bonus: Boolean(assessment.is_bonus),
+      children: [],
     });
   }
 
-  return flattened;
+  return groups;
+}
+
+function getActualPercent(raw?: number | null, total?: number | null): number | undefined {
+  if (typeof raw !== "number" || typeof total !== "number") return undefined;
+  if (!Number.isFinite(raw) || !Number.isFinite(total) || total <= 0) return undefined;
+  return clampPercent((raw / total) * 100);
+}
+
+function flattenScenarioLeafTargets(
+  groups: ScenarioGroup[],
+  activeScenario: Record<string, number>
+): ScenarioLeafTarget[] {
+  const leafTargets: ScenarioLeafTarget[] = [];
+
+  for (const group of groups) {
+    if (group.children.length) {
+      for (const child of group.children) {
+        const overrideSelf = typeof activeScenario[child.key] === "number";
+        const overrideParent = typeof activeScenario[group.key] === "number";
+        const actual = getActualPercent(child.raw_score, child.total_score);
+        const parentScore = activeScenario[group.key];
+        const childScore = activeScenario[child.key];
+        const score = clampPercent(
+          typeof childScore === "number"
+            ? childScore
+            : typeof parentScore === "number"
+              ? parentScore
+              : typeof actual === "number"
+                ? actual
+                : 75
+        );
+
+        leafTargets.push({
+          assessment_name: child.key,
+          score,
+          actual,
+          graded: hasPersistedGrade(child) && Number(child.total_score) > 0,
+          overrideSelf,
+          overrideParent,
+        });
+      }
+      continue;
+    }
+
+    const overrideSelf = typeof activeScenario[group.key] === "number";
+    const actual = getActualPercent(group.raw_score, group.total_score);
+    const score = clampPercent(
+      typeof activeScenario[group.key] === "number"
+        ? activeScenario[group.key]
+        : typeof actual === "number"
+          ? actual
+          : 75
+    );
+
+    leafTargets.push({
+      assessment_name: group.key,
+      score,
+      actual,
+      graded: hasPersistedGrade(group) && Number(group.total_score) > 0,
+      overrideSelf,
+      overrideParent: false,
+    });
+  }
+
+  return leafTargets;
+}
+
+function resolveParentValue(
+  group: ScenarioGroup,
+  activeScenario: Record<string, number>
+): number {
+  const parentOverride = activeScenario[group.key];
+  if (typeof parentOverride === "number") {
+    return clampPercent(parentOverride);
+  }
+
+  if (!group.children.length) {
+    const actual = getActualPercent(group.raw_score, group.total_score);
+    return typeof actual === "number" ? actual : 75;
+  }
+
+  const totalWeight = group.children.reduce(
+    (sum, child) => sum + Math.max(0, Number.isFinite(child.weight) ? child.weight : 0),
+    0
+  );
+  if (totalWeight <= 0) return 75;
+
+  const weightedContribution = group.children.reduce((sum, child) => {
+    const childOverride = activeScenario[child.key];
+    const actual = getActualPercent(child.raw_score, child.total_score);
+    const childValue = clampPercent(
+      typeof childOverride === "number"
+        ? childOverride
+        : typeof actual === "number"
+          ? actual
+          : 75
+    );
+    return sum + (childValue * child.weight) / 100;
+  }, 0);
+
+  return clampPercent((weightedContribution / totalWeight) * 100);
+}
+
+function resolveChildValue(
+  group: ScenarioGroup,
+  child: ScenarioAssessment,
+  activeScenario: Record<string, number>
+): number {
+  const childOverride = activeScenario[child.key];
+  if (typeof childOverride === "number") return clampPercent(childOverride);
+
+  const parentOverride = activeScenario[group.key];
+  if (typeof parentOverride === "number") return clampPercent(parentOverride);
+
+  const actual = getActualPercent(child.raw_score, child.total_score);
+  return typeof actual === "number" ? actual : 75;
 }
 
 function formatCompactNumber(value: number): string {
@@ -104,7 +250,7 @@ function formatCompactNumber(value: number): string {
 export function ExploreScenarios() {
   const router = useRouter();
 
-  const [assessments, setAssessments] = useState<ScenarioAssessment[]>([]);
+  const [assessments, setAssessments] = useState<ScenarioGroup[]>([]);
   const [courseAssessments, setCourseAssessments] = useState<CourseAssessment[]>([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -123,9 +269,7 @@ export function ExploreScenarios() {
     useState<DashboardWhatIfResponse | null>(null);
 
   const [activeScenario, setActiveScenario] = useState<Record<string, number>>({});
-  const [activeAssessmentName, setActiveAssessmentName] = useState<string | null>(
-    null
-  );
+  const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>({});
 
   const fetchSavedScenarios = async (resolvedCourseId: string) => {
     try {
@@ -154,7 +298,7 @@ export function ExploreScenarios() {
           return;
         }
 
-        const normalized = flattenScenarioAssessments(latest.assessments ?? []);
+        const normalized = buildScenarioGroups(latest.assessments ?? []);
         const summary = await getDashboardSummary(resolvedCourseId);
 
         setAssessments(normalized);
@@ -170,37 +314,33 @@ export function ExploreScenarios() {
     loadCourse();
   }, [ensureCourseIdFromList]);
 
-  const getActualGrade = useCallback((a: ScenarioAssessment): number | undefined => {
-    const raw = a.raw_score;
-    const total = a.total_score;
-    if (typeof raw !== "number" || typeof total !== "number") return undefined;
-    if (!Number.isFinite(raw) || !Number.isFinite(total) || total <= 0)
-      return undefined;
-    return clampPercent((raw / total) * 100);
-  }, []);
+  const getParentScenarioValue = useCallback(
+    (group: ScenarioGroup) => resolveParentValue(group, activeScenario),
+    [activeScenario]
+  );
 
-  const getScenarioValue = useCallback((a: ScenarioAssessment) => {
-    const override = activeScenario[a.key];
-    if (typeof override === "number") return clampPercent(override);
+  const getChildScenarioValue = useCallback(
+    (group: ScenarioGroup, child: ScenarioAssessment) =>
+      resolveChildValue(group, child, activeScenario),
+    [activeScenario]
+  );
 
-    const actual = getActualGrade(a);
-    if (typeof actual === "number") return actual;
-
-    return 75;
-  }, [activeScenario, getActualGrade]);
+  const leafTargets = useMemo(
+    () => flattenScenarioLeafTargets(assessments, activeScenario),
+    [assessments, activeScenario]
+  );
 
   useEffect(() => {
     if (!courseId || !assessments.length) return;
 
-    const scenarioEntries = assessments
+    const scenarioEntries = leafTargets
       .filter(
-        (assessment) =>
-          !hasPersistedGrade(assessment) ||
-          typeof activeScenario[assessment.key] === "number"
+        (target) =>
+          !target.graded || target.overrideSelf || target.overrideParent
       )
-      .map((assessment) => ({
-        assessment_name: assessment.key,
-        score: clampPercent(getScenarioValue(assessment)),
+      .map((target) => ({
+        assessment_name: target.assessment_name,
+        score: clampPercent(target.score),
       }));
 
     const timer = window.setTimeout(async () => {
@@ -215,7 +355,7 @@ export function ExploreScenarios() {
     }, 200);
 
     return () => window.clearTimeout(timer);
-  }, [courseId, activeScenario, assessments, getScenarioValue]);
+  }, [courseId, leafTargets, assessments]);
 
   const hasChanges = Object.keys(activeScenario).length > 0;
 
@@ -224,9 +364,18 @@ export function ExploreScenarios() {
       return scenarioProjection.projected_normalised ?? scenarioProjection.projected_grade;
     }
     if (!assessments.length) return 0;
-    const sum = assessments.reduce((acc, a) => {
-      const v = getScenarioValue(a);
-      return acc + (v * a.weight) / 100;
+    const sum = assessments.reduce((acc, group) => {
+      if (group.children.length) {
+        return (
+          acc +
+          group.children.reduce(
+            (childAcc, child) =>
+              childAcc + (getChildScenarioValue(group, child) * child.weight) / 100,
+            0
+          )
+        );
+      }
+      return acc + (getParentScenarioValue(group) * group.weight) / 100;
     }, 0);
     return Number.isFinite(sum) ? sum : 0;
   })();
@@ -247,15 +396,36 @@ export function ExploreScenarios() {
     dashboardSummary?.normalisation_applied ??
     false;
 
-  const handleSliderChange = (name: string, value: number) => {
+  const handleParentSliderChange = (group: ScenarioGroup, value: number) => {
     const safe = clampPercent(value);
-    setActiveAssessmentName(name);
-    setActiveScenario((prev) => ({ ...prev, [name]: safe }));
+    setActiveScenario((prev) => {
+      const next = { ...prev, [group.key]: safe };
+      if (group.children.length) {
+        for (const child of group.children) {
+          next[child.key] = safe;
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleChildSliderChange = (
+    group: ScenarioGroup,
+    child: ScenarioAssessment,
+    value: number
+  ) => {
+    const safe = clampPercent(value);
+    setActiveScenario((prev) => {
+      // Child changes should not overwrite sibling sliders.
+      // Remove any parent override so parent value is derived from children.
+      const next = { ...prev, [child.key]: safe };
+      delete next[group.key];
+      return next;
+    });
   };
 
   const handleResetAll = () => {
     setActiveScenario({});
-    setActiveAssessmentName(null);
   };
 
   const handleOpenSaveDialog = () => {
@@ -275,13 +445,13 @@ export function ExploreScenarios() {
       return;
     }
 
-    const scenarios = assessments
-      .filter((assessment) => typeof activeScenario[assessment.key] === "number")
-      .map((assessment) => {
-        const score = clampPercent(activeScenario[assessment.key]);
-        const actual = getActualGrade(assessment);
-        return { assessment_name: assessment.key, score, actual };
-      })
+    const scenarios = leafTargets
+      .filter((target) => target.overrideSelf || target.overrideParent)
+      .map((target) => ({
+        assessment_name: target.assessment_name,
+        score: clampPercent(target.score),
+        actual: target.actual,
+      }))
       .filter(
         ({ score, actual }) =>
           typeof actual !== "number" || Math.abs(score - actual) > 0.001
@@ -325,8 +495,12 @@ export function ExploreScenarios() {
         if (children.length) {
           const childUpdates = children
             .map((child) => {
+              const parentOverride = activeScenario[assessment.name];
               const key = `${assessment.name}${CHILD_ASSESSMENT_SEPARATOR}${child.name}`;
-              const hasOverride = typeof activeScenario[key] === "number";
+              const childOverride = activeScenario[key];
+              const hasOverride =
+                typeof childOverride === "number" ||
+                typeof parentOverride === "number";
               const hasGrade =
                 typeof child.raw_score === "number" &&
                 typeof child.total_score === "number" &&
@@ -341,7 +515,11 @@ export function ExploreScenarios() {
                   ? clampPercent((child.raw_score! / child.total_score) * 100)
                   : undefined;
               const percent = hasOverride
-                ? clampPercent(activeScenario[key])
+                ? clampPercent(
+                    typeof childOverride === "number"
+                      ? childOverride
+                      : (parentOverride as number)
+                  )
                 : typeof actual === "number"
                   ? actual
                   : 75;
@@ -406,7 +584,6 @@ export function ExploreScenarios() {
         assessments: updates,
       });
       setActiveScenario({});
-      setActiveAssessmentName(null);
       setError("");
 
       router.push("/setup/grades");
@@ -437,7 +614,6 @@ export function ExploreScenarios() {
       await fetchSavedScenarios(courseId);
       setSelectedScenarioId("");
       setActiveScenario({});
-      setActiveAssessmentName(null);
       setShowDeleteDialog(false);
       setError("");
       window.alert("Scenario deleted successfully.");
@@ -466,7 +642,6 @@ export function ExploreScenarios() {
         overrides[entry.assessment_name] = clampPercent(entry.score);
       }
       setActiveScenario(overrides);
-      setActiveAssessmentName(null);
       setError("");
     } catch (e) {
       setError(getApiErrorMessage(e, "Failed to load scenario."));
@@ -513,16 +688,19 @@ export function ExploreScenarios() {
             </div>
 
             <div className="space-y-5">
-              {assessments.map((a) => {
-                const actual = getActualGrade(a);
-                const value = getScenarioValue(a);
-                const contribution = (value * a.weight) / 100;
-
-                const isModified = typeof activeScenario[a.key] === "number";
+              {assessments.map((group) => {
+                const hasChildren = group.children.length > 0;
+                const isExpanded = expandedByKey[group.key] ?? false;
+                const parentActual = getActualPercent(group.raw_score, group.total_score);
+                const parentValue = getParentScenarioValue(group);
+                const parentContribution = (parentValue * group.weight) / 100;
+                const isModified =
+                  typeof activeScenario[group.key] === "number" ||
+                  group.children.some((child) => typeof activeScenario[child.key] === "number");
 
                 return (
                   <div
-                    key={a.id}
+                    key={group.key}
                     className={`rounded-2xl p-5 border ${
                       isModified
                         ? "border-[#5D737E] bg-[#E9EFF1]"
@@ -530,19 +708,48 @@ export function ExploreScenarios() {
                     }`}
                   >
                     <div className="flex items-start justify-between gap-6 mb-4">
-                      <div>
-                        <h4 className="font-semibold text-gray-800">{a.displayName}</h4>
-                        <p className="text-sm text-gray-500">
-                          {formatCompactNumber(a.weight)}% •{" "}
-                          {typeof actual === "number"
-                            ? `Current: ${actual.toFixed(1)}%`
-                            : "Not graded"}{" "}
-                          • {`${value.toFixed(1)}% (${contribution.toFixed(2)} / ${formatCompactNumber(a.weight)})`}
-                        </p>
+                      <div className="flex items-start gap-3">
+                        {hasChildren ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedByKey((prev) => ({
+                                ...prev,
+                                [group.key]: !prev[group.key],
+                              }))
+                            }
+                            className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#D4DDE1] bg-white text-[#5D737E] hover:bg-[#F1F5F7]"
+                            aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.displayName}`}
+                          >
+                            <ChevronDown
+                              size={16}
+                              className={`transition-transform ${
+                                isExpanded ? "rotate-180" : ""
+                              }`}
+                            />
+                          </button>
+                        ) : (
+                          <span className="mt-3 h-2.5 w-2.5 rounded-full bg-[#B8C6CC]" />
+                        )}
+                        <div>
+                          <h4 className="font-semibold text-gray-800">{group.displayName}</h4>
+                          <p className="text-sm text-gray-500">
+                            {formatCompactNumber(group.weight)}% •{" "}
+                            {typeof parentActual === "number"
+                              ? `Current: ${parentActual.toFixed(1)}%`
+                              : hasChildren
+                                ? "Derived from child inputs"
+                                : "Not graded"}{" "}
+                            •{" "}
+                            {`${parentValue.toFixed(1)}% (${parentContribution.toFixed(2)} / ${formatCompactNumber(
+                              group.weight
+                            )})`}
+                          </p>
+                        </div>
                       </div>
 
                       <div className="text-3xl font-semibold text-[#5D737E]">
-                        {value.toFixed(1)}%
+                        {parentValue.toFixed(1)}%
                       </div>
                     </div>
 
@@ -551,42 +758,109 @@ export function ExploreScenarios() {
                       min={0}
                       max={100}
                       step={1}
-                      value={value}
+                      value={parentValue}
                       onChange={(e) =>
-                        handleSliderChange(a.key, Number(e.target.value))
+                        handleParentSliderChange(group, Number(e.target.value))
                       }
                       className="mt-4 w-full h-2 rounded-full appearance-none cursor-pointer"
                       style={{
-                        background: `linear-gradient(to right, #5D737E 0%, #5D737E ${value}%, #E6E2DB ${value}%, #E6E2DB 100%)`,
+                        background: `linear-gradient(to right, #5D737E 0%, #5D737E ${parentValue}%, #E6E2DB ${parentValue}%, #E6E2DB 100%)`,
                         WebkitAppearance: "none",
                       }}
                     />
 
-                    <style jsx>{`
-                      input[type="range"]::-webkit-slider-thumb {
-                        -webkit-appearance: none;
-                        appearance: none;
-                        width: 18px;
-                        height: 18px;
-                        background: #5d737e;
-                        border-radius: 9999px;
-                        border: none;
-                        cursor: pointer;
-                        margin-top: -5px;
-                      }
+                    {hasChildren && isExpanded ? (
+                      <div className="mt-4 space-y-3 border-l border-[#D4DDE1] pl-5">
+                        {group.children.map((child) => {
+                          const childActual = getActualPercent(
+                            child.raw_score,
+                            child.total_score
+                          );
+                          const childValue = getChildScenarioValue(group, child);
+                          const childContribution = (childValue * child.weight) / 100;
+                          const childModified =
+                            typeof activeScenario[child.key] === "number" ||
+                            typeof activeScenario[group.key] === "number";
 
-                      input[type="range"]::-moz-range-thumb {
-                        width: 18px;
-                        height: 18px;
-                        background: #5d737e;
-                        border-radius: 9999px;
-                        border: none;
-                        cursor: pointer;
-                      }
-                    `}</style>
+                          return (
+                            <div
+                              key={child.key}
+                              className={`rounded-xl border px-4 py-3 ${
+                                childModified
+                                  ? "border-[#AFC2CC] bg-[#F4F8FA]"
+                                  : "border-[#E8E3DC] bg-[#FBF8F3]"
+                              }`}
+                            >
+                              <div className="mb-2 flex items-center justify-between gap-4">
+                                <div>
+                                  <p className="text-sm font-medium text-gray-800">
+                                    {child.name}
+                                  </p>
+                                  <p className="text-xs text-gray-500">
+                                    {formatCompactNumber(child.weight)}% •{" "}
+                                    {typeof childActual === "number"
+                                      ? `Current: ${childActual.toFixed(1)}%`
+                                      : "Not graded"}{" "}
+                                    •{" "}
+                                    {`${childValue.toFixed(1)}% (${childContribution.toFixed(2)} / ${formatCompactNumber(
+                                      child.weight
+                                    )})`}
+                                  </p>
+                                </div>
+                                <span className="text-xl font-semibold text-[#5D737E]">
+                                  {childValue.toFixed(1)}%
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                min={0}
+                                max={100}
+                                step={1}
+                                value={childValue}
+                                onChange={(e) =>
+                                  handleChildSliderChange(
+                                    group,
+                                    child,
+                                    Number(e.target.value)
+                                  )
+                                }
+                                className="w-full h-2 rounded-full appearance-none cursor-pointer"
+                                style={{
+                                  background: `linear-gradient(to right, #5D737E 0%, #5D737E ${childValue}%, #E6E2DB ${childValue}%, #E6E2DB 100%)`,
+                                  WebkitAppearance: "none",
+                                }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}
+
+              <style jsx>{`
+                input[type="range"]::-webkit-slider-thumb {
+                  -webkit-appearance: none;
+                  appearance: none;
+                  width: 18px;
+                  height: 18px;
+                  background: #5d737e;
+                  border-radius: 9999px;
+                  border: none;
+                  cursor: pointer;
+                  margin-top: -5px;
+                }
+
+                input[type="range"]::-moz-range-thumb {
+                  width: 18px;
+                  height: 18px;
+                  background: #5d737e;
+                  border-radius: 9999px;
+                  border: none;
+                  cursor: pointer;
+                }
+              `}</style>
             </div>
 
             {/* Controls appear only when changed */}
@@ -675,41 +949,75 @@ export function ExploreScenarios() {
             </div>
 
             <div className="mt-8 space-y-4">
-              {(projectionBreakdown.length > 0 ? projectionBreakdown : assessments).map(
-                (entry) => {
-                  const isProjectionEntry = "source" in entry;
-                  const label = isProjectionEntry ? entry.name : entry.displayName;
-                  const contribution = isProjectionEntry
-                    ? entry.contribution
-                    : (getScenarioValue(entry) * entry.weight) / 100;
-                  const sourceLabel = isProjectionEntry
-                    ? entry.source === "scenario" || entry.source === "whatif"
-                      ? "Scenario"
-                      : entry.source === "graded" || entry.source === "actual"
-                        ? "Graded"
-                        : "Remaining"
-                    : typeof activeScenario[entry.key] === "number"
-                      ? "Scenario"
-                      : hasPersistedGrade(entry)
-                        ? "Graded"
-                        : "Default";
-
-                  return (
-                    <div
-                      key={label}
-                      className="flex items-center justify-between gap-4 text-sm"
-                    >
-                      <div>
-                        <span className="text-gray-500">{label}</span>
-                        <p className="text-xs text-gray-400">{sourceLabel}</p>
+              {projectionBreakdown.length > 0
+                ? projectionBreakdown.map((entry) => {
+                    const sourceLabel =
+                      entry.source === "scenario" || entry.source === "whatif"
+                        ? "Scenario"
+                        : entry.source === "graded" || entry.source === "actual"
+                          ? "Graded"
+                          : "Remaining";
+                    return (
+                      <div
+                        key={entry.name}
+                        className="flex items-center justify-between gap-4 text-sm"
+                      >
+                        <div>
+                          <span className="text-gray-500">{entry.name}</span>
+                          <p className="text-xs text-gray-400">{sourceLabel}</p>
+                        </div>
+                        <span className="font-semibold text-gray-800">
+                          +{entry.contribution.toFixed(2)}%
+                        </span>
                       </div>
-                      <span className="font-semibold text-gray-800">
-                        +{contribution.toFixed(2)}%
-                      </span>
-                    </div>
-                  );
-                }
-              )}
+                    );
+                  })
+                : assessments
+                    .flatMap((group) => {
+                      if (group.children.length) {
+                        return group.children.map((child) => ({
+                          key: child.key,
+                          label: child.displayName,
+                          contribution:
+                            (getChildScenarioValue(group, child) * child.weight) / 100,
+                          sourceLabel:
+                            typeof activeScenario[child.key] === "number" ||
+                            typeof activeScenario[group.key] === "number"
+                              ? "Scenario"
+                              : hasPersistedGrade(child)
+                                ? "Graded"
+                                : "Default",
+                        }));
+                      }
+                      return [
+                        {
+                          key: group.key,
+                          label: group.displayName,
+                          contribution:
+                            (getParentScenarioValue(group) * group.weight) / 100,
+                          sourceLabel:
+                            typeof activeScenario[group.key] === "number"
+                              ? "Scenario"
+                              : hasPersistedGrade(group)
+                                ? "Graded"
+                                : "Default",
+                        },
+                      ];
+                    })
+                    .map((entry) => (
+                      <div
+                        key={entry.key}
+                        className="flex items-center justify-between gap-4 text-sm"
+                      >
+                        <div>
+                          <span className="text-gray-500">{entry.label}</span>
+                          <p className="text-xs text-gray-400">{entry.sourceLabel}</p>
+                        </div>
+                        <span className="font-semibold text-gray-800">
+                          +{entry.contribution.toFixed(2)}%
+                        </span>
+                      </div>
+                    ))}
             </div>
 
             {hasChanges ? (
