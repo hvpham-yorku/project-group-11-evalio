@@ -19,8 +19,10 @@ type EditableAssessment = {
   weight: number;
   rule?: string | null;
   rule_type?: string | null;
+  rule_config?: Record<string, unknown> | null;
   total_count?: number | null;
   effective_count?: number | null;
+  is_bonus?: boolean;
   children?: EditableAssessment[];
 };
 
@@ -93,8 +95,17 @@ function getChildBaseLabel(parentName: string): string {
 const BEST_OF_RULE_REGEX = /best\s+(\d+)\s+(?:(?:out\s+of|of)\s+)?(\d+)/i;
 const DROP_LOWEST_RULE_REGEX = /\bdrop\s+lowest(?:\s+(\d+))?\b/i;
 const DROP_LOWEST_ALT_RULE_REGEX = /\bdrop\s+(\d+)\s+lowest\b/i;
+const MANDATORY_PASS_RULE_REGEX = /\bmandatory\s+pass\b|\bmust\s+pass\b/i;
+const MANDATORY_PASS_THRESHOLD_REGEX =
+  /(?:>=|at\s+least|minimum|threshold)\s*(\d+(?:\.\d+)?)/i;
 const TOTAL_COUNT_REGEX = /\b(?:out\s+of|of)\s+(\d+)\b/i;
 const LEADING_COUNT_REGEX = /^(\d+)\s+/;
+const SUPPORTED_RULE_TYPES = new Set([
+  "best_of",
+  "drop_lowest",
+  "pure_multiplicative",
+  "mandatory_pass",
+]);
 
 function parsePositiveInteger(value: unknown): number | null {
   const numeric = Number(value);
@@ -105,13 +116,17 @@ function parsePositiveInteger(value: unknown): number | null {
 function deriveRuleMetadata(
   ruleText: string,
   assessmentName: string
-): Pick<EditableAssessment, "rule_type" | "total_count" | "effective_count"> {
+): Pick<
+  EditableAssessment,
+  "rule_type" | "total_count" | "effective_count" | "rule_config"
+> {
   const normalizedRule = ruleText.trim();
   if (!normalizedRule) {
     return {
       rule_type: null,
       total_count: null,
       effective_count: null,
+      rule_config: null,
     };
   }
 
@@ -123,6 +138,10 @@ function deriveRuleMetadata(
       rule_type: "best_of",
       effective_count: effectiveCount,
       total_count: totalCount,
+      rule_config: {
+        ...(effectiveCount ? { best_count: effectiveCount } : {}),
+        ...(totalCount ? { total_count: totalCount } : {}),
+      },
     };
   }
 
@@ -143,6 +162,25 @@ function deriveRuleMetadata(
       rule_type: "drop_lowest",
       total_count: totalCount,
       effective_count: effectiveCount,
+      rule_config: {
+        drop_count: dropCount,
+        ...(totalCount ? { total_count: totalCount } : {}),
+      },
+    };
+  }
+
+  if (MANDATORY_PASS_RULE_REGEX.test(normalizedRule)) {
+    const thresholdMatch = MANDATORY_PASS_THRESHOLD_REGEX.exec(normalizedRule);
+    const threshold = Number.parseFloat(thresholdMatch?.[1] ?? "50");
+    const safeThreshold =
+      Number.isFinite(threshold) && threshold >= 0 && threshold <= 100
+        ? threshold
+        : 50;
+    return {
+      rule_type: "mandatory_pass",
+      total_count: null,
+      effective_count: null,
+      rule_config: { pass_threshold: safeThreshold },
     };
   }
 
@@ -150,7 +188,16 @@ function deriveRuleMetadata(
     rule_type: null,
     total_count: null,
     effective_count: null,
+    rule_config: null,
   };
+}
+
+function getPassThreshold(assessment: EditableAssessment): number {
+  const config = assessment.rule_config ?? {};
+  const raw = (config as Record<string, unknown>).pass_threshold;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 50;
+  return Math.max(0, Math.min(parsed, 100));
 }
 
 function getRuleSummaryLabel(assessment: EditableAssessment): string | null {
@@ -176,6 +223,10 @@ function getRuleSummaryLabel(assessment: EditableAssessment): string | null {
     return "All sub-items count";
   }
 
+  if (assessment.rule_type === "mandatory_pass") {
+    return `Must pass (\u2265${getPassThreshold(assessment)}%)`;
+  }
+
   return null;
 }
 
@@ -190,6 +241,10 @@ function findAssessmentValidationError(items: EditableAssessment[]): string | nu
 
     if (!Number.isFinite(assessment.weight) || assessment.weight <= 0) {
       return `Assessment "${trimmedName}" must have a positive weight.`;
+    }
+
+    if (assessment.is_bonus && assessment.rule_type === "mandatory_pass") {
+      return `Assessment "${trimmedName}" cannot be both bonus and mandatory pass.`;
     }
 
     const children = Array.isArray(assessment.children) ? assessment.children : [];
@@ -305,8 +360,13 @@ export default function StructureStep() {
           weight: Number.isFinite(Number(it?.weight)) ? Number(it.weight) : 0,
           rule: typeof it?.rule === "string" ? it.rule : it?.rule ?? "",
           rule_type: typeof it?.rule_type === "string" ? it.rule_type : null,
+          rule_config:
+            it?.rule_config && typeof it.rule_config === "object"
+              ? it.rule_config
+              : null,
           total_count: Number.isFinite(Number(it?.total_count)) ? Number(it.total_count) : null,
           effective_count: Number.isFinite(Number(it?.effective_count)) ? Number(it.effective_count) : null,
+          is_bonus: Boolean(it?.is_bonus),
           children: childrenRaw.length ? normalize(childrenRaw, `${prefix}-${idx}`) : [],
         };
       });
@@ -315,7 +375,12 @@ export default function StructureStep() {
   }, [extractionResult]);
 
   const totalWeight = useMemo(() => {
-    const sumTopLevel = assessments.reduce((sum, a) => sum + (Number.isFinite(a.weight) ? a.weight : 0), 0);
+    const sumTopLevel = assessments.reduce(
+      (sum, a) =>
+        sum +
+        (!a.is_bonus && Number.isFinite(a.weight) ? a.weight : 0),
+      0
+    );
     return Number(sumTopLevel.toFixed(2));
   }, [assessments]);
 
@@ -325,7 +390,7 @@ export default function StructureStep() {
         bg: "bg-[#DFE9E0]",
         border: "border-[#D0DED2]",
         text: "text-[#4F7E5A]",
-        message: "Perfect! Your weights add up to 100%.",
+        message: "Perfect! Your non-bonus weights add up to 100%.",
       };
     }
     if (totalWeight < 100) {
@@ -333,14 +398,14 @@ export default function StructureStep() {
         bg: "bg-[#F3EBD9]",
         border: "border-[#E7D8B8]",
         text: "text-[#8E7340]",
-        message: `You need ${(100 - totalWeight).toFixed(0)}% more to reach 100%.`,
+        message: `You need ${(100 - totalWeight).toFixed(0)}% more non-bonus weight to reach 100%.`,
       };
     }
     return {
       bg: "bg-[#F4DEDE]",
       border: "border-[#E4C2C2]",
       text: "text-[#9C5D5D]",
-      message: `Weights exceed 100% by ${(totalWeight - 100).toFixed(0)}%. Please adjust to continue.`,
+      message: `Non-bonus weights exceed 100% by ${(totalWeight - 100).toFixed(0)}%. Please adjust to continue.`,
     };
   }, [totalWeight]);
 
@@ -360,6 +425,9 @@ export default function StructureStep() {
         name: "",
         weight: Number.NaN,
         rule: "",
+        rule_type: null,
+        rule_config: null,
+        is_bonus: false,
         children: [],
       },
     ]);
@@ -376,6 +444,9 @@ export default function StructureStep() {
         name: inferredName,
         weight: Number.NaN,
         rule: "",
+        rule_type: null,
+        rule_config: null,
+        is_bonus: false,
         children: [],
       };
       return addChildToParent(prev, parentId, newChild);
@@ -425,7 +496,7 @@ export default function StructureStep() {
     }
 
     if (totalWeight !== 100) {
-      setError("Total assessment weight must equal 100% to continue.");
+      setError("Total non-bonus assessment weight must equal 100% to continue.");
       return;
     }
 
@@ -474,13 +545,27 @@ export default function StructureStep() {
     const children = Array.isArray(a.children) ? a.children : [];
     const hasChildren = children.length > 0;
     const expanded = !!expandedByKey[a.id];
+    const isBonus = Boolean(a.is_bonus);
+    const isMandatoryPass = a.rule_type === "mandatory_pass";
+    const passThreshold = getPassThreshold(a);
     const ruleSummaryLabel = getRuleSummaryLabel(a);
-    const rulesOpenByDefault = Boolean((a.rule ?? "").trim() || ruleSummaryLabel);
+    const hasUnsupportedRule =
+      (Boolean((a.rule ?? "").trim()) && !a.rule_type) ||
+      (Boolean(a.rule_type) && !SUPPORTED_RULE_TYPES.has(String(a.rule_type)));
+    const rulesOpenByDefault = Boolean(
+      (a.rule ?? "").trim() || ruleSummaryLabel || hasUnsupportedRule
+    );
     const rulesOpen = rulesOpenById[a.id] ?? rulesOpenByDefault;
 
     return (
       <div key={nodeKey} className="space-y-3" style={{ marginLeft: `${depth * 16}px` }}>
-        <div className="bg-[#EAE6E0] rounded-2xl border border-[#E2DDD6] px-4 py-4">
+        <div
+          className={`rounded-2xl border px-4 py-4 ${
+            isBonus
+              ? "bg-[#EDF7F0] border-[#C9E5D2]"
+              : "bg-[#EAE6E0] border-[#E2DDD6]"
+          }`}
+        >
           <div className="flex items-start gap-3">
             {hasChildren ? (
               <button
@@ -511,6 +596,23 @@ export default function StructureStep() {
                     placeholder="Assessment name"
                     className="w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
                   />
+                  <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                    {isBonus ? (
+                      <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 font-semibold text-green-700">
+                        Bonus
+                      </span>
+                    ) : null}
+                    {ruleSummaryLabel ? (
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
+                        {ruleSummaryLabel}
+                      </span>
+                    ) : null}
+                    {hasUnsupportedRule ? (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 font-semibold text-amber-700">
+                        Unsupported rule text
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="w-24">
@@ -534,7 +636,9 @@ export default function StructureStep() {
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-[11px] text-center text-gray-500">% of grade</p>
+                  <p className="mt-1 text-[11px] text-center text-gray-500">
+                    {isBonus ? "Bonus weight" : "% of grade"}
+                  </p>
                 </div>
               </div>
 
@@ -561,26 +665,167 @@ export default function StructureStep() {
 
                 {rulesOpen ? (
                   <>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <label className="text-[11px] text-gray-600">
+                        Rule Type
+                        <select
+                          value={a.rule_type ?? ""}
+                          onChange={(e) => {
+                            const nextType = e.target.value || null;
+                            if (nextType === null) {
+                              updateAssessment(a.id, {
+                                rule_type: null,
+                                rule_config: null,
+                                total_count: null,
+                                effective_count: null,
+                              });
+                              return;
+                            }
+
+                            if (nextType === "mandatory_pass") {
+                              updateAssessment(a.id, {
+                                rule_type: "mandatory_pass",
+                                rule_config: { pass_threshold: passThreshold || 50 },
+                                total_count: null,
+                                effective_count: null,
+                                is_bonus: false,
+                              });
+                              return;
+                            }
+
+                            if (nextType === "best_of") {
+                              const totalCount =
+                                parsePositiveInteger(a.total_count) ??
+                                (a.children?.length ? a.children.length : null);
+                              const effectiveCount =
+                                parsePositiveInteger(a.effective_count) ??
+                                (totalCount ? Math.max(1, totalCount - 1) : 1);
+                              updateAssessment(a.id, {
+                                rule_type: "best_of",
+                                total_count: totalCount,
+                                effective_count: effectiveCount,
+                                rule_config: {
+                                  best_count: effectiveCount,
+                                  ...(totalCount ? { total_count: totalCount } : {}),
+                                },
+                              });
+                              return;
+                            }
+
+                            if (nextType === "drop_lowest") {
+                              const totalCount =
+                                parsePositiveInteger(a.total_count) ??
+                                (a.children?.length ? a.children.length : null);
+                              const effectiveCount =
+                                parsePositiveInteger(a.effective_count) ??
+                                (totalCount ? Math.max(1, totalCount - 1) : null);
+                              const dropCount =
+                                totalCount && effectiveCount
+                                  ? Math.max(1, totalCount - effectiveCount)
+                                  : 1;
+                              updateAssessment(a.id, {
+                                rule_type: "drop_lowest",
+                                total_count: totalCount,
+                                effective_count: effectiveCount,
+                                rule_config: {
+                                  drop_count: dropCount,
+                                  ...(totalCount ? { total_count: totalCount } : {}),
+                                },
+                              });
+                              return;
+                            }
+
+                            updateAssessment(a.id, {
+                              rule_type: nextType,
+                              rule_config: null,
+                              total_count: null,
+                              effective_count: null,
+                            });
+                          }}
+                          className="mt-1 w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
+                        >
+                          <option value="">None</option>
+                          <option value="best_of">Best Of</option>
+                          <option value="drop_lowest">Drop Lowest</option>
+                          <option value="pure_multiplicative">All Sub-items Count</option>
+                          <option value="mandatory_pass">
+                            Mandatory Pass
+                          </option>
+                        </select>
+                      </label>
+
+                      <label className="flex items-center gap-2 rounded-xl border border-[#D8D1C6] bg-[#F9F8F6] px-3 py-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={isBonus}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            updateAssessment(a.id, {
+                              is_bonus: checked,
+                              ...(checked
+                                ? {
+                                    rule_type:
+                                      a.rule_type === "mandatory_pass"
+                                        ? null
+                                        : a.rule_type,
+                                    rule_config:
+                                      a.rule_type === "mandatory_pass"
+                                        ? null
+                                        : a.rule_config,
+                                  }
+                                : {}),
+                            });
+                          }}
+                        />
+                        Bonus Assessment
+                      </label>
+                    </div>
+
+                    {isMandatoryPass ? (
+                      <label className="mt-2 block text-[11px] text-gray-600">
+                        Mandatory pass threshold (%)
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={passThreshold}
+                          onChange={(e) => {
+                            const nextThreshold = Number(e.target.value);
+                            const safeThreshold =
+                              Number.isFinite(nextThreshold)
+                                ? Math.max(0, Math.min(nextThreshold, 100))
+                                : 50;
+                            updateAssessment(a.id, {
+                              rule_config: { pass_threshold: safeThreshold },
+                            });
+                          }}
+                          className="mt-1 w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
+                        />
+                      </label>
+                    ) : null}
+
                     <input
                       value={a.rule ?? ""}
                       onChange={(e) => {
                         const nextRule = e.target.value;
                         const derived = deriveRuleMetadata(nextRule, a.name);
+                        const activatingMandatory =
+                          derived.rule_type === "mandatory_pass";
                         updateAssessment(a.id, {
                           rule: nextRule,
                           ...derived,
+                          ...(activatingMandatory ? { is_bonus: false } : {}),
                         });
                       }}
                       placeholder="e.g., Best 10 of 11 quizzes count"
                       className="mt-2 w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
                     />
-                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-gray-500">
-                      {ruleSummaryLabel ? (
-                        <span className="px-2 py-1 rounded-full bg-slate-50 text-slate-700 border border-slate-200">
-                          {ruleSummaryLabel}
-                        </span>
-                      ) : null}
-                    </div>
+                    {hasUnsupportedRule ? (
+                      <p className="mt-2 text-[11px] text-amber-700">
+                        Unsupported rule text is preserved for review but not treated as fully supported.
+                      </p>
+                    ) : null}
                   </>
                 ) : null}
               </div>
@@ -753,7 +998,7 @@ export default function StructureStep() {
             <p className="mt-1 text-sm text-[#737373]">Define your course grading components</p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-[#848484]">Total Weight</p>
+            <p className="text-xs text-[#848484]">Non-bonus Weight</p>
             <p
               className={`text-4xl font-semibold leading-none ${
                 totalWeight === 100 ? "text-[#5E9B68]" : totalWeight < 100 ? "text-[#8E7340]" : "text-[#9C5D5D]"

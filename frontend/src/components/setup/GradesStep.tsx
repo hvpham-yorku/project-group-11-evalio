@@ -81,6 +81,15 @@ function toPercentage(raw: number, total: number): number {
   return clampPercent((raw / total) * 100);
 }
 
+function getMandatoryPassThreshold(assessment: Assessment): number | null {
+  if (assessment.rule_type !== "mandatory_pass") return null;
+  const config = assessment.rule_config ?? {};
+  const raw = (config as Record<string, unknown>).pass_threshold;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 50;
+  return Math.max(0, Math.min(parsed, 100));
+}
+
 function getBestOfEffectiveCount(assessment: Assessment): number {
   if (typeof assessment.effective_count === "number" && assessment.effective_count > 0) {
     return Math.min(Math.floor(assessment.effective_count), assessment.children.length || 1);
@@ -682,6 +691,20 @@ export function GradesStep() {
             const total = parseNumberOrNull(a.total_score);
             const hasChildren = a.children.length > 0;
             const hasGrade = isAssessmentGraded(a);
+            const mandatoryPassThreshold = getMandatoryPassThreshold(a);
+            const livePercent = hasChildren
+              ? computeParentPercentFromChildren(a)
+              : raw !== null && total !== null && total > 0
+                ? toPercentage(raw, total)
+                : null;
+            const mandatoryPassStatus =
+              mandatoryPassThreshold === null
+                ? null
+                : livePercent === null
+                  ? "pending"
+                  : livePercent >= mandatoryPassThreshold
+                    ? "passed"
+                    : "failed";
             const percent = hasGrade
               ? hasChildren
                 ? (computeParentPercentFromChildren(a) ?? 0)
@@ -750,10 +773,40 @@ export function GradesStep() {
                             </button>
                           ) : null}
                           <h4 className="font-semibold text-gray-800">{a.name}</h4>
+                          {mandatoryPassThreshold !== null ? (
+                            <span
+                              className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+                                mandatoryPassStatus === "passed"
+                                  ? "bg-green-50 text-green-700"
+                                  : mandatoryPassStatus === "failed"
+                                    ? "bg-red-50 text-red-700"
+                                    : "bg-amber-50 text-amber-700"
+                              }`}
+                            >
+                              Must pass {"\u2265"} {mandatoryPassThreshold.toFixed(1)}%
+                            </span>
+                          ) : null}
                         </div>
                         <p className="text-sm text-gray-500">
                           {a.weight}% of final grade
                         </p>
+                        {mandatoryPassThreshold !== null ? (
+                          <p
+                            className={`mt-1 text-xs ${
+                              mandatoryPassStatus === "passed"
+                                ? "text-green-700"
+                                : mandatoryPassStatus === "failed"
+                                  ? "text-red-700"
+                                  : "text-amber-700"
+                            }`}
+                          >
+                            {mandatoryPassStatus === "pending"
+                              ? "Enter a score to check if you meet the pass requirement."
+                              : mandatoryPassStatus === "passed"
+                                ? `You passed with ${livePercent?.toFixed(1) ?? "0.0"}%.`
+                                : `Your score of ${livePercent?.toFixed(1) ?? "0.0"}% is below the required ${mandatoryPassThreshold.toFixed(1)}%.`}
+                          </p>
+                        ) : null}
                       </div>
 
                       <div className="flex items-center gap-2">

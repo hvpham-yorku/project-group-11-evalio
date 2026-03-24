@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  CheckCircle2,
   TrendingUp,
   GraduationCap,
   Calendar,
@@ -11,6 +12,7 @@ import {
   Lightbulb,
   ChevronDown,
   Sigma,
+  XCircle,
 } from "lucide-react";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -51,6 +53,10 @@ type AssessmentBreakdownRow = {
   neededLabel: string;
   needed: string;
   contrib: string;
+  isMandatoryPass?: boolean;
+  passThreshold?: number | null;
+  passStatus?: "passed" | "failed" | "pending" | null;
+  mandatoryWarning?: string | null;
 };
 
 type AssessmentTarget = {
@@ -61,6 +67,8 @@ type AssessmentTarget = {
   isBonus: boolean;
   percent: number | null;
   graded: boolean;
+  isMandatoryPass: boolean;
+  passThreshold: number | null;
 };
 
 type AssessmentTargetGroup = {
@@ -147,6 +155,17 @@ function getPercent(assessment: CourseAssessment): number | null {
   return Math.max(0, Math.min(percent, 100));
 }
 
+function getMandatoryPassThreshold(
+  assessment: CourseAssessment
+): number | null {
+  if (assessment.rule_type !== "mandatory_pass") return null;
+  const config = assessment.rule_config ?? {};
+  const raw = (config as Record<string, unknown>).pass_threshold;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 50;
+  return Math.max(0, Math.min(parsed, 100));
+}
+
 function buildAssessmentTargetGroups(
   assessments: CourseAssessment[]
 ): AssessmentTargetGroup[] {
@@ -155,6 +174,7 @@ function buildAssessmentTargetGroups(
   for (const assessment of assessments) {
     const children = Array.isArray(assessment.children) ? assessment.children : [];
     const isBonus = Boolean(assessment.is_bonus);
+    const passThreshold = getMandatoryPassThreshold(assessment);
     const parentPercent = getPercent(assessment);
 
     const parentTarget: AssessmentTarget = {
@@ -165,6 +185,8 @@ function buildAssessmentTargetGroups(
       isBonus,
       percent: parentPercent,
       graded: parentPercent !== null,
+      isMandatoryPass: passThreshold !== null,
+      passThreshold,
     };
 
     if (children.length) {
@@ -186,6 +208,8 @@ function buildAssessmentTargetGroups(
           isBonus,
           percent,
           graded: childHasGrade,
+          isMandatoryPass: false,
+          passThreshold: null,
         });
       }
       targets.push({
@@ -226,6 +250,15 @@ async function buildBreakdownRow(
   assessment: AssessmentTarget
 ): Promise<AssessmentBreakdownRow> {
   const actualPercent = assessment.percent;
+  const mandatoryPassStatus =
+    assessment.isMandatoryPass && typeof assessment.passThreshold === "number"
+      ? actualPercent === null
+        ? "pending"
+        : actualPercent >= assessment.passThreshold
+          ? "passed"
+          : "failed"
+      : null;
+
   if (actualPercent !== null) {
     const contributionPoints = (actualPercent * assessment.weight) / 100;
     return {
@@ -239,6 +272,10 @@ async function buildBreakdownRow(
         assessment.weight
       )})`,
       contrib: `+${contributionPoints.toFixed(2)}%`,
+      isMandatoryPass: assessment.isMandatoryPass,
+      passThreshold: assessment.passThreshold,
+      passStatus: mandatoryPassStatus,
+      mandatoryWarning: null,
     };
   }
 
@@ -260,6 +297,10 @@ async function buildBreakdownRow(
       assessment.weight
     )})`,
     contrib: `+${contributionPoints.toFixed(2)}%`,
+    isMandatoryPass: assessment.isMandatoryPass,
+    passThreshold: assessment.passThreshold,
+    passStatus: assessment.isMandatoryPass ? "pending" : null,
+    mandatoryWarning: minimum.mandatory_pass_warning ?? null,
   };
 }
 
@@ -697,6 +738,17 @@ export function Dashboard() {
 
   const boundaryBreakdown = dashboardSummary?.breakdown ?? [];
   const projectionBreakdown = whatIfResult?.breakdown ?? [];
+  const mandatoryPassStatus = dashboardSummary?.mandatory_pass_status;
+  const bonusContribution =
+    dashboardSummary?.bonus_contribution ??
+    boundaryBreakdown
+      .filter((entry) => entry.is_bonus)
+      .reduce((sum, entry) => sum + entry.current_contribution, 0);
+  const coreGrade =
+    dashboardSummary?.core_grade ??
+    (dashboardSummary
+      ? Math.max(0, dashboardSummary.current_grade - bonusContribution)
+      : 0);
 
   const activeCourse = useMemo(
     () => courses.find((course) => course.course_id === activeCourseId) ?? null,
@@ -948,6 +1000,43 @@ export function Dashboard() {
           </button>
         </div>
 
+        {mandatoryPassStatus?.has_requirements ? (
+          <div
+            className={`mb-4 rounded-2xl border p-4 text-sm ${
+              mandatoryPassStatus.requirements_met
+                ? "border-green-200 bg-green-50 text-green-800"
+                : mandatoryPassStatus.failed_assessments.length > 0
+                  ? "border-red-200 bg-red-50 text-red-800"
+                  : "border-amber-200 bg-amber-50 text-amber-800"
+            }`}
+          >
+            <div className="flex items-center gap-2 font-semibold">
+              {mandatoryPassStatus.requirements_met ? (
+                <CheckCircle2 size={16} />
+              ) : mandatoryPassStatus.failed_assessments.length > 0 ? (
+                <XCircle size={16} />
+              ) : (
+                <AlertTriangle size={16} />
+              )}
+              Mandatory Pass Requirements
+            </div>
+            <div className="mt-2 space-y-1 text-xs">
+              {mandatoryPassStatus.requirements.map((requirement) => (
+                <p key={`mandatory-${requirement.assessment_name}`}>
+                  {requirement.assessment_name}: need at least{" "}
+                  {requirement.threshold.toFixed(1)}% (
+                  {requirement.status === "pending"
+                    ? "not yet graded"
+                    : `${requirement.status} at ${(
+                        requirement.actual_percent ?? 0
+                      ).toFixed(1)}%`}
+                  )
+                </p>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-red-100 bg-red-50 p-5">
             <p className="text-[10px] uppercase tracking-wider text-red-500">
@@ -990,6 +1079,25 @@ export function Dashboard() {
           </p>
         ) : null}
 
+        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+              Core Grade Contribution
+            </p>
+            <p className="mt-1 text-lg font-semibold text-slate-800">
+              {coreGrade.toFixed(2)}%
+            </p>
+          </div>
+          <div className="rounded-xl border border-green-100 bg-green-50 p-4">
+            <p className="text-[10px] uppercase tracking-wider text-green-500">
+              Bonus Contribution
+            </p>
+            <p className="mt-1 text-lg font-semibold text-green-700">
+              +{bonusContribution.toFixed(2)}%
+            </p>
+          </div>
+        </div>
+
         {showBoundaryMath ? (
           <div className="mt-6 space-y-3 border-t border-[#E6E2DB] pt-6">
             {boundaryBreakdown.map((entry) => (
@@ -1003,6 +1111,20 @@ export function Dashboard() {
                     <p className="text-[11px] text-gray-500">
                       Weight {formatCompactNumber(entry.weight)}% {entry.is_bonus ? "• Bonus" : ""}
                     </p>
+                    {entry.is_mandatory_pass ? (
+                      <p
+                        className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${
+                          entry.pass_status === "passed"
+                            ? "bg-green-50 text-green-700"
+                            : entry.pass_status === "failed"
+                              ? "bg-red-50 text-red-700"
+                              : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        Mandatory {"\u2265"} {(entry.pass_threshold ?? 50).toFixed(1)}% •{" "}
+                        {entry.pass_status ?? "pending"}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="grid grid-cols-3 gap-4 text-right text-xs">
                     <div>
@@ -1114,6 +1236,20 @@ export function Dashboard() {
                           ? ` • What-if ${entry.hypothetical_score.toFixed(0)}%`
                           : ""}
                       </p>
+                      {entry.is_mandatory_pass ? (
+                        <p
+                          className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${
+                            entry.pass_status === "passed"
+                              ? "bg-green-50 text-green-700"
+                              : entry.pass_status === "failed"
+                                ? "bg-red-50 text-red-700"
+                                : "bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          Mandatory {"\u2265"} {(entry.pass_threshold ?? 50).toFixed(1)}% •{" "}
+                          {entry.pass_status ?? "pending"}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="grid grid-cols-2 gap-4 text-right text-xs">
                       <div>
@@ -1175,6 +1311,20 @@ export function Dashboard() {
                   <div>
                     <p className="font-bold text-gray-800">{parent.name}</p>
                     <p className="text-[10px] text-gray-400">{parent.weightLabel}</p>
+                    {parent.isMandatoryPass ? (
+                      <p
+                        className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${
+                          parent.passStatus === "passed"
+                            ? "bg-green-50 text-green-700"
+                            : parent.passStatus === "failed"
+                              ? "bg-red-50 text-red-700"
+                              : "bg-amber-50 text-amber-700"
+                        }`}
+                      >
+                        Mandatory {"\u2265"} {(parent.passThreshold ?? 50).toFixed(1)}% •{" "}
+                        {parent.passStatus ?? "pending"}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 {hasChildren ? (
@@ -1208,6 +1358,11 @@ export function Dashboard() {
                   </p>
                 </div>
               </div>
+              {parent.mandatoryWarning ? (
+                <p className="mt-2 text-xs text-amber-700">
+                  {parent.mandatoryWarning}
+                </p>
+              ) : null}
 
               {hasChildren && isExpanded ? (
                 <div className="mt-3 space-y-3 border-l border-[#D4DDE1] pl-5">

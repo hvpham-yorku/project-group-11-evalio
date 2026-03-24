@@ -18,6 +18,8 @@ Design decisions
 from __future__ import annotations
 
 import math
+import logging
+import unicodedata
 from datetime import date, datetime
 from typing import Any
 
@@ -27,6 +29,7 @@ from app.services.grading_service import (
     calculate_course_totals,
     compute_assessment_contribution,
     fill_remaining_ungraded_scores,
+    evaluate_mandatory_pass_requirements,
     _is_assessment_fully_graded,
     _is_target_fully_graded,
     _target_label,
@@ -35,6 +38,57 @@ from app.services.grading_service import (
     resolve_assessment_target,
 )
 from app.services.gpa_service import convert_percentage_all_scales
+
+logger = logging.getLogger(__name__)
+
+
+def _normalize_requirement_key(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    normalized = unicodedata.normalize("NFKC", value)
+    return normalized.strip().casefold()
+
+
+def _coerce_pass_threshold(rule_config: dict[str, Any] | None) -> float:
+    config = rule_config or {}
+    try:
+        threshold = float(config.get("pass_threshold", 50))
+    except (TypeError, ValueError):
+        return 50.0
+    return max(0.0, min(100.0, threshold))
+
+
+def _format_mandatory_pass_status(raw_status: dict[str, Any]) -> dict[str, Any]:
+    requirements: list[dict[str, Any]] = []
+    for requirement in raw_status.get("requirements", []):
+        percent = requirement.get("percent")
+        actual_percent = float(percent) if isinstance(percent, (int, float)) else None
+        requirements.append(
+            {
+                "assessment_name": str(requirement.get("assessment_name", "")),
+                "threshold": float(requirement.get("threshold", 50.0)),
+                "status": str(requirement.get("status", "pending")),
+                "actual_percent": actual_percent,
+            }
+        )
+
+    return {
+        "has_requirements": bool(raw_status.get("has_requirements", False)),
+        "requirements_met": bool(raw_status.get("requirements_met", False)),
+        "failed_assessments": list(raw_status.get("failed_assessments", [])),
+        "pending_assessments": list(raw_status.get("pending_assessments", [])),
+        "requirements": requirements,
+    }
+
+
+def _mandatory_requirement_lookup(
+    mandatory_status: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    return {
+        _normalize_requirement_key(requirement.get("assessment_name", "")): requirement
+        for requirement in mandatory_status.get("requirements", [])
+        if _normalize_requirement_key(requirement.get("assessment_name", ""))
+    }
 
 
 # ─── Grade Boundary Algorithms ────────────────────────────────────────────────
@@ -51,13 +105,24 @@ def compute_grade_boundaries(course: CourseCreate) -> dict[str, Any]:
     core_weight = 0.0
     bonus_weight = 0.0
     breakdown: list[dict[str, Any]] = []
+    mandatory_pass_status = _format_mandatory_pass_status(
+        evaluate_mandatory_pass_requirements(course)
+    )
+    mandatory_lookup = _mandatory_requirement_lookup(mandatory_pass_status)
 
     for a in course.assessments:
         is_bonus = getattr(a, "is_bonus", False)
+        is_mandatory_pass = a.rule_type == "mandatory_pass"
+        requirement = mandatory_lookup.get(_normalize_requirement_key(a.name))
         current = compute_assessment_contribution(a, missing_percent=0.0)
         maximum = compute_assessment_contribution(a, missing_percent=100.0)
         remaining = max(0.0, maximum - current)
         graded = _is_assessment_fully_graded(a)
+        if is_mandatory_pass and requirement is None:
+            logger.warning(
+                "mandatory_pass requirement missing in lookup for assessment=%r",
+                a.name,
+            )
 
         entry: dict[str, Any] = {
             "name": a.name,
@@ -68,6 +133,11 @@ def compute_grade_boundaries(course: CourseCreate) -> dict[str, Any]:
             "max_contribution": round(maximum, 4),
             "remaining_potential": round(remaining, 4),
             "has_children": bool(a.children),
+            "is_mandatory_pass": is_mandatory_pass,
+            "pass_threshold": (
+                _coerce_pass_threshold(a.rule_config) if is_mandatory_pass else None
+            ),
+            "pass_status": requirement.get("status") if requirement else None,
         }
 
         if a.children:
@@ -87,11 +157,24 @@ def compute_grade_boundaries(course: CourseCreate) -> dict[str, Any]:
                         if child_graded
                         else None
                     ),
+                    "is_mandatory_pass": False,
+                    "pass_threshold": None,
+                    "pass_status": None,
                 }
                 children_detail.append(child_entry)
             entry["children"] = children_detail
         elif graded:
-            assert a.raw_score is not None and a.total_score is not None
+            if a.raw_score is None or a.total_score is None:
+                logger.warning(
+                    "graded assessment %r missing score pair; omitting score_percent",
+                    a.name,
+                )
+                breakdown.append(entry)
+                if is_bonus:
+                    bonus_weight += a.weight
+                else:
+                    core_weight += a.weight
+                continue
             entry["score_percent"] = round(
                 calculate_assessment_percent(a.raw_score, a.total_score), 2
             )
@@ -143,8 +226,11 @@ def compute_grade_boundaries(course: CourseCreate) -> dict[str, Any]:
         "normalisation_applied": core_weight < 100 and core_weight > 0,
         "core_weight": round(core_weight, 2),
         "bonus_weight": round(bonus_weight, 2),
+        "core_grade": round(current_totals["core_total"], 2),
+        "bonus_contribution": round(current_totals["bonus_total"], 2),
         "graded_weight": round(graded_weight, 2),
         "remaining_weight": round(remaining_weight, 2),
+        "mandatory_pass_status": mandatory_pass_status,
         # Transparent breakdown
         "breakdown": breakdown,
         # GPA conversions on current grade
@@ -192,6 +278,10 @@ def compute_multi_whatif(
     projected_course = course.model_copy(deep=True)
     for assessment_name, score in scenario_map.items():
         apply_hypothetical_score(projected_course, assessment_name, score)
+    mandatory_pass_status = _format_mandatory_pass_status(
+        evaluate_mandatory_pass_requirements(projected_course)
+    )
+    mandatory_lookup = _mandatory_requirement_lookup(mandatory_pass_status)
 
     max_course = projected_course.model_copy(deep=True)
     fill_remaining_ungraded_scores(max_course, missing_percent=100.0)
@@ -220,7 +310,14 @@ def compute_multi_whatif(
 
     for assessment in course.assessments:
         is_bonus = getattr(assessment, "is_bonus", False)
+        is_mandatory_pass = assessment.rule_type == "mandatory_pass"
+        requirement = mandatory_lookup.get(_normalize_requirement_key(assessment.name))
         graded = _is_assessment_fully_graded(assessment)
+        if is_mandatory_pass and requirement is None:
+            logger.warning(
+                "mandatory_pass requirement missing in projected lookup for assessment=%r",
+                assessment.name,
+            )
         projected_assessment = projected_lookup[assessment.name]
         max_assessment = max_lookup[assessment.name]
         contribution = compute_assessment_contribution(projected_assessment)
@@ -247,6 +344,11 @@ def compute_multi_whatif(
             "max_contribution": round(max_contribution, 4),
             "hypothetical_score": scenario_map.get(assessment.name),
             "has_children": bool(assessment.children),
+            "is_mandatory_pass": is_mandatory_pass,
+            "pass_threshold": (
+                _coerce_pass_threshold(assessment.rule_config) if is_mandatory_pass else None
+            ),
+            "pass_status": requirement.get("status") if requirement else None,
         }
 
         if assessment.children:
@@ -284,10 +386,37 @@ def compute_multi_whatif(
                     "source": child_source,
                     "hypothetical_score": child_hypo,
                     "score_percent": child_score_pct,
+                    "is_mandatory_pass": False,
+                    "pass_threshold": None,
+                    "pass_status": None,
                 })
             entry["children"] = child_entries
 
         whatif_breakdown.append(entry)
+
+    mandatory_pass_warnings: list[str] = []
+    for requirement in mandatory_pass_status.get("requirements", []):
+        if requirement.get("status") != "failed":
+            continue
+        assessment_name = str(requirement.get("assessment_name", ""))
+        if not any(
+            scenario_name == assessment_name
+            or scenario_name.startswith(f"{assessment_name}::")
+            for scenario_name in scenario_map
+        ):
+            continue
+
+        actual_percent = requirement.get("actual_percent")
+        actual_display = (
+            f"{float(actual_percent):.1f}%"
+            if isinstance(actual_percent, (int, float))
+            else "ungraded"
+        )
+        threshold = float(requirement.get("threshold", 50.0))
+        mandatory_pass_warnings.append(
+            f"Warning: Score of {actual_display} on {assessment_name} "
+            f"is below the mandatory pass threshold of {threshold:.1f}%."
+        )
 
     if 0 < core_weight < 100:
         norm_factor = 100.0 / core_weight
@@ -309,14 +438,22 @@ def compute_multi_whatif(
         "course_name": course.name,
         "projected_grade": round(projected, 2),
         "maximum_possible": round(max_possible, 2),
-        "current_grade": current_totals["final_total"],
+        "current_grade": round(current_totals["final_total"], 2),
         "projected_normalised": projected_normalised,
         "maximum_possible_normalised": maximum_possible_normalised,
         "current_normalised": current_normalised,
         "normalisation_applied": 0 < core_weight < 100,
         "core_weight": round(core_weight, 2),
         "bonus_weight": round(bonus_weight, 2),
+        "current_core_grade": round(current_totals["core_total"], 2),
+        "current_bonus_contribution": round(current_totals["bonus_total"], 2),
+        "projected_core_grade": round(projected_totals["core_total"], 2),
+        "projected_bonus_contribution": round(projected_totals["bonus_total"], 2),
+        "maximum_core_grade": round(max_totals["core_total"], 2),
+        "maximum_bonus_contribution": round(max_totals["bonus_total"], 2),
         "scenarios_applied": len(scenario_map),
+        "mandatory_pass_status": mandatory_pass_status,
+        "mandatory_pass_warnings": mandatory_pass_warnings,
         "york_equivalent_projected": get_york_grade(projected),
         "gpa_projected": convert_percentage_all_scales(projected),
         "breakdown": whatif_breakdown,

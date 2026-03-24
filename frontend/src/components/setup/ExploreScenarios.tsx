@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Lightbulb, RotateCcw } from "lucide-react";
+import { AlertTriangle, ChevronDown, Lightbulb, RotateCcw } from "lucide-react";
 import {
   deleteSavedScenario,
   getDashboardSummary,
@@ -34,6 +34,8 @@ type ScenarioAssessment = {
   parentName?: string;
   childName?: string;
   is_bonus?: boolean;
+  is_mandatory_pass?: boolean;
+  pass_threshold?: number | null;
 };
 
 type ScenarioGroup = {
@@ -45,6 +47,8 @@ type ScenarioGroup = {
   raw_score?: number | null;
   total_score?: number | null;
   is_bonus?: boolean;
+  is_mandatory_pass?: boolean;
+  pass_threshold?: number | null;
   children: ScenarioAssessment[];
 };
 
@@ -73,6 +77,15 @@ function hasPersistedGrade(a: { raw_score?: number | null; total_score?: number 
   return typeof a.raw_score === "number" && typeof a.total_score === "number";
 }
 
+function getMandatoryPassThreshold(assessment: CourseAssessment): number | null {
+  if (assessment.rule_type !== "mandatory_pass") return null;
+  const config = assessment.rule_config ?? {};
+  const raw = (config as Record<string, unknown>).pass_threshold;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 50;
+  return Math.max(0, Math.min(parsed, 100));
+}
+
 function buildScenarioGroups(
   assessments: CourseAssessment[]
 ): ScenarioGroup[] {
@@ -81,6 +94,7 @@ function buildScenarioGroups(
 
   for (const assessment of assessments) {
     const children = Array.isArray(assessment.children) ? assessment.children : [];
+    const passThreshold = getMandatoryPassThreshold(assessment);
     if (children.length) {
       const childItems: ScenarioAssessment[] = children.map((child) => ({
         id: nextId++,
@@ -93,6 +107,8 @@ function buildScenarioGroups(
         parentName: assessment.name,
         childName: child.name,
         is_bonus: Boolean(assessment.is_bonus),
+        is_mandatory_pass: false,
+        pass_threshold: null,
       }));
 
       groups.push({
@@ -104,6 +120,8 @@ function buildScenarioGroups(
         raw_score: assessment.raw_score,
         total_score: assessment.total_score,
         is_bonus: Boolean(assessment.is_bonus),
+        is_mandatory_pass: passThreshold !== null,
+        pass_threshold: passThreshold,
         children: childItems,
       });
       continue;
@@ -118,6 +136,8 @@ function buildScenarioGroups(
       raw_score: assessment.raw_score,
       total_score: assessment.total_score,
       is_bonus: Boolean(assessment.is_bonus),
+      is_mandatory_pass: passThreshold !== null,
+      pass_threshold: passThreshold,
       children: [],
     });
   }
@@ -395,6 +415,23 @@ export function ExploreScenarios() {
     scenarioProjection?.normalisation_applied ??
     dashboardSummary?.normalisation_applied ??
     false;
+  const mandatoryPassWarnings = useMemo(() => {
+    const explicitWarnings = scenarioProjection?.mandatory_pass_warnings ?? [];
+    const status = scenarioProjection?.mandatory_pass_status;
+    const computedWarnings = !status?.has_requirements
+      ? []
+      : status.requirements
+      .filter((requirement) => requirement.status === "failed")
+      .map(
+        (requirement) =>
+          `Warning: Score of ${(requirement.actual_percent ?? 0).toFixed(1)}% on ${
+            requirement.assessment_name
+          } is below the mandatory pass threshold of ${requirement.threshold.toFixed(
+            1
+          )}%.`
+      );
+    return [...new Set([...explicitWarnings, ...computedWarnings])];
+  }, [scenarioProjection]);
 
   const handleParentSliderChange = (group: ScenarioGroup, value: number) => {
     const safe = clampPercent(value);
@@ -687,6 +724,20 @@ export function ExploreScenarios() {
               </select>
             </div>
 
+            {mandatoryPassWarnings.length > 0 ? (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                <div className="mb-1 flex items-center gap-2 font-semibold">
+                  <AlertTriangle size={16} />
+                  Mandatory pass warning
+                </div>
+                <div className="space-y-1 text-xs">
+                  {mandatoryPassWarnings.map((warning) => (
+                    <p key={warning}>{warning}</p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <div className="space-y-5">
               {assessments.map((group) => {
                 const hasChildren = group.children.length > 0;
@@ -694,6 +745,11 @@ export function ExploreScenarios() {
                 const parentActual = getActualPercent(group.raw_score, group.total_score);
                 const parentValue = getParentScenarioValue(group);
                 const parentContribution = (parentValue * group.weight) / 100;
+                const parentThreshold = group.pass_threshold;
+                const parentBelowThreshold =
+                  Boolean(group.is_mandatory_pass) &&
+                  typeof parentThreshold === "number" &&
+                  parentValue < parentThreshold;
                 const isModified =
                   typeof activeScenario[group.key] === "number" ||
                   group.children.some((child) => typeof activeScenario[child.key] === "number");
@@ -745,6 +801,17 @@ export function ExploreScenarios() {
                               group.weight
                             )})`}
                           </p>
+                          {group.is_mandatory_pass ? (
+                            <p
+                              className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${
+                                parentBelowThreshold
+                                  ? "bg-red-50 text-red-700"
+                                  : "bg-green-50 text-green-700"
+                              }`}
+                            >
+                              Mandatory pass threshold: {(parentThreshold ?? 50).toFixed(1)}%
+                            </p>
+                          ) : null}
                         </div>
                       </div>
 
@@ -764,10 +831,25 @@ export function ExploreScenarios() {
                       }
                       className="mt-4 w-full h-2 rounded-full appearance-none cursor-pointer"
                       style={{
-                        background: `linear-gradient(to right, #5D737E 0%, #5D737E ${parentValue}%, #E6E2DB ${parentValue}%, #E6E2DB 100%)`,
+                        background: `linear-gradient(to right, ${
+                          parentBelowThreshold ? "#DC2626" : "#5D737E"
+                        } 0%, ${
+                          parentBelowThreshold ? "#DC2626" : "#5D737E"
+                        } ${parentValue}%, #E6E2DB ${parentValue}%, #E6E2DB 100%)`,
                         WebkitAppearance: "none",
                       }}
                     />
+                    {group.is_mandatory_pass ? (
+                      <p
+                        className={`mt-2 text-xs ${
+                          parentBelowThreshold ? "text-red-600" : "text-green-700"
+                        }`}
+                      >
+                        {parentBelowThreshold
+                          ? `Below threshold (${(parentThreshold ?? 50).toFixed(1)}%).`
+                          : `At or above threshold (${(parentThreshold ?? 50).toFixed(1)}%).`}
+                      </p>
+                    ) : null}
 
                     {hasChildren && isExpanded ? (
                       <div className="mt-4 space-y-3 border-l border-[#D4DDE1] pl-5">

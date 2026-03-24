@@ -33,14 +33,22 @@ class CourseService:
         if not course.assessments:
             raise CourseValidationError("At least one assessment is required")
 
-        total_weight = sum(assessment.weight for assessment in course.assessments)
-        if total_weight > 100:
-            raise CourseValidationError("Total assessment weight cannot exceed 100%")
+        for assessment in course.assessments:
+            if getattr(assessment, "is_bonus", False) and assessment.rule_type == "mandatory_pass":
+                raise CourseValidationError(
+                    f"Assessment '{assessment.name}' cannot be both bonus and mandatory_pass"
+                )
+
+        core_weight = sum(
+            a.weight for a in course.assessments if not getattr(a, "is_bonus", False)
+        )
+        if core_weight > 100:
+            raise CourseValidationError("Total non-bonus assessment weight cannot exceed 100%")
 
         stored = self._repository.create(user_id=user_id, course=course)
         return {
             "message": "Course created successfully",
-            "total_weight": total_weight,
+            "total_weight": core_weight,
             "course_id": stored.course_id,
             "course": stored.course,
         }
@@ -59,8 +67,8 @@ class CourseService:
         if not assessments:
             raise CourseValidationError("At least one assessment weight update is required")
 
-        total_weight = Decimal("0")
         seen_names: set[str] = set()
+        weight_by_name: dict[str, Decimal] = {}
         for assessment in assessments:
             weight = assessment["weight"]
             decimal_weight = weight if isinstance(weight, Decimal) else Decimal(str(weight))
@@ -75,10 +83,7 @@ class CourseService:
                 )
 
             seen_names.add(assessment["name"])
-            total_weight += decimal_weight
-
-        if total_weight != Decimal("100"):
-            raise CourseValidationError("Total assessment weight must equal 100%")
+            weight_by_name[assessment["name"]] = decimal_weight
 
         stored = self._get_course_or_raise(user_id=user_id, course_id=course_id)
         existing_assessments = {
@@ -96,6 +101,14 @@ class CourseService:
             missing = ", ".join(sorted(missing_assessments))
             raise CourseValidationError(f"Missing assessment updates for: {missing}")
 
+        core_weight = sum(
+            weight_by_name[name]
+            for name, a in existing_assessments.items()
+            if not getattr(a, "is_bonus", False) and name in weight_by_name
+        )
+        if core_weight != Decimal("100"):
+            raise CourseValidationError("Total non-bonus assessment weight must equal 100%")
+
         for assessment in assessments:
             existing_assessments[assessment["name"]].weight = float(assessment["weight"])
 
@@ -106,7 +119,7 @@ class CourseService:
             "message": "Assessment weights updated successfully",
             "course_id": course_id,
             "course_index": course_index,
-            "total_weight": float(total_weight),
+            "total_weight": float(core_weight),
             "course": stored.course,
         }
 

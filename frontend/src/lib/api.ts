@@ -99,6 +99,7 @@ export type WhatIfResponse = {
   maximum_possible: number;
   york_equivalent: YorkEquivalent;
   explanation: string;
+  mandatory_pass_status?: MandatoryPassStatus;
 };
 
 export type MinimumRequiredResponse = {
@@ -111,6 +112,22 @@ export type MinimumRequiredResponse = {
   other_remaining_assumed_max: number;
   target: number;
   explanation: string;
+  mandatory_pass_warning?: string;
+};
+
+export type MandatoryPassRequirement = {
+  assessment_name: string;
+  threshold: number;
+  status: "passed" | "failed" | "pending";
+  actual_percent?: number;
+};
+
+export type MandatoryPassStatus = {
+  has_requirements: boolean;
+  requirements_met: boolean;
+  failed_assessments: string[];
+  pending_assessments: string[];
+  requirements: MandatoryPassRequirement[];
 };
 
 export type GpaConversion = {
@@ -201,6 +218,9 @@ export type DashboardBreakdownEntry = {
   max_contribution: number;
   remaining_potential: number;
   score_percent?: number;
+  is_mandatory_pass?: boolean;
+  pass_threshold?: number | null;
+  pass_status?: "passed" | "failed" | "pending" | null;
 };
 
 export type DashboardSummaryResponse = {
@@ -214,9 +234,12 @@ export type DashboardSummaryResponse = {
   normalisation_applied: boolean;
   core_weight: number;
   bonus_weight: number;
+  core_grade?: number;
+  bonus_contribution?: number;
   graded_weight: number;
   remaining_weight: number;
   breakdown: DashboardBreakdownEntry[];
+  mandatory_pass_status?: MandatoryPassStatus;
   gpa_current: Record<string, GpaConversion>;
   gpa_best_case: Record<string, GpaConversion>;
   york_equivalent: YorkEquivalent;
@@ -230,6 +253,9 @@ export type DashboardWhatIfBreakdownEntry = {
   contribution: number;
   max_contribution: number;
   hypothetical_score?: number;
+  is_mandatory_pass?: boolean;
+  pass_threshold?: number | null;
+  pass_status?: "passed" | "failed" | "pending" | null;
 };
 
 export type DashboardWhatIfResponse = {
@@ -243,7 +269,15 @@ export type DashboardWhatIfResponse = {
   normalisation_applied?: boolean;
   core_weight?: number;
   bonus_weight?: number;
+  current_core_grade?: number;
+  current_bonus_contribution?: number;
+  projected_core_grade?: number;
+  projected_bonus_contribution?: number;
+  maximum_core_grade?: number;
+  maximum_bonus_contribution?: number;
   scenarios_applied: number;
+  mandatory_pass_status?: MandatoryPassStatus;
+  mandatory_pass_warnings?: string[];
   york_equivalent_projected: YorkEquivalent;
   gpa_projected: Record<string, GpaConversion>;
   breakdown: DashboardWhatIfBreakdownEntry[];
