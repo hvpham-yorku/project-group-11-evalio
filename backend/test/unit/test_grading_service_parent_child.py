@@ -143,6 +143,7 @@ def test_bonus_contributes_outside_core_totals():
     course = CourseCreate(
         name="EECS",
         term="W26",
+        bonus_policy="additive",
         assessments=[
             {"name": "Midterm", "weight": 70, "raw_score": 80, "total_score": 100},
             {"name": "Final", "weight": 20, "raw_score": None, "total_score": None},
@@ -161,6 +162,7 @@ def test_final_total_can_exceed_100_with_bonus():
     course = CourseCreate(
         name="EECS",
         term="W26",
+        bonus_policy="additive",
         assessments=[
             {"name": "Core", "weight": 100, "raw_score": 100, "total_score": 100},
             {"name": "Bonus", "weight": 10, "raw_score": 100, "total_score": 100, "is_bonus": True},
@@ -171,3 +173,39 @@ def test_final_total_can_exceed_100_with_bonus():
     assert totals["core_total"] == 100.0
     assert totals["bonus_total"] == 10.0
     assert totals["final_total"] == 110.0
+
+
+def test_bonus_policy_none_ignores_bonus_in_final_total():
+    course = CourseCreate(
+        name="EECS",
+        term="W26",
+        bonus_policy="none",
+        assessments=[
+            {"name": "Core", "weight": 100, "raw_score": 80, "total_score": 100},
+            {"name": "Bonus", "weight": 10, "raw_score": 100, "total_score": 100, "is_bonus": True},
+        ],
+    )
+
+    totals = calculate_course_totals(course)
+    assert totals["core_total"] == 80.0
+    assert totals["bonus_total"] == 10.0
+    assert totals["final_total"] == 80.0
+    assert calculate_current_standing(course) == 80.0
+
+
+def test_bonus_policy_capped_limits_final_total():
+    course = CourseCreate(
+        name="EECS",
+        term="W26",
+        bonus_policy="capped",
+        bonus_cap_percentage=95,
+        assessments=[
+            {"name": "Core", "weight": 90, "raw_score": 100, "total_score": 100},
+            {"name": "Bonus", "weight": 10, "raw_score": 100, "total_score": 100, "is_bonus": True},
+        ],
+    )
+
+    totals = calculate_course_totals(course)
+    assert totals["core_total"] == 90.0
+    assert totals["bonus_total"] == 10.0
+    assert totals["final_total"] == 95.0

@@ -18,6 +18,15 @@ def _to_float(value: Decimal | float | int | None) -> float | None:
     return float(value)
 
 
+def _normalize_bonus_policy(value: str | None) -> str:
+    if not isinstance(value, str):
+        return "none"
+    normalized = value.strip().lower()
+    if normalized not in {"none", "additive", "capped"}:
+        return "none"
+    return normalized
+
+
 def persist_course_assessments(
     session: Session,
     course_id: UUID,
@@ -38,11 +47,15 @@ def persist_course_assessments(
         session.flush()
 
         if assessment.rule_type:
+            normalized_rule_config = _normalize_rule_config_for_persistence(
+                rule_type=assessment.rule_type,
+                raw=assessment.rule_config,
+            )
             session.add(
                 RuleDB(
                     assessment_id=parent_row.id,
                     rule_type=assessment.rule_type,
-                    rule_config=assessment.rule_config or {},
+                    rule_config=normalized_rule_config,
                 )
             )
 
@@ -124,17 +137,73 @@ def hydrate_course_aggregate(session: Session, course_row: CourseDB) -> CourseCr
                 total_score=_to_float(parent_row.total_score),
                 children=children or None,
                 rule_type=rule.rule_type if rule else None,
-                rule_config=_normalize_rule_config(rule.rule_config if rule else None),
+                rule_config=_normalize_rule_config(
+                    rule_type=rule.rule_type if rule else None,
+                    raw=rule.rule_config if rule else None,
+                ),
                 is_bonus=bool(parent_row.is_bonus),
             )
         )
 
-    return CourseCreate(name=course_row.name, term=course_row.term, assessments=assessments)
+    return CourseCreate(
+        name=course_row.name,
+        term=course_row.term,
+        bonus_policy=_normalize_bonus_policy(course_row.bonus_policy),
+        bonus_cap_percentage=_to_float(course_row.bonus_cap_percentage),
+        assessments=assessments,
+    )
 
 
-def _normalize_rule_config(raw: Any) -> dict[str, Any] | None:
+def _normalize_rule_config(rule_type: str | None, raw: Any) -> dict[str, Any] | None:
     if raw is None:
+        if rule_type == "mandatory_pass":
+            return {"pass_threshold": 50.0}
         return None
     if isinstance(raw, dict):
+        if rule_type == "mandatory_pass":
+            config = dict(raw)
+            threshold = config.get("pass_threshold", 50.0)
+            try:
+                normalized_threshold = float(threshold)
+            except (TypeError, ValueError):
+                normalized_threshold = 50.0
+            if not 0 <= normalized_threshold <= 100:
+                normalized_threshold = 50.0
+            config["pass_threshold"] = normalized_threshold
+            return config
         return raw
     return None
+
+
+def _normalize_rule_config_for_persistence(
+    rule_type: str,
+    raw: Any,
+) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raw = {}
+
+    if rule_type != "mandatory_pass":
+        return dict(raw)
+
+    if "pass_threshold" not in raw:
+        raise ValueError(
+            "mandatory_pass rule_config must include pass_threshold between 0 and 100"
+        )
+
+    threshold = raw.get("pass_threshold")
+    try:
+        normalized_threshold = float(threshold)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "mandatory_pass rule_config pass_threshold must be between 0 and 100"
+        ) from exc
+
+    if not 0 <= normalized_threshold <= 100:
+        raise ValueError(
+            "mandatory_pass rule_config pass_threshold must be between 0 and 100"
+        )
+
+    return {
+        **raw,
+        "pass_threshold": normalized_threshold,
+    }

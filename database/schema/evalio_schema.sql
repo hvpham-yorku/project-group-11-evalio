@@ -53,6 +53,12 @@ CREATE TABLE courses (
 
     term VARCHAR(20) NOT NULL,
 
+    bonus_policy VARCHAR(20) NOT NULL DEFAULT 'none'
+        CHECK (bonus_policy IN ('none','additive','capped')),
+
+    bonus_cap_percentage DECIMAL(5,2)
+        CHECK (bonus_cap_percentage >= 0 AND bonus_cap_percentage <= 100),
+
     credits DECIMAL(3,1) NOT NULL DEFAULT 3.0,
 
     final_percentage DECIMAL(5,2)
@@ -66,6 +72,13 @@ CREATE TABLE courses (
     FOREIGN KEY (user_id)
         REFERENCES users(id)
         ON DELETE CASCADE
+);
+
+ALTER TABLE courses
+ADD CONSTRAINT courses_bonus_cap_policy_check
+CHECK (
+    (bonus_policy = 'capped' AND bonus_cap_percentage IS NOT NULL)
+    OR (bonus_policy IN ('none','additive') AND bonus_cap_percentage IS NULL)
 );
 
 CREATE INDEX idx_courses_term

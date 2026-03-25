@@ -9,6 +9,8 @@ from app.services.grading_service import (
     calculate_minimum_required_score,
     calculate_required_average_summary,
     calculate_whatif_scenario,
+    evaluate_mandatory_pass_requirements,
+    fill_remaining_ungraded_scores,
     get_york_grade,
 )
 
@@ -235,6 +237,8 @@ class CourseService:
             "core_total": totals["core_total"],
             "bonus_total": totals["bonus_total"],
             "final_total": totals["final_total"],
+            "mandatory_pass_status": evaluate_mandatory_pass_requirements(stored.course),
+            "is_failed": totals["is_failed"],
             "assessments": [
                 {
                     "name": assessment.name,
@@ -279,47 +283,45 @@ class CourseService:
 
     def check_target_feasibility(self, user_id: UUID, course_id: UUID, target: float) -> dict:
         stored = self._get_course_or_raise(user_id=user_id, course_id=course_id)
-        current_core_contrib = sum(
-            compute_assessment_contribution(assessment, missing_percent=0.0)
-            for assessment in stored.course.assessments
-            if not assessment.is_bonus
-        )
-        max_core_contrib = sum(
-            compute_assessment_contribution(assessment, missing_percent=100.0)
-            for assessment in stored.course.assessments
-            if not assessment.is_bonus
-        )
-        remaining_potential = max(0.0, max_core_contrib - current_core_contrib)
+        current_totals = calculate_course_totals(stored.course)
+        maximum_course = stored.course.model_copy(deep=True)
+        fill_remaining_ungraded_scores(maximum_course, missing_percent=100.0)
+        maximum_totals = calculate_course_totals(maximum_course)
 
-        current_standing = round(current_core_contrib, 2)
-        maximum_possible = round(current_core_contrib + remaining_potential, 2)
-        if current_core_contrib >= target:
-            feasible = True
-        elif current_core_contrib + remaining_potential >= target:
-            feasible = True
+        current_standing = round(current_totals["final_total"], 2)
+        maximum_possible = round(maximum_totals["final_total"], 2)
+        remaining_potential = max(0.0, maximum_possible - current_standing)
+        feasible = (not maximum_totals["is_failed"]) and (maximum_possible + 1e-9 >= target)
+
+        if maximum_totals["is_failed"]:
+            explanation = (
+                "Target is not achievable because a mandatory pass assessment "
+                "has already been failed."
+            )
+        elif feasible:
+            explanation = (
+                "Target is achievable if perfect scores are obtained on remaining assessments."
+            )
         else:
-            feasible = False
-
-        explanation = (
-            "Target is achievable if perfect scores are obtained on remaining assessments."
-            if feasible
-            else "Target is not achievable even with perfect scores on remaining assessments."
-        )
+            explanation = (
+                "Target is not achievable even with perfect scores on remaining assessments."
+            )
         required_average_summary = calculate_required_average_summary(
             current_standing=current_standing,
             target_percentage=target,
             remaining_weight=remaining_potential,
         )
-        totals = calculate_course_totals(stored.course)
 
         return {
             "course_id": course_id,
             "target": target,
             "current_standing": current_standing,
             "maximum_possible": maximum_possible,
-            "core_total": totals["core_total"],
-            "bonus_total": totals["bonus_total"],
-            "final_total": totals["final_total"],
+            "core_total": current_totals["core_total"],
+            "bonus_total": current_totals["bonus_total"],
+            "final_total": current_totals["final_total"],
+            "mandatory_pass_status": evaluate_mandatory_pass_requirements(stored.course),
+            "is_failed": current_totals["is_failed"],
             "feasible": feasible,
             "explanation": explanation,
             "york_equivalent": get_york_grade(target),

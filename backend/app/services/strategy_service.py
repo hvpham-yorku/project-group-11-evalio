@@ -25,6 +25,7 @@ from typing import Any
 
 from app.models import Assessment, CourseCreate
 from app.services.grading_service import (
+    _apply_bonus_policy,
     apply_hypothetical_score,
     calculate_course_totals,
     compute_assessment_contribution,
@@ -186,8 +187,13 @@ def compute_grade_boundaries(course: CourseCreate) -> dict[str, Any]:
         else:
             core_weight += a.weight
 
-    totals_min = calculate_course_totals(course, missing_percent=0.0)
-    totals_max = calculate_course_totals(course, missing_percent=100.0)
+    min_course = course.model_copy(deep=True)
+    fill_remaining_ungraded_scores(min_course, missing_percent=0.0)
+    max_course = course.model_copy(deep=True)
+    fill_remaining_ungraded_scores(max_course, missing_percent=100.0)
+
+    totals_min = calculate_course_totals(min_course)
+    totals_max = calculate_course_totals(max_course)
     current_totals = calculate_course_totals(course)
 
     min_grade = totals_min["final_total"]
@@ -199,9 +205,30 @@ def compute_grade_boundaries(course: CourseCreate) -> dict[str, Any]:
     # bonus marks can push the effective grade above 100 %.
     if core_weight > 0 and core_weight < 100:
         norm_factor = 100.0 / core_weight
-        min_normalised = round(totals_min["core_total"] * norm_factor + totals_min["bonus_total"], 2)
-        max_normalised = round(totals_max["core_total"] * norm_factor + totals_max["bonus_total"], 2)
-        current_normalised = round(current_totals["core_total"] * norm_factor + current_totals["bonus_total"], 2)
+        min_normalised = round(
+            _apply_bonus_policy(
+                course,
+                core_total=totals_min["core_total"] * norm_factor,
+                bonus_total=totals_min["bonus_total"],
+            ),
+            2,
+        )
+        max_normalised = round(
+            _apply_bonus_policy(
+                course,
+                core_total=totals_max["core_total"] * norm_factor,
+                bonus_total=totals_max["bonus_total"],
+            ),
+            2,
+        )
+        current_normalised = round(
+            _apply_bonus_policy(
+                course,
+                core_total=current_totals["core_total"] * norm_factor,
+                bonus_total=current_totals["bonus_total"],
+            ),
+            2,
+        )
     else:
         min_normalised = min_grade
         max_normalised = max_grade
@@ -231,12 +258,15 @@ def compute_grade_boundaries(course: CourseCreate) -> dict[str, Any]:
         "graded_weight": round(graded_weight, 2),
         "remaining_weight": round(remaining_weight, 2),
         "mandatory_pass_status": mandatory_pass_status,
+        "is_failed": current_totals["is_failed"],
+        "minimum_is_failed": totals_min["is_failed"],
+        "maximum_is_failed": totals_max["is_failed"],
         # Transparent breakdown
         "breakdown": breakdown,
         # GPA conversions on current grade
-        "gpa_current": convert_percentage_all_scales(current_grade),
-        "gpa_best_case": convert_percentage_all_scales(max_grade),
-        "york_equivalent": get_york_grade(current_grade),
+        "gpa_current": convert_percentage_all_scales(0.0 if current_totals["is_failed"] else current_grade),
+        "gpa_best_case": convert_percentage_all_scales(0.0 if totals_max["is_failed"] else max_grade),
+        "york_equivalent": get_york_grade(0.0 if current_totals["is_failed"] else current_grade),
     }
 
 
@@ -421,13 +451,28 @@ def compute_multi_whatif(
     if 0 < core_weight < 100:
         norm_factor = 100.0 / core_weight
         projected_normalised = round(
-            projected_totals["core_total"] * norm_factor + projected_totals["bonus_total"], 2
+            _apply_bonus_policy(
+                course,
+                core_total=projected_totals["core_total"] * norm_factor,
+                bonus_total=projected_totals["bonus_total"],
+            ),
+            2,
         )
         maximum_possible_normalised = round(
-            max_totals["core_total"] * norm_factor + max_totals["bonus_total"], 2
+            _apply_bonus_policy(
+                course,
+                core_total=max_totals["core_total"] * norm_factor,
+                bonus_total=max_totals["bonus_total"],
+            ),
+            2,
         )
         current_normalised = round(
-            current_totals["core_total"] * norm_factor + current_totals["bonus_total"], 2
+            _apply_bonus_policy(
+                course,
+                core_total=current_totals["core_total"] * norm_factor,
+                bonus_total=current_totals["bonus_total"],
+            ),
+            2,
         )
     else:
         projected_normalised = round(projected, 2)
@@ -454,8 +499,11 @@ def compute_multi_whatif(
         "scenarios_applied": len(scenario_map),
         "mandatory_pass_status": mandatory_pass_status,
         "mandatory_pass_warnings": mandatory_pass_warnings,
-        "york_equivalent_projected": get_york_grade(projected),
-        "gpa_projected": convert_percentage_all_scales(projected),
+        "is_failed": projected_totals["is_failed"],
+        "current_is_failed": current_totals["is_failed"],
+        "maximum_is_failed": max_totals["is_failed"],
+        "york_equivalent_projected": get_york_grade(0.0 if projected_totals["is_failed"] else projected),
+        "gpa_projected": convert_percentage_all_scales(0.0 if projected_totals["is_failed"] else projected),
         "breakdown": whatif_breakdown,
     }
 

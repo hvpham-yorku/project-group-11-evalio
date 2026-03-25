@@ -89,10 +89,11 @@ def get_course_gpa(
 
     totals = calculate_course_totals(stored.course)
     pct = totals["final_total"]
+    effective_pct = 0.0 if totals["is_failed"] else pct
 
     try:
-        conversion = convert_percentage(pct, scale)
-        all_scales = convert_percentage_all_scales(pct)
+        conversion = convert_percentage(effective_pct, scale)
+        all_scales = convert_percentage_all_scales(effective_pct)
     except GpaConversionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -100,6 +101,7 @@ def get_course_gpa(
         "course_id": str(course_id),
         "course_name": stored.course.name,
         "percentage": round(pct, 2),
+        "is_failed": totals["is_failed"],
         "totals": totals,
         "gpa": conversion,
         "all_scales": all_scales,
@@ -137,9 +139,10 @@ def whatif_gpa(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     projected = whatif_result["projected_grade"]
+    effective_projected = 0.0 if whatif_result.get("is_failed") else projected
     try:
-        gpa = convert_percentage(projected, payload.scale)
-        all_scales = convert_percentage_all_scales(projected)
+        gpa = convert_percentage(effective_projected, payload.scale)
+        all_scales = convert_percentage_all_scales(effective_projected)
     except GpaConversionError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -147,6 +150,7 @@ def whatif_gpa(
         "course_id": str(course_id),
         "course_name": stored.course.name,
         "projected_percentage": round(projected, 2),
+        "is_failed": bool(whatif_result.get("is_failed")),
         "gpa": gpa,
         "all_scales": all_scales,
         "whatif_detail": whatif_result,

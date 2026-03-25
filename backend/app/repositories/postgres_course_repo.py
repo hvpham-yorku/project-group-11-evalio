@@ -22,6 +22,8 @@ class PostgresCourseRepository:
                 user_id=user_id,
                 name=course.name,
                 term=course.term,
+                bonus_policy=course.bonus_policy,
+                bonus_cap_percentage=course.bonus_cap_percentage,
             )
             session.add(row)
             session.flush()
@@ -85,6 +87,8 @@ class PostgresCourseRepository:
 
             row.name = course.name
             row.term = course.term
+            row.bonus_policy = course.bonus_policy
+            row.bonus_cap_percentage = course.bonus_cap_percentage
 
             session.execute(
                 delete(AssessmentDB).where(AssessmentDB.course_id == course_id)

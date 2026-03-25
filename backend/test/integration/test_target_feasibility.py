@@ -77,10 +77,11 @@ def test_target_feasibility_respects_best_of_remaining_potential(auth_client):
     assert data["feasible"] is False
 
 
-def test_target_feasibility_ignores_bonus_contribution(auth_client):
+def test_target_feasibility_ignores_bonus_when_policy_is_none(auth_client):
     payload = {
         "name": "EECS Bonus",
         "term": "W26",
+        "bonus_policy": "none",
         "assessments": [
             {"name": "Core Midterm", "weight": 60, "raw_score": 100, "total_score": 100},
             {"name": "Core Final", "weight": 20, "raw_score": None, "total_score": None},
@@ -99,5 +100,62 @@ def test_target_feasibility_ignores_bonus_contribution(auth_client):
     assert data["maximum_possible"] == 80.0
     assert data["core_total"] == 60.0
     assert data["bonus_total"] == 20.0
+    assert data["final_total"] == 60.0
+    assert data["feasible"] is False
+
+
+def test_target_feasibility_includes_bonus_when_policy_is_additive(auth_client):
+    payload = {
+        "name": "EECS Bonus Additive",
+        "term": "W26",
+        "bonus_policy": "additive",
+        "assessments": [
+            {"name": "Core Midterm", "weight": 60, "raw_score": 100, "total_score": 100},
+            {"name": "Core Final", "weight": 20, "raw_score": None, "total_score": None},
+            {"name": "Participation Bonus", "weight": 20, "raw_score": 100, "total_score": 100, "is_bonus": True},
+        ],
+    }
+    created = auth_client.post("/courses/", json=payload)
+    assert created.status_code == 200
+    course_id = created.json()["course_id"]
+
+    response = auth_client.post(f"/courses/{course_id}/target", json={"target": 85})
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["current_standing"] == 80.0
+    assert data["maximum_possible"] == 100.0
+    assert data["core_total"] == 60.0
+    assert data["bonus_total"] == 20.0
     assert data["final_total"] == 80.0
+    assert data["feasible"] is True
+
+
+def test_target_feasibility_not_feasible_when_mandatory_pass_already_failed(auth_client):
+    payload = {
+        "name": "EECS Mandatory Fail",
+        "term": "W26",
+        "bonus_policy": "additive",
+        "assessments": [
+            {"name": "Assignments", "weight": 40, "raw_score": 100, "total_score": 100},
+            {
+                "name": "Final Exam",
+                "weight": 60,
+                "raw_score": 40,
+                "total_score": 100,
+                "rule_type": "mandatory_pass",
+                "rule_config": {"pass_threshold": 50},
+            },
+        ],
+    }
+    created = auth_client.post("/courses/", json=payload)
+    assert created.status_code == 200
+    course_id = created.json()["course_id"]
+
+    response = auth_client.post(f"/courses/{course_id}/target", json={"target": 50})
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["final_total"] == 64.0
+    assert data["is_failed"] is True
     assert data["feasible"] is False

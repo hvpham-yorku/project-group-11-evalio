@@ -36,6 +36,8 @@ export type Course = {
   name: string;
   course_name?: string;
   term?: string | null;
+  bonus_policy?: "none" | "additive" | "capped";
+  bonus_cap_percentage?: number | null;
   assessments: CourseAssessment[];
 };
 
@@ -417,11 +419,22 @@ export function listCourses() {
 export function createCourse(payload: {
   name: string;
   term?: string | null;
+  bonus_policy?: "none" | "additive" | "capped";
+  bonus_cap_percentage?: number | null;
   assessments: Array<{
     name: string;
     weight: number;
     raw_score?: number | null;
     total_score?: number | null;
+    children?: Array<{
+      name: string;
+      weight: number;
+      raw_score?: number | null;
+      total_score?: number | null;
+    }> | null;
+    rule_type?: string | null;
+    rule_config?: Record<string, unknown> | null;
+    is_bonus?: boolean;
   }>;
 }) {
   return request("/courses/", {

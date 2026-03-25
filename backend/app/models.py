@@ -9,6 +9,12 @@ SUPPORTED_RULE_TYPES = {
     "mandatory_pass",
 }
 
+SUPPORTED_BONUS_POLICIES = {
+    "none",
+    "additive",
+    "capped",
+}
+
 
 class ChildAssessment(BaseModel):
     name: str = Field(..., min_length=1)
@@ -63,7 +69,11 @@ class Assessment(BaseModel):
             return self
 
         if self.rule_type == "mandatory_pass":
-            threshold = config.get("pass_threshold", 50)
+            if "pass_threshold" not in config:
+                raise ValueError(
+                    "mandatory_pass rule_config must include pass_threshold between 0 and 100"
+                )
+            threshold = config.get("pass_threshold")
             try:
                 normalized_threshold = float(threshold)
             except (TypeError, ValueError) as exc:
@@ -97,4 +107,27 @@ class Assessment(BaseModel):
 class CourseCreate(BaseModel):
     name: str = Field(..., min_length=1)
     term: Optional[str] = None
+    bonus_policy: str = "none"
+    bonus_cap_percentage: Optional[float] = Field(None, ge=0, le=100)
     assessments: List[Assessment]
+
+    @model_validator(mode="after")
+    def validate_bonus_policy(self) -> "CourseCreate":
+        normalized_policy = self.bonus_policy.strip().lower()
+        if normalized_policy not in SUPPORTED_BONUS_POLICIES:
+            raise ValueError(
+                f"Unsupported bonus_policy '{self.bonus_policy}'"
+            )
+
+        if normalized_policy == "capped":
+            if self.bonus_cap_percentage is None:
+                raise ValueError(
+                    "bonus_cap_percentage is required when bonus_policy is 'capped'"
+                )
+        elif self.bonus_cap_percentage is not None:
+            raise ValueError(
+                "bonus_cap_percentage is only allowed when bonus_policy is 'capped'"
+            )
+
+        self.bonus_policy = normalized_policy
+        return self

@@ -152,6 +152,8 @@ def test_mandatory_pass_boundary_and_custom_threshold_behavior(
     summary = evaluate_mandatory_pass_requirements(course)
 
     assert totals["final_total"] == pytest.approx(50 + (score * 0.5))
+    assert totals["mandatory_pass_status"] == expected_status
+    assert totals["is_failed"] is (expected_status == "failed")
     assert summary["requirements_met"] is requirements_met
     assert summary["pending_assessments"] == []
     assert summary["failed_assessments"] == ([] if expected_status == "passed" else ["Final Exam"])

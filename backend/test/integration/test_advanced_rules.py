@@ -197,6 +197,7 @@ def test_dashboard_whatif_below_mandatory_threshold_returns_failure(auth_client)
     assert status["has_requirements"] is True
     assert "Final Exam" in status["failed_assessments"]
     assert len(data["mandatory_pass_warnings"]) >= 1
+    assert data["is_failed"] is True
 
     final_breakdown = next(item for item in data["breakdown"] if item["name"] == "Final Exam")
     assert final_breakdown["pass_status"] == "failed"
@@ -233,9 +234,8 @@ def test_minimum_required_warns_when_below_mandatory_threshold(auth_client):
     assert response.status_code == 200
     data = response.json()
 
-    assert data["minimum_required"] < 60
-    assert "mandatory_pass_warning" in data
-    assert "below the mandatory pass threshold" in data["mandatory_pass_warning"]
+    assert data["minimum_required"] == 60.0
+    assert "mandatory_pass_warning" not in data
 
 
 def test_bonus_contribution_is_separate_and_does_not_change_mandatory_evaluation(auth_client):
@@ -244,6 +244,7 @@ def test_bonus_contribution_is_separate_and_does_not_change_mandatory_evaluation
         {
             "name": "Advanced Rules 7",
             "term": "W26",
+            "bonus_policy": "additive",
             "assessments": [
                 {
                     "name": "Final Exam",
@@ -276,6 +277,7 @@ def test_bonus_contribution_is_separate_and_does_not_change_mandatory_evaluation
     assert data["core_grade"] == pytest.approx(40.0, abs=0.01)
     assert data["bonus_contribution"] == pytest.approx(5.0, abs=0.01)
     assert data["current_grade"] == pytest.approx(45.0, abs=0.01)
+    assert data["is_failed"] is True
 
     status = data["mandatory_pass_status"]
     assert status["requirements_met"] is False

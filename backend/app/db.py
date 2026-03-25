@@ -72,6 +72,13 @@ class CourseDB(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     term: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    bonus_policy: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="none",
+        server_default=text("'none'"),
+    )
+    bonus_cap_percentage: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     credits: Mapped[float] = mapped_column(Numeric(3, 1), nullable=False, default=3.0, server_default="3.0")
     final_percentage: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     grade_type: Mapped[str] = mapped_column(String(20), nullable=False, default="numeric", server_default="'numeric'")
@@ -322,9 +329,85 @@ class DeadlineExportDB(Base):
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    _ensure_courses_bonus_policy_columns()
     _ensure_deadlines_due_date_column()
     _ensure_deadlines_deadline_type_column()
     _ensure_rules_rule_type_constraint()
+
+
+def _ensure_courses_bonus_policy_columns() -> None:
+    if engine.dialect.name != "postgresql":
+        return
+
+    ddl = """
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'courses'
+    ) THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'courses' AND column_name = 'bonus_policy'
+        ) THEN
+            ALTER TABLE courses
+            ADD COLUMN bonus_policy VARCHAR(20);
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'courses' AND column_name = 'bonus_cap_percentage'
+        ) THEN
+            ALTER TABLE courses
+            ADD COLUMN bonus_cap_percentage DECIMAL(5,2);
+        END IF;
+
+        UPDATE courses
+        SET bonus_policy = 'additive'
+        WHERE bonus_policy IS NULL;
+
+        ALTER TABLE courses
+        ALTER COLUMN bonus_policy SET DEFAULT 'none';
+
+        ALTER TABLE courses
+        ALTER COLUMN bonus_policy SET NOT NULL;
+
+        ALTER TABLE courses
+        DROP CONSTRAINT IF EXISTS courses_bonus_policy_check;
+
+        ALTER TABLE courses
+        ADD CONSTRAINT courses_bonus_policy_check
+        CHECK (bonus_policy IN ('none', 'additive', 'capped'));
+
+        ALTER TABLE courses
+        DROP CONSTRAINT IF EXISTS courses_bonus_cap_percentage_range_check;
+
+        ALTER TABLE courses
+        ADD CONSTRAINT courses_bonus_cap_percentage_range_check
+        CHECK (
+            bonus_cap_percentage IS NULL
+            OR (bonus_cap_percentage >= 0 AND bonus_cap_percentage <= 100)
+        );
+
+        ALTER TABLE courses
+        DROP CONSTRAINT IF EXISTS courses_bonus_cap_percentage_policy_check;
+
+        ALTER TABLE courses
+        ADD CONSTRAINT courses_bonus_cap_percentage_policy_check
+        CHECK (
+            (bonus_policy = 'capped' AND bonus_cap_percentage IS NOT NULL)
+            OR (bonus_policy IN ('none', 'additive') AND bonus_cap_percentage IS NULL)
+        );
+    END IF;
+END
+$$;
+"""
+
+    with engine.begin() as connection:
+        connection.execute(text(ddl))
 
 
 def _ensure_deadlines_due_date_column() -> None:

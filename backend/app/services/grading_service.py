@@ -1,3 +1,5 @@
+from typing import Any
+
 from app.models import CourseCreate
 
 CHILD_ASSESSMENT_SEPARATOR = "::"
@@ -297,7 +299,53 @@ def evaluate_mandatory_pass_requirements(course: CourseCreate) -> dict[str, obje
     }
 
 
-def calculate_course_totals(course: CourseCreate, *, missing_percent: float = 0.0) -> dict[str, float]:
+def _get_bonus_policy(course: CourseCreate) -> str:
+    raw_policy = getattr(course, "bonus_policy", "none")
+    if not isinstance(raw_policy, str):
+        return "none"
+    normalized = raw_policy.strip().lower()
+    if normalized not in {"none", "additive", "capped"}:
+        return "none"
+    return normalized
+
+
+def _apply_bonus_policy(
+    course: CourseCreate,
+    *,
+    core_total: float,
+    bonus_total: float,
+) -> float:
+    policy = _get_bonus_policy(course)
+    if policy == "none":
+        return float(core_total)
+
+    final_total = float(core_total + bonus_total)
+    if policy != "capped":
+        return final_total
+
+    bonus_cap = getattr(course, "bonus_cap_percentage", None)
+    if bonus_cap is None:
+        return final_total
+    return min(final_total, float(bonus_cap))
+
+
+def _summarize_mandatory_pass_state(course: CourseCreate) -> tuple[str, dict[str, object], bool]:
+    details = evaluate_mandatory_pass_requirements(course)
+    failed_assessments = list(details.get("failed_assessments", []))
+    pending_assessments = list(details.get("pending_assessments", []))
+
+    if failed_assessments:
+        return "failed", details, True
+    if pending_assessments:
+        return "pending", details, False
+    return "passed", details, False
+
+
+def _calculate_grading_result(
+    course: CourseCreate,
+    *,
+    missing_percent: float = 0.0,
+) -> dict[str, Any]:
     core_total = 0.0
     bonus_total = 0.0
 
@@ -308,12 +356,24 @@ def calculate_course_totals(course: CourseCreate, *, missing_percent: float = 0.
         else:
             core_total += contribution
 
-    final_total = core_total + bonus_total
+    final_total = _apply_bonus_policy(
+        course,
+        core_total=core_total,
+        bonus_total=bonus_total,
+    )
+    mandatory_pass_status, mandatory_pass_details, is_failed = _summarize_mandatory_pass_state(course)
     return {
         "core_total": round(core_total, 2),
         "bonus_total": round(bonus_total, 2),
         "final_total": round(final_total, 2),
+        "mandatory_pass_status": mandatory_pass_status,
+        "mandatory_pass_details": mandatory_pass_details,
+        "is_failed": is_failed,
     }
+
+
+def calculate_course_totals(course: CourseCreate, *, missing_percent: float = 0.0) -> dict[str, Any]:
+    return _calculate_grading_result(course, missing_percent=missing_percent)
 
 
 def calculate_current_standing(course: CourseCreate) -> float:
@@ -412,7 +472,8 @@ def calculate_minimum_required_score(
     if _is_target_fully_graded(target_assessment, target_child):
         raise ValueError(f"Assessment '{assessment_name}' is already graded")
 
-    current_standing = calculate_current_standing(course)
+    current_result = calculate_course_totals(course)
+    current_standing = current_result["final_total"]
 
     optimistic_course = course.model_copy(deep=True)
     fill_remaining_ungraded_scores(
@@ -424,15 +485,40 @@ def calculate_minimum_required_score(
     points_after_others = totals_without_target["final_total"]
     other_remaining_max = max(0.0, points_after_others - current_standing)
 
+    if totals_without_target["is_failed"]:
+        return {
+            "course_name": course.name,
+            "assessment_name": target_path if target_path != assessment_name else assessment_name,
+            "assessment_weight": _get_target_weight(target_assessment, target_child),
+            "minimum_required": 101.0,
+            "is_achievable": False,
+            "current_standing": round(current_standing, 2),
+            "other_remaining_assumed_max": round(other_remaining_max, 2),
+            "target": target,
+            "explanation": (
+                "Target is not achievable because a mandatory pass assessment "
+                "has already been failed."
+            ),
+            "is_failed": True,
+        }
+
     points_needed = target - points_after_others
 
     maximum_course = optimistic_course.model_copy(deep=True)
     apply_hypothetical_score(maximum_course, target_path, 100.0)
     maximum_totals = calculate_course_totals(maximum_course)
     max_possible = maximum_totals["final_total"]
+    target_pass_threshold = (
+        _get_mandatory_pass_threshold(target_assessment)
+        if target_assessment.rule_type == "mandatory_pass"
+        else 0.0
+    )
 
-    if points_needed <= 0:
-        minimum_required = 0.0
+    if maximum_totals["is_failed"]:
+        minimum_required = 101.0
+        is_achievable = False
+    elif points_needed <= 0:
+        minimum_required = max(0.0, target_pass_threshold)
         is_achievable = True
     elif max_possible + 1e-9 < target:
         target_capacity = max(0.0, max_possible - points_after_others)
@@ -442,14 +528,15 @@ def calculate_minimum_required_score(
             minimum_required = (points_needed / target_capacity) * 100
         is_achievable = False
     else:
-        low = 0.0
+        low = max(0.0, target_pass_threshold)
         high = 100.0
         for _ in range(30):
             mid = (low + high) / 2
             candidate_course = optimistic_course.model_copy(deep=True)
             apply_hypothetical_score(candidate_course, target_path, mid)
-            candidate_total = calculate_course_totals(candidate_course)["final_total"]
-            if candidate_total >= target:
+            candidate_result = calculate_course_totals(candidate_course)
+            candidate_total = candidate_result["final_total"]
+            if not candidate_result["is_failed"] and candidate_total >= target:
                 high = mid
             else:
                 low = mid
@@ -467,6 +554,7 @@ def calculate_minimum_required_score(
         "current_standing": round(current_standing, 2),
         "other_remaining_assumed_max": round(other_remaining_max, 2),
         "target": target,
+        "is_failed": False,
         "explanation": (
             f"You need at least {round(minimum_required, 1)}% on {display_name} "
             f"to reach {target}% (assuming 100% on all other remaining assessments)."
@@ -499,6 +587,7 @@ def calculate_whatif_scenario(
         raise ValueError(f"Assessment '{assessment_name}' is already graded")
 
     current_standing = calculate_current_standing(course)
+    current_result = calculate_course_totals(course)
 
     projected_course = course.model_copy(deep=True)
     apply_hypothetical_score(projected_course, target_path, hypothetical_score)
@@ -524,14 +613,20 @@ def calculate_whatif_scenario(
         "assessment_weight": _get_target_weight(target_assessment, target_child),
         "hypothetical_score": hypothetical_score,
         "hypothetical_contribution": round(hypothetical_contribution, 2),
-        "current_standing": round(current_standing, 2),
+        "current_standing": round(current_result["final_total"], 2),
         "projected_grade": round(projected_grade, 2),
         "remaining_potential": round(remaining_potential, 2),
         "maximum_possible": round(maximum_possible, 2),
-        "york_equivalent": get_york_grade(projected_grade),
+        "is_failed": projected_totals["is_failed"],
+        "york_equivalent": get_york_grade(0.0 if projected_totals["is_failed"] else projected_grade),
         "explanation": (
             f"If you score {hypothetical_score}% on {display_name} ({_get_target_weight(target_assessment, target_child)}% weight), "
             f"your grade will be {round(projected_grade, 2)}%. "
             f"With {remaining_potential}% weight remaining, your maximum possible is {round(maximum_possible, 2)}%."
+            + (
+                " Course outcome would still be a fail because a mandatory pass requirement is not met."
+                if projected_totals["is_failed"]
+                else ""
+            )
         )
     }

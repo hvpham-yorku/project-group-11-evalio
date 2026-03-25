@@ -154,6 +154,8 @@ def test_mandatory_pass_boundary_and_custom_threshold_behavior(
     summary = evaluate_mandatory_pass_requirements(course)
 
     assert totals["final_total"] == pytest.approx(50 + (score * 0.5))
+    assert totals["mandatory_pass_status"] == expected_status
+    assert totals["is_failed"] is (expected_status == "failed")
     assert summary["requirements_met"] is requirements_met
     assert summary["pending_assessments"] == []
     assert summary["failed_assessments"] == ([] if expected_status == "passed" else ["Final Exam"])
@@ -165,3 +167,36 @@ def test_mandatory_pass_boundary_and_custom_threshold_behavior(
             "percent": float(score),
         }
     ]
+
+
+def test_bonus_and_failed_mandatory_pass_keep_numeric_total_but_fail_outcome():
+    course = CourseCreate(
+        name="EECS",
+        term="W26",
+        bonus_policy="additive",
+        assessments=[
+            {
+                "name": "Final Exam",
+                "weight": 100,
+                "raw_score": 40,
+                "total_score": 100,
+                "rule_type": "mandatory_pass",
+                "rule_config": {"pass_threshold": 50},
+            },
+            {
+                "name": "Participation Bonus",
+                "weight": 5,
+                "raw_score": 100,
+                "total_score": 100,
+                "is_bonus": True,
+            },
+        ],
+    )
+
+    totals = calculate_course_totals(course)
+
+    assert totals["core_total"] == 40.0
+    assert totals["bonus_total"] == 5.0
+    assert totals["final_total"] == 45.0
+    assert totals["mandatory_pass_status"] == "failed"
+    assert totals["is_failed"] is True

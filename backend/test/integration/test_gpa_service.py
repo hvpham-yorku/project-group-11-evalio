@@ -218,6 +218,33 @@ class TestGpaEndpoints:
         assert "all_scales" in data
         assert data["gpa"]["scale"] == "9.0"
 
+    def test_get_course_gpa_respects_failed_mandatory_pass(self, auth_client):
+        response = auth_client.post("/courses/", json={
+            "name": "EECS 2311",
+            "term": "F25",
+            "assessments": [
+                {"name": "Assignments", "weight": 40, "raw_score": 100, "total_score": 100},
+                {
+                    "name": "Final",
+                    "weight": 60,
+                    "raw_score": 40,
+                    "total_score": 100,
+                    "rule_type": "mandatory_pass",
+                    "rule_config": {"pass_threshold": 50},
+                },
+            ],
+        })
+        assert response.status_code == 200
+        course_id = response.json()["course_id"]
+
+        gpa_resp = auth_client.get(f"/courses/{course_id}/gpa?scale=9.0")
+        assert gpa_resp.status_code == 200
+        data = gpa_resp.json()
+        assert data["percentage"] == 64.0
+        assert data["is_failed"] is True
+        assert data["gpa"]["letter"] == "F"
+        assert data["gpa"]["grade_point"] == 0.0
+
     def test_get_course_gpa_invalid_scale(self, auth_client):
         r = self._create_course(auth_client)
         course_id = r.json()["course_id"]

@@ -64,6 +64,26 @@ class TestMultiWhatIf:
         with pytest.raises(ValueError, match="not found"):
             compute_multi_whatif(course, [{"assessment_name": "NonExistent", "score": 50}])
 
+    def test_failed_mandatory_pass_sets_failed_flag(self):
+        course = CourseCreate(
+            name="Test Course",
+            term="F25",
+            assessments=[
+                Assessment(name="Assignments", weight=40, raw_score=100, total_score=100),
+                Assessment(
+                    name="Final",
+                    weight=60,
+                    rule_type="mandatory_pass",
+                    rule_config={"pass_threshold": 50},
+                ),
+            ],
+        )
+
+        result = compute_multi_whatif(course, [{"assessment_name": "Final", "score": 40}])
+        assert result["projected_grade"] == 64.0
+        assert result["is_failed"] is True
+        assert result["mandatory_pass_status"]["failed_assessments"] == ["Final"]
+
 
 class TestLearningStrategies:
     def test_high_weight_gets_pareto(self):
