@@ -76,6 +76,103 @@ def persist_course_assessments(
     session.flush()
 
 
+def sync_course_assessments(
+    session: Session,
+    course_id: UUID,
+    assessments: list[Assessment],
+) -> None:
+    existing_parent_rows = session.scalars(
+        select(AssessmentDB).where(
+            AssessmentDB.course_id == course_id,
+            AssessmentDB.parent_assessment_id.is_(None),
+        )
+    ).all()
+    existing_children_by_parent: dict[UUID, dict[str, AssessmentDB]] = {}
+    for parent_row in existing_parent_rows:
+        child_rows = session.scalars(
+            select(AssessmentDB).where(
+                AssessmentDB.parent_assessment_id == parent_row.id,
+            )
+        ).all()
+        existing_children_by_parent[parent_row.id] = {row.name: row for row in child_rows}
+
+    existing_parents_by_name = {row.name: row for row in existing_parent_rows}
+    retained_parent_ids: set[UUID] = set()
+
+    for position, assessment in enumerate(assessments):
+        parent_row = existing_parents_by_name.get(assessment.name)
+        if parent_row is None:
+            parent_row = AssessmentDB(
+                course_id=course_id,
+                parent_assessment_id=None,
+                name=assessment.name,
+            )
+            session.add(parent_row)
+            session.flush()
+
+        parent_row.name = assessment.name
+        parent_row.weight = float(assessment.weight)
+        parent_row.raw_score = _to_float(assessment.raw_score)
+        parent_row.total_score = _to_float(assessment.total_score)
+        parent_row.is_bonus = bool(assessment.is_bonus)
+        parent_row.position = position
+        retained_parent_ids.add(parent_row.id)
+
+        normalized_rule_config = None
+        if assessment.rule_type:
+            normalized_rule_config = _normalize_rule_config_for_persistence(
+                rule_type=assessment.rule_type,
+                raw=assessment.rule_config,
+            )
+
+        existing_rule = parent_row.rule
+        if assessment.rule_type:
+            if existing_rule is None:
+                session.add(
+                    RuleDB(
+                        assessment_id=parent_row.id,
+                        rule_type=assessment.rule_type,
+                        rule_config=normalized_rule_config,
+                    )
+                )
+            else:
+                existing_rule.rule_type = assessment.rule_type
+                existing_rule.rule_config = normalized_rule_config
+        elif existing_rule is not None:
+            session.delete(existing_rule)
+
+        existing_children = existing_children_by_parent.get(parent_row.id, {})
+        retained_child_ids: set[UUID] = set()
+        for child_position, child in enumerate(assessment.children or []):
+            child_row = existing_children.get(child.name)
+            if child_row is None:
+                child_row = AssessmentDB(
+                    course_id=course_id,
+                    parent_assessment_id=parent_row.id,
+                    name=child.name,
+                )
+                session.add(child_row)
+                session.flush()
+
+            child_row.name = child.name
+            child_row.weight = float(child.weight)
+            child_row.raw_score = _to_float(child.raw_score)
+            child_row.total_score = _to_float(child.total_score)
+            child_row.is_bonus = False
+            child_row.position = child_position
+            retained_child_ids.add(child_row.id)
+
+        for child_row in existing_children.values():
+            if child_row.id not in retained_child_ids:
+                session.delete(child_row)
+
+    for parent_row in existing_parent_rows:
+        if parent_row.id not in retained_parent_ids:
+            session.delete(parent_row)
+
+    session.flush()
+
+
 def hydrate_course_aggregate(session: Session, course_row: CourseDB) -> CourseCreate:
     parent_rows = session.scalars(
         select(AssessmentDB)

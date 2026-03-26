@@ -2,12 +2,13 @@ from uuid import UUID
 
 from sqlalchemy import delete, select
 
-from app.db import AssessmentDB, CourseDB, SessionLocal, init_db
+from app.db import CourseDB, SessionLocal, init_db
 from app.models import CourseCreate
 from app.repositories.base import StoredCourse
 from app.repositories.postgres_course_mapper import (
     hydrate_course_aggregate,
     persist_course_assessments,
+    sync_course_assessments,
 )
 
 
@@ -90,12 +91,11 @@ class PostgresCourseRepository:
             row.bonus_policy = course.bonus_policy
             row.bonus_cap_percentage = course.bonus_cap_percentage
 
-            session.execute(
-                delete(AssessmentDB).where(AssessmentDB.course_id == course_id)
+            sync_course_assessments(
+                session=session,
+                course_id=course_id,
+                assessments=course.assessments,
             )
-            session.flush()
-
-            persist_course_assessments(session=session, course_id=course_id, assessments=course.assessments)
 
             session.commit()
             session.refresh(row)

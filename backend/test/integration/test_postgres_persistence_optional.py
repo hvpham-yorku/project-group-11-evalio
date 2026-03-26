@@ -1,17 +1,25 @@
 import pytest
 import psycopg
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
+from app.db import AssessmentDB
 from app.models import CourseCreate, Assessment
+from app.models_deadline import DeadlineCreate
+from app.repositories.inmemory_calendar_repo import InMemoryCalendarRepository
 from app.services.course_service import CourseService
+from app.services.deadline_service import DeadlineService
+from app.services.planning_service import PlanningService
 from app.services.scenario_service import ScenarioService
 
 assert psycopg is not None, "psycopg is required to run DB persistence tests"
 
 from app.repositories.postgres_user_repo import PostgresUserRepository
 from app.repositories.postgres_course_repo import PostgresCourseRepository
+from app.repositories.postgres_deadline_repo import PostgresDeadlineRepository
+from app.repositories.postgres_grade_target_repo import PostgresGradeTargetRepository
 from app.repositories.postgres_scenario_repo import PostgresScenarioRepository
 
 
@@ -30,6 +38,30 @@ def pg_repos():
 
     # Cleanup
     scenario_repo.clear()
+    course_repo.clear()
+    user_repo.clear()
+
+
+@pytest.fixture
+def pg_planning_stack():
+    user_repo = PostgresUserRepository()
+    course_repo = PostgresCourseRepository()
+    deadline_repo = PostgresDeadlineRepository()
+    target_repo = PostgresGradeTargetRepository()
+
+    target_repo.clear()
+    deadline_repo.clear()
+    course_repo.clear()
+    user_repo.clear()
+
+    course_service = CourseService(course_repo)
+    deadline_service = DeadlineService(deadline_repo, InMemoryCalendarRepository())
+    planning_service = PlanningService(course_service, deadline_service, target_repo)
+
+    yield user_repo, course_repo, deadline_repo, target_repo, planning_service
+
+    target_repo.clear()
+    deadline_repo.clear()
     course_repo.clear()
     user_repo.clear()
 
@@ -253,3 +285,187 @@ def test_postgres_backfills_legacy_bonus_policy_to_additive(pg_repos):
     assert reloaded is not None
     assert reloaded.course.bonus_policy == "additive"
     assert reloaded.course.bonus_cap_percentage is None
+
+
+def test_postgres_course_update_preserves_assessment_ids(pg_repos):
+    user_repo, course_repo, _scenario_repo = pg_repos
+
+    user = user_repo.create_user(email="pg-assessment-ids@test.com", password_hash="dummyhash")
+    user_id = user.user_id
+
+    stored = course_repo.create(
+        user_id=user_id,
+        course=CourseCreate(
+            name="Assessment Identity",
+            term="W26",
+            assessments=[
+                Assessment(name="Midterm", weight=40, raw_score=75, total_score=100),
+                Assessment(name="Final", weight=60, raw_score=None, total_score=None),
+            ],
+        ),
+    )
+
+    with course_repo._session_factory() as session:
+        before_rows = session.scalars(
+            select(AssessmentDB)
+            .where(
+                AssessmentDB.course_id == stored.course_id,
+                AssessmentDB.parent_assessment_id.is_(None),
+            )
+            .order_by(AssessmentDB.name.asc())
+        ).all()
+        before_ids = {row.name: row.id for row in before_rows}
+
+    course_repo.update(
+        user_id=user_id,
+        course_id=stored.course_id,
+        course=CourseCreate(
+            name="Assessment Identity Revised",
+            term="W26",
+            assessments=[
+                Assessment(name="Midterm", weight=35, raw_score=80, total_score=100),
+                Assessment(name="Final", weight=65, raw_score=None, total_score=None),
+            ],
+        ),
+    )
+
+    with course_repo._session_factory() as session:
+        after_rows = session.scalars(
+            select(AssessmentDB)
+            .where(
+                AssessmentDB.course_id == stored.course_id,
+                AssessmentDB.parent_assessment_id.is_(None),
+            )
+            .order_by(AssessmentDB.name.asc())
+        ).all()
+        after_ids = {row.name: row.id for row in after_rows}
+
+    assert after_ids["Midterm"] == before_ids["Midterm"]
+    assert after_ids["Final"] == before_ids["Final"]
+
+
+def test_postgres_planning_alerts_include_overdue_deadlines_from_persisted_data(pg_planning_stack):
+    user_repo, course_repo, deadline_repo, _target_repo, planning_service = pg_planning_stack
+
+    user = user_repo.create_user(email="pg-overdue@test.com", password_hash="dummyhash")
+    user_id = user.user_id
+    stored = course_repo.create(
+        user_id=user_id,
+        course=CourseCreate(
+            name="Overdue Alerts",
+            term="W26",
+            assessments=[Assessment(name="Assignment 1", weight=40), Assessment(name="Final", weight=60)],
+        ),
+    )
+    deadline_repo.create(
+        user_id=user_id,
+        course_id=stored.course_id,
+        data=DeadlineCreate(
+            title="Assignment 1",
+            due_date="2026-03-20",
+            due_time="09:00",
+            assessment_name="Assignment 1",
+        ),
+    )
+
+    result = planning_service.get_risk_alerts(
+        user_id=user_id,
+        reference_at=datetime.fromisoformat("2026-03-22T12:00:00-04:00"),
+    )
+
+    overdue_alerts = [alert for alert in result["alerts"] if alert["type"] == "overdue_deadline"]
+    assert len(overdue_alerts) == 1
+    assert overdue_alerts[0]["course_name"] == "Overdue Alerts"
+    assert overdue_alerts[0]["assessment_name"] == "Assignment 1"
+
+
+def test_postgres_planning_alerts_include_near_term_deadlines_from_persisted_data(pg_planning_stack):
+    user_repo, course_repo, deadline_repo, _target_repo, planning_service = pg_planning_stack
+
+    user = user_repo.create_user(email="pg-nearterm@test.com", password_hash="dummyhash")
+    user_id = user.user_id
+    stored = course_repo.create(
+        user_id=user_id,
+        course=CourseCreate(
+            name="Near Term Alerts",
+            term="W26",
+            assessments=[Assessment(name="Quiz", weight=20), Assessment(name="Final", weight=80)],
+        ),
+    )
+    deadline_repo.create(
+        user_id=user_id,
+        course_id=stored.course_id,
+        data=DeadlineCreate(
+            title="Quiz",
+            due_date="2026-03-23",
+            due_time="10:00",
+            assessment_name="Quiz",
+        ),
+    )
+
+    result = planning_service.get_risk_alerts(
+        user_id=user_id,
+        reference_at=datetime.fromisoformat("2026-03-22T12:00:00-04:00"),
+    )
+
+    near_term_alerts = [alert for alert in result["alerts"] if alert["type"] == "near_term_deadline"]
+    assert len(near_term_alerts) == 1
+    assert near_term_alerts[0]["course_name"] == "Near Term Alerts"
+    assert near_term_alerts[0]["assessment_name"] == "Quiz"
+
+
+def test_postgres_planning_alerts_use_persisted_targets_for_impossible_target_detection(pg_planning_stack):
+    user_repo, course_repo, _deadline_repo, target_repo, planning_service = pg_planning_stack
+
+    user = user_repo.create_user(email="pg-target@test.com", password_hash="dummyhash")
+    user_id = user.user_id
+    stored = course_repo.create(
+        user_id=user_id,
+        course=CourseCreate(
+            name="Target Alerts",
+            term="W26",
+            assessments=[
+                Assessment(name="Midterm", weight=60, raw_score=50, total_score=100),
+                Assessment(name="Final", weight=40, raw_score=None, total_score=None),
+            ],
+        ),
+    )
+    target_repo.set_target(user_id=user_id, course_id=stored.course_id, target_percentage=85)
+
+    result = planning_service.get_risk_alerts(
+        user_id=user_id,
+        reference_at=datetime.fromisoformat("2026-03-22T12:00:00-04:00"),
+    )
+
+    impossible_alerts = [alert for alert in result["alerts"] if alert["type"] == "impossible_target"]
+    assert len(impossible_alerts) == 1
+    assert impossible_alerts[0]["course_name"] == "Target Alerts"
+    assert impossible_alerts[0]["target"] == 85
+
+
+def test_postgres_planning_alerts_detect_high_weight_ungraded_assessments_from_persisted_scores(pg_planning_stack):
+    user_repo, course_repo, _deadline_repo, _target_repo, planning_service = pg_planning_stack
+
+    user = user_repo.create_user(email="pg-highweight@test.com", password_hash="dummyhash")
+    user_id = user.user_id
+    stored = course_repo.create(
+        user_id=user_id,
+        course=CourseCreate(
+            name="High Weight Alerts",
+            term="W26",
+            assessments=[
+                Assessment(name="Project", weight=35, raw_score=None, total_score=None),
+                Assessment(name="Final", weight=65, raw_score=80, total_score=100),
+            ],
+        ),
+    )
+
+    result = planning_service.get_risk_alerts(
+        user_id=user_id,
+        reference_at=datetime.fromisoformat("2026-03-22T12:00:00-04:00"),
+    )
+
+    high_weight_alerts = [alert for alert in result["alerts"] if alert["type"] == "high_weight_ungraded"]
+    assert len(high_weight_alerts) == 1
+    assert high_weight_alerts[0]["course_name"] == "High Weight Alerts"
+    assert high_weight_alerts[0]["assessment_name"] == "Project"

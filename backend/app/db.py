@@ -130,7 +130,7 @@ class AssessmentDB(Base):
     raw_score: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
     total_score: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
     is_bonus: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
-    position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
