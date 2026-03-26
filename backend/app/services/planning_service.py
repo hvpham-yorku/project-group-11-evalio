@@ -13,6 +13,7 @@ from app.services.grading_service import (
     _is_assessment_fully_graded,
     _target_label,
     resolve_assessment_target,
+    resolve_assessment_target_by_id,
 )
 
 PLANNING_TIMEZONE = ZoneInfo("America/Toronto")
@@ -185,6 +186,7 @@ class PlanningService:
             due_at = self._deadline_due_at(deadline.due_date, deadline.due_time)
             assessment_context = self._resolve_deadline_assessment_context(
                 stored_course.course,
+                getattr(deadline, "assessment_id", None),
                 deadline.assessment_name,
                 deadline.title,
             )
@@ -220,6 +222,7 @@ class PlanningService:
             due_at = self._deadline_due_at(deadline.due_date, deadline.due_time)
             assessment_context = self._resolve_deadline_assessment_context(
                 stored_course.course,
+                getattr(deadline, "assessment_id", None),
                 deadline.assessment_name,
                 deadline.title,
             )
@@ -325,7 +328,7 @@ class PlanningService:
             if _is_assessment_fully_graded(assessment):
                 continue
 
-            linked_deadline = self._match_deadline_to_assessment(deadlines, assessment.name)
+            linked_deadline = self._match_deadline_to_assessment(deadlines, assessment)
             due_at = None
             due_date = None
             due_time = None
@@ -417,9 +420,20 @@ class PlanningService:
     def _resolve_deadline_assessment_context(
         self,
         course,
+        assessment_id,
         assessment_name: str | None,
         deadline_title: str,
     ) -> dict[str, Any]:
+        if assessment_id:
+            try:
+                parent, child = resolve_assessment_target_by_id(course, assessment_id)
+            except ValueError:
+                pass
+            else:
+                return {
+                    "assessment_name": _target_label(parent.name, child.name if child is not None else None),
+                    "assessment_weight": _get_target_weight(parent, child),
+                }
         for candidate in (assessment_name, deadline_title):
             if not candidate:
                 continue
@@ -437,9 +451,12 @@ class PlanningService:
         }
 
     @staticmethod
-    def _match_deadline_to_assessment(deadlines, assessment_name: str):
-        assessment_key = assessment_name.casefold()
+    def _match_deadline_to_assessment(deadlines, assessment):
+        assessment_key = assessment.name.casefold()
+        assessment_id = getattr(assessment, "assessment_id", None)
         for deadline in deadlines:
+            if assessment_id is not None and getattr(deadline, "assessment_id", None) == assessment_id:
+                return deadline
             if deadline.assessment_name and deadline.assessment_name.casefold() == assessment_key:
                 return deadline
             if deadline.title.casefold() == assessment_key:

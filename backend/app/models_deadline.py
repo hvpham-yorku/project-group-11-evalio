@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 class Deadline(BaseModel):
     deadline_id: UUID
     course_id: UUID
+    assessment_id: Optional[UUID] = None
     title: str
     deadline_type: Optional[str] = None
     due_date: str = Field(..., description="ISO-8601 date (YYYY-MM-DD)")
@@ -41,6 +42,7 @@ class DeadlineCreate(BaseModel):
     due_time: Optional[str] = Field(None, description="HH:MM (24h)")
     source: str = Field(default="manual")
     notes: Optional[str] = None
+    assessment_id: Optional[UUID] = None
     assessment_name: Optional[str] = None
 
 
@@ -50,6 +52,7 @@ class DeadlineUpdate(BaseModel):
     due_date: Optional[str] = None
     due_time: Optional[str] = None
     notes: Optional[str] = None
+    assessment_id: Optional[UUID] = None
     assessment_name: Optional[str] = None
 
 

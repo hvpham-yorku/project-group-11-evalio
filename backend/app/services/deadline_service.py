@@ -34,8 +34,14 @@ from uuid import UUID, uuid4
 from app.models_deadline import (
     Deadline,
     DeadlineCreate,
+    DeadlineUpdate,
 )
 from app.repositories.base import CalendarConnectionRepository, DeadlineRepository
+from app.services.grading_service import (
+    _target_label,
+    resolve_assessment_target,
+    resolve_assessment_target_by_id,
+)
 
 # ─── Date-parsing regexes (shared with extraction_service) ────────────────────
 
@@ -542,9 +548,11 @@ class DeadlineService:
         self,
         repository: DeadlineRepository,
         calendar_repository: CalendarConnectionRepository | None = None,
+        course_service=None,
     ) -> None:
         self._repo = repository
         self._calendar_repo = calendar_repository
+        self._course_service = course_service
         # In-memory Google token storage per user_id (for dev).
         self._google_tokens: dict[UUID, dict[str, Any]] = {}
 
@@ -553,20 +561,39 @@ class DeadlineService:
     def create_deadline(
         self, user_id: UUID, course_id: UUID, data: DeadlineCreate
     ) -> Deadline:
-        return self._repo.create(user_id, course_id, data)
+        created = self._repo.create(
+            user_id,
+            course_id,
+            self._resolve_deadline_reference(user_id, course_id, data),
+        )
+        return self._canonicalize_deadline(user_id, course_id, created)
 
     def list_deadlines(self, user_id: UUID, course_id: UUID) -> list[Deadline]:
-        return self._sort_deadlines(self._repo.list_all(user_id, course_id))
+        deadlines = [
+            self._canonicalize_deadline(user_id, course_id, deadline)
+            for deadline in self._repo.list_all(user_id, course_id)
+        ]
+        return self._sort_deadlines(deadlines)
 
     def get_deadline(
         self, user_id: UUID, course_id: UUID, deadline_id: UUID
     ) -> Deadline | None:
-        return self._repo.get_by_id(user_id, course_id, deadline_id)
+        deadline = self._repo.get_by_id(user_id, course_id, deadline_id)
+        if deadline is None:
+            return None
+        return self._canonicalize_deadline(user_id, course_id, deadline)
 
     def update_deadline(
         self, user_id: UUID, course_id: UUID, deadline_id: UUID, data: Any
     ) -> Deadline | None:
-        return self._repo.update(user_id, course_id, deadline_id, data)
+        if isinstance(data, DeadlineUpdate):
+            resolved = self._resolve_deadline_reference(user_id, course_id, data)
+        else:
+            resolved = data
+        updated = self._repo.update(user_id, course_id, deadline_id, resolved)
+        if updated is None:
+            return None
+        return self._canonicalize_deadline(user_id, course_id, updated)
 
     def delete_deadline(
         self, user_id: UUID, course_id: UUID, deadline_id: UUID
@@ -601,10 +628,73 @@ class DeadlineService:
                 due_time=raw.get("due_time"),
                 source=raw.get("source", "outline"),
                 notes=raw.get("notes"),
+                assessment_id=raw.get("assessment_id"),
                 assessment_name=raw.get("assessment_name"),
             )
-            created.append(self._repo.create(user_id, course_id, dl_create))
+            created.append(
+                self._repo.create(
+                    user_id,
+                    course_id,
+                    self._resolve_deadline_reference(user_id, course_id, dl_create),
+                )
+            )
         return created
+
+    def _resolve_deadline_reference(self, user_id: UUID, course_id: UUID, data):
+        if self._course_service is None:
+            return data
+
+        assessment_id = getattr(data, "assessment_id", None)
+        assessment_name = getattr(data, "assessment_name", None)
+        if assessment_id is None and not assessment_name:
+            return data
+
+        stored_course = self._course_service._get_course_or_raise(
+            user_id=user_id,
+            course_id=course_id,
+        )
+
+        try:
+            if assessment_id is not None:
+                parent, child = resolve_assessment_target_by_id(stored_course.course, assessment_id)
+            else:
+                parent, child = resolve_assessment_target(stored_course.course, assessment_name)
+        except ValueError as exc:
+            if assessment_id is not None:
+                raise DeadlineValidationError(str(exc)) from exc
+            return data
+
+        canonical_name = _target_label(parent.name, child.name if child is not None else None)
+        canonical_id = child.assessment_id if child is not None else parent.assessment_id
+        if canonical_id is None:
+            return data
+        return data.model_copy(
+            update={
+                "assessment_id": canonical_id,
+                "assessment_name": canonical_name,
+            }
+        )
+
+    def _canonicalize_deadline(self, user_id: UUID, course_id: UUID, deadline: Deadline) -> Deadline:
+        if self._course_service is None or deadline.assessment_id is None:
+            return deadline
+
+        try:
+            stored_course = self._course_service._get_course_or_raise(
+                user_id=user_id,
+                course_id=course_id,
+            )
+            parent, child = resolve_assessment_target_by_id(
+                stored_course.course,
+                deadline.assessment_id,
+            )
+        except Exception:
+            return deadline
+
+        canonical_name = _target_label(parent.name, child.name if child is not None else None)
+        if canonical_name == deadline.assessment_name:
+            return deadline
+        return deadline.model_copy(update={"assessment_name": canonical_name})
 
     # ── ICS Export ──
 

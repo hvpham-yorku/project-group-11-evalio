@@ -93,6 +93,7 @@ CREATE TABLE deadlines (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
     course_id UUID NOT NULL,
+    assessment_id UUID,
 
     title VARCHAR(255) NOT NULL,
 
@@ -116,7 +117,11 @@ CREATE TABLE deadlines (
 
     FOREIGN KEY (course_id)
         REFERENCES courses(id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (assessment_id)
+        REFERENCES assessments(id)
+        ON DELETE SET NULL
 );
 
 ALTER TABLE deadlines
@@ -128,6 +133,9 @@ ON deadlines(course_id);
 
 CREATE INDEX idx_deadlines_due_date
 ON deadlines(due_date);
+
+CREATE INDEX idx_deadlines_assessment_id
+ON deadlines(assessment_id);
 
 
 

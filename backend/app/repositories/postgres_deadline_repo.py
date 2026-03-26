@@ -5,7 +5,7 @@ from uuid import UUID
 
 from sqlalchemy import delete, select
 
-from app.db import CourseDB, DeadlineDB, SessionLocal, init_db
+from app.db import AssessmentDB, CourseDB, DeadlineDB, SessionLocal, init_db
 from app.models_deadline import Deadline, DeadlineCreate, DeadlineUpdate
 
 
@@ -39,17 +39,28 @@ class PostgresDeadlineRepository:
             )
         )
 
+    def _get_assessment(self, session, course_id: UUID, assessment_id: UUID) -> AssessmentDB | None:
+        return session.scalar(
+            select(AssessmentDB).where(
+                AssessmentDB.course_id == course_id,
+                AssessmentDB.id == assessment_id,
+            )
+        )
+
     def create(self, user_id: UUID, course_id: UUID, data: DeadlineCreate) -> Deadline:
         with self._session_factory() as session:
             course = self._get_course(session, user_id, course_id)
             if course is None:
                 raise KeyError(course_id)
+            if data.assessment_id is not None and self._get_assessment(session, course_id, data.assessment_id) is None:
+                raise KeyError(f"Assessment {data.assessment_id} not found in course {course_id}")
 
             due_date = date.fromisoformat(data.due_date)
             due_time = time.fromisoformat(data.due_time) if data.due_time else None
 
             row = DeadlineDB(
                 course_id=course_id,
+                assessment_id=data.assessment_id,
                 title=data.title,
                 deadline_type=data.deadline_type,
                 due_date=due_date,
@@ -104,6 +115,11 @@ class PostgresDeadlineRepository:
             }
             if "title" in updates:
                 row.title = updates["title"]
+            if "assessment_id" in updates:
+                assessment_id = updates["assessment_id"]
+                if assessment_id is not None and self._get_assessment(session, course_id, assessment_id) is None:
+                    raise KeyError(f"Assessment {assessment_id} not found in course {course_id}")
+                row.assessment_id = assessment_id
             if "deadline_type" in updates:
                 row.deadline_type = updates["deadline_type"]
             if "due_date" in updates:
@@ -159,6 +175,7 @@ class PostgresDeadlineRepository:
         return Deadline(
             deadline_id=row.id,
             course_id=row.course_id,
+            assessment_id=row.assessment_id,
             title=row.title,
             deadline_type=row.deadline_type,
             due_date=row.due_date.isoformat(),

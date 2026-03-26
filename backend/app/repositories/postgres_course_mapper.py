@@ -97,10 +97,15 @@ def sync_course_assessments(
         existing_children_by_parent[parent_row.id] = {row.name: row for row in child_rows}
 
     existing_parents_by_name = {row.name: row for row in existing_parent_rows}
+    existing_parents_by_id = {row.id: row for row in existing_parent_rows}
     retained_parent_ids: set[UUID] = set()
 
     for position, assessment in enumerate(assessments):
-        parent_row = existing_parents_by_name.get(assessment.name)
+        parent_row = None
+        if assessment.assessment_id is not None:
+            parent_row = existing_parents_by_id.get(assessment.assessment_id)
+        if parent_row is None:
+            parent_row = existing_parents_by_name.get(assessment.name)
         if parent_row is None:
             parent_row = AssessmentDB(
                 course_id=course_id,
@@ -142,9 +147,14 @@ def sync_course_assessments(
             session.delete(existing_rule)
 
         existing_children = existing_children_by_parent.get(parent_row.id, {})
+        existing_children_by_id = {row.id: row for row in existing_children.values()}
         retained_child_ids: set[UUID] = set()
         for child_position, child in enumerate(assessment.children or []):
-            child_row = existing_children.get(child.name)
+            child_row = None
+            if child.assessment_id is not None:
+                child_row = existing_children_by_id.get(child.assessment_id)
+            if child_row is None:
+                child_row = existing_children.get(child.name)
             if child_row is None:
                 child_row = AssessmentDB(
                     course_id=course_id,
@@ -215,6 +225,7 @@ def hydrate_course_aggregate(session: Session, course_row: CourseDB) -> CourseCr
             continue
         children_by_parent[child_row.parent_assessment_id].append(
             ChildAssessment(
+                assessment_id=child_row.id,
                 name=child_row.name,
                 weight=float(child_row.weight),
                 raw_score=_to_float(child_row.raw_score),
@@ -228,6 +239,7 @@ def hydrate_course_aggregate(session: Session, course_row: CourseDB) -> CourseCr
         children = children_by_parent.get(parent_row.id, [])
         assessments.append(
             Assessment(
+                assessment_id=parent_row.id,
                 name=parent_row.name,
                 weight=float(parent_row.weight),
                 raw_score=_to_float(parent_row.raw_score),

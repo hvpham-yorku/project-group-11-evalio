@@ -22,6 +22,7 @@ class StoredUser:
 
 @dataclass(frozen=True)
 class StoredScenarioEntry:
+    assessment_id: UUID
     assessment_name: str
     score: float
 

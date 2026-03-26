@@ -12,7 +12,7 @@ from app.repositories.inmemory_calendar_repo import InMemoryCalendarRepository
 from app.services.course_service import CourseService
 from app.services.deadline_service import DeadlineService
 from app.services.planning_service import PlanningService
-from app.services.scenario_service import ScenarioService
+from app.services.scenario_service import ScenarioService, ScenarioValidationError
 
 assert psycopg is not None, "psycopg is required to run DB persistence tests"
 
@@ -469,3 +469,161 @@ def test_postgres_planning_alerts_detect_high_weight_ungraded_assessments_from_p
     assert len(high_weight_alerts) == 1
     assert high_weight_alerts[0]["course_name"] == "High Weight Alerts"
     assert high_weight_alerts[0]["assessment_name"] == "Project"
+
+
+def test_postgres_saved_scenario_is_read_only_for_real_grades(pg_repos):
+    user_repo, course_repo, scenario_repo = pg_repos
+
+    user = user_repo.create_user(email="pg-scenario-safety@test.com", password_hash="dummyhash")
+    user_id = user.user_id
+    stored = course_repo.create(
+        user_id=user_id,
+        course=CourseCreate(
+            name="Scenario Safety",
+            term="W26",
+            assessments=[
+                Assessment(name="Midterm", weight=40, raw_score=78, total_score=100),
+                Assessment(name="Final", weight=60, raw_score=None, total_score=None),
+            ],
+        ),
+    )
+
+    course_service = CourseService(course_repo)
+    scenario_service = ScenarioService(scenario_repo, course_service)
+    before = course_repo.get_by_id(user_id=user_id, course_id=stored.course_id)
+    assert before is not None
+
+    saved = scenario_service.save_scenario(
+        user_id=user_id,
+        course_id=stored.course_id,
+        name="Final 90",
+        entries=[{"assessment_name": "Final", "score": 90}],
+    )
+    scenario_id = UUID(saved["scenario"]["scenario_id"])
+
+    after_save = course_repo.get_by_id(user_id=user_id, course_id=stored.course_id)
+    assert after_save is not None
+    assert after_save.course.assessments[0].raw_score == before.course.assessments[0].raw_score
+    assert after_save.course.assessments[1].raw_score == before.course.assessments[1].raw_score
+    assert after_save.course.assessments[1].total_score == before.course.assessments[1].total_score
+
+    result = scenario_service.run_saved_scenario(
+        user_id=user_id,
+        course_id=stored.course_id,
+        scenario_id=scenario_id,
+    )
+    assert result["mutates_real_grades"] is False
+
+    after_run = course_repo.get_by_id(user_id=user_id, course_id=stored.course_id)
+    assert after_run is not None
+    assert after_run.course.assessments[0].raw_score == before.course.assessments[0].raw_score
+    assert after_run.course.assessments[1].raw_score == before.course.assessments[1].raw_score
+    assert after_run.course.assessments[1].total_score == before.course.assessments[1].total_score
+
+
+def test_postgres_deadline_link_uses_stable_assessment_id_after_rename(pg_planning_stack):
+    user_repo, course_repo, deadline_repo, _target_repo, _planning_service = pg_planning_stack
+
+    user = user_repo.create_user(email="pg-deadline-rename@test.com", password_hash="dummyhash")
+    user_id = user.user_id
+    deadline_service = DeadlineService(deadline_repo, InMemoryCalendarRepository(), CourseService(course_repo))
+
+    stored = course_repo.create(
+        user_id=user_id,
+        course=CourseCreate(
+            name="Deadline Rename Safety",
+            term="W26",
+            assessments=[
+                Assessment(name="Midterm", weight=40, raw_score=None, total_score=None),
+                Assessment(name="Final", weight=60, raw_score=None, total_score=None),
+            ],
+        ),
+    )
+    created = deadline_service.create_deadline(
+        user_id=user_id,
+        course_id=stored.course_id,
+        data=DeadlineCreate(
+            title="Midterm Due",
+            due_date="2026-03-25",
+            due_time="10:00",
+            assessment_name="Midterm",
+        ),
+    )
+    assert created.assessment_id is not None
+
+    renamed = course_repo.get_by_id(user_id=user_id, course_id=stored.course_id)
+    assert renamed is not None
+    renamed.course.assessments[0].name = "Midterm Renamed"
+    course_repo.update(user_id=user_id, course_id=stored.course_id, course=renamed.course)
+
+    deadlines = deadline_service.list_deadlines(user_id=user_id, course_id=stored.course_id)
+    assert len(deadlines) == 1
+    assert deadlines[0].assessment_id == created.assessment_id
+    assert deadlines[0].assessment_name == "Midterm Renamed"
+
+
+def test_postgres_deadline_creation_tolerates_unmatched_assessment_name(pg_planning_stack):
+    user_repo, course_repo, deadline_repo, _target_repo, _planning_service = pg_planning_stack
+
+    user = user_repo.create_user(email="pg-deadline-unmatched@test.com", password_hash="dummyhash")
+    user_id = user.user_id
+    deadline_service = DeadlineService(deadline_repo, InMemoryCalendarRepository(), CourseService(course_repo))
+
+    stored = course_repo.create(
+        user_id=user_id,
+        course=CourseCreate(
+            name="Deadline Fallback Safety",
+            term="W26",
+            assessments=[
+                Assessment(name="Midterm", weight=40, raw_score=None, total_score=None),
+                Assessment(name="Final", weight=60, raw_score=None, total_score=None),
+            ],
+        ),
+    )
+    created = deadline_service.create_deadline(
+        user_id=user_id,
+        course_id=stored.course_id,
+        data=DeadlineCreate(
+            title="Reading Reflection",
+            due_date="2026-03-25",
+            due_time="10:00",
+            assessment_name="Unmatched Assessment Name",
+        ),
+    )
+
+    assert created.assessment_id is None
+    assert created.assessment_name == "Unmatched Assessment Name"
+
+
+def test_postgres_duplicate_scenario_entries_fail_without_partial_write(pg_repos):
+    user_repo, course_repo, scenario_repo = pg_repos
+
+    user = user_repo.create_user(email="pg-scenario-atomic@test.com", password_hash="dummyhash")
+    user_id = user.user_id
+    stored = course_repo.create(
+        user_id=user_id,
+        course=CourseCreate(
+            name="Scenario Atomicity",
+            term="W26",
+            assessments=[
+                Assessment(name="Final", weight=100, raw_score=None, total_score=None),
+            ],
+        ),
+    )
+
+    course_service = CourseService(course_repo)
+    scenario_service = ScenarioService(scenario_repo, course_service)
+
+    with pytest.raises(ScenarioValidationError, match="Duplicate assessment"):
+        scenario_service.save_scenario(
+            user_id=user_id,
+            course_id=stored.course_id,
+            name="Broken Scenario",
+            entries=[
+                {"assessment_name": "Final", "score": 90},
+                {"assessment_name": "Final", "score": 80},
+            ],
+        )
+
+    stored_scenarios = scenario_repo.list_all(user_id=user_id, course_id=stored.course_id)
+    assert stored_scenarios == []

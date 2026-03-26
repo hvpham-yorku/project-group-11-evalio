@@ -18,7 +18,8 @@ router = APIRouter(prefix="/courses/{course_id}/scenarios", tags=["Scenarios"])
 
 
 class ScenarioEntryRequest(BaseModel):
-    assessment_name: str = Field(..., min_length=1)
+    assessment_id: UUID | None = None
+    assessment_name: str | None = Field(None, min_length=1)
     score: float = Field(..., ge=0, le=100)
 
 
