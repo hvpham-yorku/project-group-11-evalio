@@ -19,7 +19,7 @@ import {
 
 /* ─── scroll-triggered visibility ─── */
 
-function useReveal<T extends HTMLElement>(threshold = 0.15) {
+function useReveal<T extends HTMLElement>(threshold = 0.1) {
   const ref = useRef<T>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -43,15 +43,22 @@ function useReveal<T extends HTMLElement>(threshold = 0.15) {
 const fade = (on: boolean, delay = 0) =>
   ({
     opacity: on ? 1 : 0,
-    transform: on ? "translateY(0)" : "translateY(24px)",
-    transition: `opacity 0.6s ease ${delay}ms, transform 0.6s ease ${delay}ms`,
+    transform: on ? "translateY(0)" : "translateY(28px)",
+    transition: `opacity 0.7s cubic-bezier(.22,1,.36,1) ${delay}ms, transform 0.7s cubic-bezier(.22,1,.36,1) ${delay}ms`,
+  }) as const;
+
+const fadeScale = (on: boolean, delay = 0) =>
+  ({
+    opacity: on ? 1 : 0,
+    transform: on ? "scale(1) translateY(0)" : "scale(0.96) translateY(20px)",
+    transition: `opacity 0.7s cubic-bezier(.22,1,.36,1) ${delay}ms, transform 0.7s cubic-bezier(.22,1,.36,1) ${delay}ms`,
   }) as const;
 
 /* ─── page ─── */
 
 export function WelcomePage() {
   const router = useRouter();
-  const hero = useReveal<HTMLElement>();
+  const hero = useReveal<HTMLElement>(0.05);
   const journey = useReveal<HTMLDivElement>();
   const features = useReveal<HTMLDivElement>();
   const cta = useReveal<HTMLDivElement>();
@@ -60,7 +67,7 @@ export function WelcomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F1EB] text-[#3A3530] antialiased">
+    <div className="min-h-screen overflow-x-hidden bg-[#F5F1EB] text-[#3A3530] antialiased">
       {/* ── Navbar ── */}
       <nav className="sticky top-0 z-50 border-b border-[#E8E3DC] bg-[#F5F1EB]/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
@@ -90,32 +97,49 @@ export function WelcomePage() {
       {/* ── Hero ── */}
       <section
         ref={hero.ref}
-        className="relative mx-auto max-w-6xl px-6 pt-16 pb-20 md:pt-24 md:pb-28"
+        className="relative mx-auto max-w-6xl overflow-hidden px-6 pt-16 pb-20 md:pt-24 md:pb-28"
       >
+        <div className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-[#E8EFF5]/70 blur-3xl" />
+        <div className="pointer-events-none absolute -top-20 right-0 h-64 w-64 rounded-full bg-[#FDF3E7]/80 blur-3xl" />
         <div className="grid items-center gap-12 md:grid-cols-2 md:gap-16">
           {/* copy */}
-          <div style={fade(hero.visible)}>
-            <p className="text-[13px] font-semibold uppercase tracking-[0.15em] text-[#5F7A8A]">
-              Academic Grade Planner
-            </p>
-            <h1 className="mt-4 text-[2.75rem] font-extrabold leading-[1.08] tracking-tight md:text-[3.5rem]">
+          <div className="relative">
+            <div
+              className="inline-flex items-center gap-2 rounded-full border border-[#D4CFC7] bg-[#FFFFFF]/90 px-3 py-1.5 shadow-sm"
+              style={fade(hero.visible)}
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#5F7A8A]/70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#5F7A8A]" />
+              </span>
+              <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#5F7A8A]">
+                Academic Grade Planner
+              </p>
+            </div>
+            <h1
+              className="mt-4 text-[2.75rem] font-extrabold leading-[1.08] tracking-tight md:text-[3.5rem]"
+              style={fade(hero.visible, 80)}
+            >
               Your grades,
               <br />
-              <span className="text-[#5F7A8A]">clarified.</span>
+              <span className="gradient-text">clarified.</span>
             </h1>
-            <p className="mt-5 max-w-[26rem] text-[1.05rem] leading-relaxed text-[#6B6560]">
+            <p
+              className="mt-5 max-w-[26rem] text-[1.05rem] leading-relaxed text-[#6B6560]"
+              style={fade(hero.visible, 150)}
+            >
               Upload your syllabus, track every assessment, and see exactly what
               you need on each remaining exam. No guesswork, no spreadsheets.
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-4">
+            <div className="mt-8 flex flex-wrap items-center gap-4" style={fade(hero.visible, 220)}>
               <button
                 onClick={() => router.push("/login")}
-                className="group flex items-center gap-2 rounded-lg bg-[#5F7A8A] px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+                className="group flex items-center gap-2 rounded-lg bg-[#5F7A8A] px-6 py-3 text-sm font-semibold text-white shadow-md shadow-black/[0.08] transition hover:-translate-y-0.5 hover:opacity-90"
               >
                 Start Planning
                 <ArrowRight
                   size={15}
-                  className="transition-transform group-hover:translate-x-0.5"
+                  className="transition-transform group-hover:translate-x-1"
                 />
               </button>
               <span className="text-sm text-[#C4B5A6]">
@@ -125,8 +149,11 @@ export function WelcomePage() {
           </div>
 
           {/* product preview */}
-          <div className="relative" style={fade(hero.visible, 200)}>
-            <div className="rounded-2xl border border-[#D4CFC7] bg-[#FFFFFF] p-5 shadow-xl shadow-black/[0.04] md:p-6">
+          <div className="relative" style={fadeScale(hero.visible, 180)}>
+            <div
+              className="rounded-2xl border border-[#D4CFC7] bg-[#FFFFFF] p-5 shadow-xl shadow-black/[0.04] md:p-6"
+              style={{ animation: "float 5s ease-in-out infinite" }}
+            >
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-medium text-[#6B6560]">
@@ -160,7 +187,7 @@ export function WelcomePage() {
                         className={`h-full rounded-full ${color}`}
                         style={{
                           width: hero.visible ? `${pct}%` : "0%",
-                          transition: "width 1s ease",
+                          transition: "width 1.1s cubic-bezier(.22,1,.36,1)",
                         }}
                       />
                     </div>
@@ -187,7 +214,10 @@ export function WelcomePage() {
             </div>
 
             {/* floating chip */}
-            <div className="absolute -bottom-4 -left-3 hidden items-center gap-2.5 rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] px-4 py-2.5 shadow-lg shadow-black/[0.04] md:flex">
+            <div
+              className="absolute -bottom-4 -left-3 hidden items-center gap-2.5 rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] px-4 py-2.5 shadow-lg shadow-black/[0.04] md:flex"
+              style={{ animation: "float-slow 6.2s ease-in-out infinite" }}
+            >
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FDF3E7]">
                 <Target size={14} className="text-[#C9945F]" />
               </div>
@@ -195,6 +225,13 @@ export function WelcomePage() {
                 <p className="text-[11px] text-[#6B6560]">Min. required</p>
                 <p className="text-sm font-bold">74% on Final</p>
               </div>
+            </div>
+            <div
+              className="absolute -top-4 -right-4 hidden items-center gap-2 rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] px-3 py-2 shadow-sm md:flex"
+              style={{ animation: "float 6s ease-in-out 1.1s infinite" }}
+            >
+              <Sparkles size={13} className="text-[#5F7A8A]" />
+              <p className="text-xs font-semibold text-[#3A3530]">AI-powered</p>
             </div>
           </div>
         </div>
@@ -212,7 +249,10 @@ export function WelcomePage() {
             aria-label="Scroll to next section"
             className="mt-3 flex h-10 w-10 items-center justify-center rounded-full border border-[#D4CFC7] bg-[#FFFFFF]/80 text-[#5F7A8A] shadow-sm transition hover:bg-[#FFFFFF] focus-visible:ring-2 focus-visible:ring-[#5F7A8A]/30"
           >
-            <ChevronDown className="h-4 w-4 animate-bounce" />
+            <ChevronDown
+              className="h-4 w-4"
+              style={{ animation: "scroll-pulse 1.4s ease-in-out infinite" }}
+            />
           </button>
         </div>
       </section>
@@ -265,7 +305,7 @@ export function WelcomePage() {
                 tweak, done.
               </p>
             </div>
-            <div className="rounded-xl border border-dashed border-[#D4CFC7] bg-[#FFFFFF] p-6 text-center">
+            <div className="rounded-xl border border-dashed border-[#D4CFC7] bg-[#FFFFFF] p-6 text-center shadow-sm transition-transform duration-300 hover:-translate-y-1 hover:shadow-md">
               <Upload size={28} className="mx-auto text-[#C4B5A6]" />
               <p className="mt-3 text-sm font-medium text-[#3A3530]">
                 Drop syllabus here
@@ -308,7 +348,7 @@ export function WelcomePage() {
                 you&apos;re on track for your target.
               </p>
             </div>
-            <div className="rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] p-5 md:order-1">
+            <div className="rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] p-5 shadow-sm transition-transform duration-300 hover:-translate-y-1 hover:shadow-md md:order-1">
               <div className="mb-4 flex items-center justify-between">
                 <span className="text-sm font-semibold text-[#3A3530]">
                   Your progress
@@ -361,7 +401,7 @@ export function WelcomePage() {
                 time around what actually matters.
               </p>
             </div>
-            <div className="rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] p-5">
+            <div className="rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] p-5 shadow-sm transition-transform duration-300 hover:-translate-y-1 hover:shadow-md">
               <p className="mb-4 text-sm font-semibold text-[#3A3530]">
                 What if I get&hellip;
               </p>
@@ -408,10 +448,7 @@ export function WelcomePage() {
             </h2>
           </div>
 
-          <div
-            className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-            style={fade(features.visible, 200)}
-          >
+          <div className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {(
               [
                 [
@@ -445,10 +482,11 @@ export function WelcomePage() {
                   "Focus recommendations based on assessment weight, deadline proximity, and your current standing.",
                 ],
               ] as const
-            ).map(([Icon, title, desc]) => (
+            ).map(([Icon, title, desc], index) => (
               <div
                 key={title}
-                className="rounded-2xl border border-[#6B6560] bg-[#3A3530] p-5 transition hover:border-[#C4B5A6]"
+                className="rounded-2xl border border-[#6B6560] bg-[#3A3530] p-5 transition duration-300 hover:-translate-y-1 hover:border-[#C4B5A6]"
+                style={fade(features.visible, index * 70)}
               >
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E8EFF5]">
                   <Icon size={16} className="text-[#5F7A8A]" />
@@ -482,12 +520,12 @@ export function WelcomePage() {
           </p>
           <button
             onClick={() => router.push("/login")}
-            className="group mt-10 inline-flex items-center gap-2 rounded-lg bg-[#5F7A8A] px-8 py-3.5 text-sm font-semibold text-white transition hover:opacity-90"
+            className="group mt-10 inline-flex items-center gap-2 rounded-lg bg-[#5F7A8A] px-8 py-3.5 text-sm font-semibold text-white shadow-md shadow-black/[0.12] transition hover:-translate-y-0.5 hover:opacity-90"
           >
             Get Started Free
             <ArrowRight
               size={15}
-              className="transition-transform group-hover:translate-x-0.5"
+              className="transition-transform group-hover:translate-x-1"
             />
           </button>
         </div>
