@@ -342,7 +342,6 @@ export function Dashboard() {
     useState<DashboardSummaryResponse | null>(null);
   const [whatIfResult, setWhatIfResult] =
     useState<DashboardWhatIfResponse | null>(null);
-  const [showBoundaryMath, setShowBoundaryMath] = useState(false);
   const [showProjectionMath, setShowProjectionMath] = useState(false);
   const { ensureCourseIdFromList } = useSetupCourse();
 
@@ -612,11 +611,6 @@ export function Dashboard() {
       ? dashboardSummary.current_normalised
       : dashboardSummary.current_grade
     : resolveCurrentGrade(targetResult);
-  const boundaryWorstCase = dashboardSummary
-    ? dashboardSummary.normalisation_applied
-      ? dashboardSummary.min_normalised
-      : dashboardSummary.min_grade
-    : currentGrade;
   const boundaryBestCase = dashboardSummary
     ? dashboardSummary.normalisation_applied
       ? dashboardSummary.max_normalised
@@ -746,19 +740,7 @@ export function Dashboard() {
       .slice(0, 3);
   }, [deadlines]);
 
-  const boundaryBreakdown = dashboardSummary?.breakdown ?? [];
   const projectionBreakdown = whatIfResult?.breakdown ?? [];
-  const mandatoryPassStatus = dashboardSummary?.mandatory_pass_status;
-  const bonusContribution =
-    dashboardSummary?.bonus_contribution ??
-    boundaryBreakdown
-      .filter((entry) => entry.is_bonus)
-      .reduce((sum, entry) => sum + entry.current_contribution, 0);
-  const coreGrade =
-    dashboardSummary?.core_grade ??
-    (dashboardSummary
-      ? Math.max(0, dashboardSummary.current_grade - bonusContribution)
-      : 0);
 
   const activeCourse = useMemo(
     () => courses.find((course) => course.course_id === activeCourseId) ?? null,
@@ -941,30 +923,6 @@ export function Dashboard() {
     };
   }, [courses, riskDeadlines, riskTargetResults]);
 
-  const boundaryCurrentContributionTotal = useMemo(
-    () =>
-      boundaryBreakdown.reduce(
-        (sum, entry) => sum + entry.current_contribution,
-        0
-      ),
-    [boundaryBreakdown]
-  );
-
-  const boundaryRemainingPotentialTotal = useMemo(
-    () =>
-      boundaryBreakdown.reduce(
-        (sum, entry) => sum + entry.remaining_potential,
-        0
-      ),
-    [boundaryBreakdown]
-  );
-
-  const boundaryMaxContributionTotal = useMemo(
-    () =>
-      boundaryBreakdown.reduce((sum, entry) => sum + entry.max_contribution, 0),
-    [boundaryBreakdown]
-  );
-
   const projectionContributionTotal = useMemo(
     () =>
       projectionBreakdown.reduce((sum, entry) => sum + entry.contribution, 0),
@@ -1008,182 +966,7 @@ export function Dashboard() {
         ))}
       </div>
 
-      {/* 3. Grade Boundaries */}
-      <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
-        <div className="mb-6 flex items-center justify-between gap-4">
-          <div>
-            <h3 className="font-bold text-[#3A3530]">Grade Boundaries</h3>
-            <p className="mt-1 text-xs text-[#6B6560]">
-              Live minimum and maximum outcomes based on saved grades and remaining work.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowBoundaryMath((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-xl border border-[#C4D6E4] bg-[#E8EFF5] px-3 py-2 text-xs font-medium text-[#5F7A8A] transition hover:opacity-90"
-          >
-            <Sigma size={14} />
-            {showBoundaryMath ? "Hide Math" : "Show Math"}
-          </button>
-        </div>
-
-        {mandatoryPassStatus?.has_requirements ? (
-          <div
-            className={`mb-4 rounded-2xl border p-4 text-sm ${
-              mandatoryPassStatus.requirements_met
-                ? "border-[#6B9B7A] bg-[#E8F2EA] text-[#6B9B7A]"
-                : mandatoryPassStatus.failed_assessments.length > 0
-                  ? "border-[#B86B6B] bg-[#F9EAEA] text-[#B86B6B]"
-                  : "border-[#F1DCC4] bg-[#FDF3E7] text-[#C9945F]"
-            }`}
-          >
-            <div className="flex items-center gap-2 font-semibold">
-              {mandatoryPassStatus.requirements_met ? (
-                <CheckCircle2 size={16} />
-              ) : mandatoryPassStatus.failed_assessments.length > 0 ? (
-                <XCircle size={16} />
-              ) : (
-                <AlertTriangle size={16} />
-              )}
-              Mandatory Pass Requirements
-            </div>
-            <div className="mt-2 space-y-1 text-xs">
-              {mandatoryPassStatus.requirements.map((requirement) => (
-                <p key={`mandatory-${requirement.assessment_name}`}>
-                  {requirement.assessment_name}: need at least{" "}
-                  {requirement.threshold.toFixed(1)}% (
-                  {requirement.status === "pending"
-                    ? "not yet graded"
-                    : `${requirement.status} at ${(
-                        requirement.actual_percent ?? 0
-                      ).toFixed(1)}%`}
-                  )
-                </p>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-[#B86B6B] bg-[#F9EAEA] p-5">
-            <p className="text-[10px] uppercase tracking-wider text-[#B86B6B]">
-              Worst Case
-            </p>
-            <p className="mt-2 text-3xl font-bold text-[#B86B6B]">
-              {boundaryWorstCase.toFixed(1)}%
-            </p>
-            <p className="mt-1 text-xs text-[#B86B6B]">
-              Current grade if remaining work scores 0%.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-5">
-            <p className="text-[10px] uppercase tracking-wider text-[#6B6560]">
-              Current
-            </p>
-            <p className="mt-2 text-3xl font-bold text-[#3A3530]">
-              {currentGrade.toFixed(1)}%
-            </p>
-            <p className="mt-1 text-xs text-[#6B6560]">
-              Based on currently saved grades.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[#6B9B7A] bg-[#E8F2EA] p-5">
-            <p className="text-[10px] uppercase tracking-wider text-[#6B9B7A]">
-              Best Case
-            </p>
-            <p className="mt-2 text-3xl font-bold text-[#6B9B7A]">
-              {boundaryBestCase.toFixed(1)}%
-            </p>
-            <p className="mt-1 text-xs text-[#6B9B7A]">
-              Maximum reachable if remaining work scores 100%.
-            </p>
-          </div>
-        </div>
-
-        {dashboardSummary?.normalisation_applied ? (
-          <p className="mt-4 text-xs text-[#6B6560]">
-            Normalisation is applied because the current core syllabus weight totals {dashboardSummary.core_weight.toFixed(1)}%.
-          </p>
-        ) : null}
-
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="rounded-xl border border-[#E8E3DC] bg-[#F5F1EB] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-[#6B6560]">
-              Core Grade Contribution
-            </p>
-            <p className="mt-1 text-lg font-semibold text-[#3A3530]">
-              {coreGrade.toFixed(2)}%
-            </p>
-          </div>
-          <div className="rounded-xl border border-[#6B9B7A] bg-[#E8F2EA] p-4">
-            <p className="text-[10px] uppercase tracking-wider text-[#6B9B7A]">
-              Bonus Contribution
-            </p>
-            <p className="mt-1 text-lg font-semibold text-[#6B9B7A]">
-              +{bonusContribution.toFixed(2)}%
-            </p>
-          </div>
-        </div>
-
-        {showBoundaryMath ? (
-          <div className="mt-6 space-y-3 border-t border-[#E8E3DC] pt-6">
-            <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#6B6560]">
-                Boundary Totals
-              </p>
-              <div className="mt-3 space-y-3 text-xs text-[#6B6560]">
-                <div>
-                  <p className="font-semibold text-[#3A3530]">Current</p>
-                  <p className="font-mono">
-                    {boundaryBreakdown
-                      .map((entry) => entry.current_contribution.toFixed(2))
-                      .join(" + ") || "0.00"}
-                    {" = "}
-                    {boundaryCurrentContributionTotal.toFixed(2)}%
-                  </p>
-                </div>
-                <div>
-                  <p className="font-semibold text-[#3A3530]">Worst Case</p>
-                  <p className="font-mono">
-                    {boundaryCurrentContributionTotal.toFixed(2)} + 0.00
-                    {" = "}
-                    {boundaryWorstCase.toFixed(2)}%
-                  </p>
-                </div>
-                <div>
-                  <p className="font-semibold text-[#3A3530]">Best Case</p>
-                  <p className="font-mono">
-                    {boundaryCurrentContributionTotal.toFixed(2)} +{" "}
-                    {boundaryRemainingPotentialTotal.toFixed(2)}
-                    {" = "}
-                    {boundaryBestCase.toFixed(2)}%
-                  </p>
-                </div>
-                <div>
-                  <p className="font-semibold text-[#3A3530]">Core + Bonus</p>
-                  <p className="font-mono">
-                    {coreGrade.toFixed(2)} + {bonusContribution.toFixed(2)}
-                    {" = "}
-                    {(coreGrade + bonusContribution).toFixed(2)}%
-                  </p>
-                </div>
-                <div>
-                  <p className="font-semibold text-[#3A3530]">Max Contribution Sum</p>
-                  <p className="font-mono">
-                    {boundaryBreakdown
-                      .map((entry) => entry.max_contribution.toFixed(2))
-                      .join(" + ") || "0.00"}
-                    {" = "}
-                    {boundaryMaxContributionTotal.toFixed(2)}%
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {/* 4. Assessment Breakdown */}
+      {/* 3. Assessment Breakdown */}
       <div className="space-y-4">
         <h3 className="font-bold text-[#3A3530]">Assessment Breakdown</h3>
         {(loading ? [] : assessmentGroups).map((group) => {

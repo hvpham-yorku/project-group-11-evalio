@@ -12,6 +12,18 @@ import type { Course } from "@/lib/api";
 
 const ACTIVE_COURSE_STORAGE_KEY = "evalio_active_course_id";
 
+function readJsonFromStorage<T>(key: string): T | null {
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    // Recover from stale/corrupted browser cache entries.
+    window.localStorage.removeItem(key);
+    return null;
+  }
+}
+
 type SetupCourseContextValue = {
   courseId: string | null;
   setCourseId: (id: string | null) => void;
@@ -50,14 +62,11 @@ export function SetupCourseProvider({
       return;
     }
 
-    const savedResult = window.localStorage.getItem(
-      `evalio_extraction_${courseId}`
+    setExtractionResultState(
+      readJsonFromStorage(`evalio_extraction_${courseId}`)
     );
-    const savedRules = window.localStorage.getItem(`evalio_rules_${courseId}`);
-
-    setExtractionResultState(savedResult ? JSON.parse(savedResult) : null);
     setInstitutionalGradingRulesState(
-      savedRules ? JSON.parse(savedRules) : null
+      readJsonFromStorage(`evalio_rules_${courseId}`)
     );
   }, [courseId]);
 

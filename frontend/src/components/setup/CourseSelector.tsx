@@ -127,7 +127,7 @@ export function CourseSelector() {
     <div className="max-w-6xl mx-auto mb-6 relative">
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className="flex cursor-pointer items-center justify-between rounded-[1.25rem] border border-[#E8E3DC] bg-[#F5F1EB] px-5 py-3 transition-all hover:bg-[#E8E3DC]"
+        className="relative z-50 flex cursor-pointer items-center justify-between rounded-[1.25rem] border border-[#E8E3DC] bg-[#F5F1EB] px-5 py-3 transition-all hover:bg-[#E8E3DC]"
       >
         <div className="flex items-center gap-3">
           <span className="text-sm font-bold text-[#3A3530]">
@@ -152,47 +152,50 @@ export function CourseSelector() {
         </div>
       </div>
 
-      {isOpen && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-[1.25rem] border border-[#D4CFC7] bg-[#FFFFFF] shadow-xl">
-          {courses.map((course) => (
+      {isOpen ? (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-[1.25rem] border border-[#D4CFC7] bg-[#FFFFFF] shadow-xl">
+            {courses.map((course) => (
+              <div
+                key={course.course_id}
+                onClick={() => {
+                  setCourseId(course.course_id);
+                  setIsOpen(false);
+                }}
+                className="flex cursor-pointer items-center justify-between border-b border-[#E8E3DC] px-4 py-3 text-sm hover:bg-[#F5F1EB]"
+              >
+                <span>{course.course_name ?? course.name}</span>
+                {course.course_id === courseId && (
+                  <Check size={14} className="text-[#5F7A8A]" />
+                )}
+              </div>
+            ))}
+
             <div
-              key={course.course_id}
               onClick={() => {
-                setCourseId(course.course_id);
                 setIsOpen(false);
+                router.push("/setup/upload");
               }}
-              className="flex cursor-pointer items-center justify-between border-b border-[#E8E3DC] px-4 py-3 text-sm hover:bg-[#F5F1EB]"
+              className="flex cursor-pointer items-center gap-2 border-b border-[#E8E3DC] px-4 py-3 text-sm text-[#5F7A8A] hover:bg-[#F5F1EB]"
             >
-              <span>{course.course_name ?? course.name}</span>
-              {course.course_id === courseId && (
-                <Check size={14} className="text-[#5F7A8A]" />
-              )}
+              <Plus size={14} />
+              <span>Add New Course</span>
             </div>
-          ))}
 
-          <div
-            onClick={() => {
-              setIsOpen(false);
-              router.push("/setup/upload");
-            }}
-            className="flex cursor-pointer items-center gap-2 border-b border-[#E8E3DC] px-4 py-3 text-sm text-[#5F7A8A] hover:bg-[#F5F1EB]"
-          >
-            <Plus size={14} />
-            <span>Add New Course</span>
+            <div
+              onClick={() => {
+                setIsOpen(false);
+                router.push("/setup/manage");
+              }}
+              className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm text-[#5F7A8A] hover:bg-[#F5F1EB]"
+            >
+              <Settings size={14} />
+              <span>Manage Courses</span>
+            </div>
           </div>
-
-          <div
-            onClick={() => {
-              setIsOpen(false);
-              router.push("/setup/manage");
-            }}
-            className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm text-[#5F7A8A] hover:bg-[#F5F1EB]"
-          >
-            <Settings size={14} />
-            <span>Manage Courses</span>
-          </div>
-        </div>
-      )}
+        </>
+      ) : null}
     </div>
   );
 }

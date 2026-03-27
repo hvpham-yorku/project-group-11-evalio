@@ -58,6 +58,30 @@ def _parse_optional_syllabus_each(rule_text: str) -> Decimal | None:
     return value if value > Decimal("0") else None
 
 
+def _parse_positive_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _parse_non_negative_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
+def _parse_positive_float(value: Any) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
 def _derive_rule_metadata(raw_item: Any) -> tuple[str | None, dict[str, Any] | None]:
     explicit_rule_type = _read_field(raw_item, "rule_type")
     explicit_rule_config = _read_field(raw_item, "rule_config")
@@ -66,6 +90,52 @@ def _derive_rule_metadata(raw_item: Any) -> tuple[str | None, dict[str, Any] | N
         rule_type = explicit_rule_type.strip()
         if isinstance(explicit_rule_config, dict):
             return rule_type, explicit_rule_config
+
+        total_count = _parse_positive_int(_read_field(raw_item, "total_count"))
+        effective_count = _parse_positive_int(_read_field(raw_item, "effective_count"))
+        unit_weight = _parse_positive_float(_read_field(raw_item, "unit_weight"))
+
+        if rule_type == "pure_multiplicative":
+            config: dict[str, Any] = {}
+            if total_count is not None:
+                config["total_count"] = total_count
+            if unit_weight is not None:
+                config["syllabus_each"] = unit_weight
+            return rule_type, config or None
+
+        if rule_type == "best_of":
+            config = {}
+            if effective_count is not None:
+                config["best_count"] = effective_count
+            if total_count is not None:
+                config["total_count"] = total_count
+            if unit_weight is not None:
+                config["syllabus_each"] = unit_weight
+            return rule_type, config or None
+
+        if rule_type == "drop_lowest":
+            config = {}
+            if total_count is not None:
+                config["total_count"] = total_count
+            if unit_weight is not None:
+                config["syllabus_each"] = unit_weight
+            if total_count is not None and effective_count is not None:
+                drop_count = _parse_non_negative_int(total_count - effective_count)
+                if drop_count is not None:
+                    config["drop_count"] = drop_count
+            return rule_type, config or None
+
+        if rule_type == "mandatory_pass":
+            rule_text = _read_field(raw_item, "rule")
+            threshold: float | None = _parse_positive_float(_read_field(raw_item, "pass_threshold"))
+            if threshold is None and isinstance(rule_text, str):
+                threshold_match = MANDATORY_PASS_THRESHOLD_REGEX.search(rule_text)
+                if threshold_match is not None:
+                    threshold = _parse_positive_float(threshold_match.group(1))
+            if threshold is None:
+                threshold = 50.0
+            return rule_type, {"pass_threshold": threshold}
+
         return rule_type, None
 
     rule_text = _read_field(raw_item, "rule")

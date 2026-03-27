@@ -160,7 +160,7 @@ export function ManageCourses() {
   const handleOpenCourse = (selectedCourseId: string) => {
     setCourseId(selectedCourseId);
     window.dispatchEvent(new Event(COURSE_REFRESH_EVENT));
-    router.push("/setup/grades");
+    router.push("/setup/dashboard");
   };
 
   const startEdit = (course: Course) => {
@@ -280,7 +280,14 @@ export function ManageCourses() {
               return (
                 <article
                   key={course.course_id}
-                  className="rounded-2xl border border-[#C4D6E4] bg-[#FFFFFF] px-5 py-4 shadow-sm"
+                  onClick={() => {
+                    if (!isEditing) {
+                      handleOpenCourse(course.course_id);
+                    }
+                  }}
+                  className={`rounded-2xl border border-[#C4D6E4] bg-[#FFFFFF] px-5 py-4 shadow-sm ${
+                    isEditing ? "" : "cursor-pointer transition hover:bg-[#F5F1EB]"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -310,20 +317,20 @@ export function ManageCourses() {
 
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => handleOpenCourse(course.course_id)}
-                        className="rounded-lg bg-[#E8EFF5] px-3.5 py-1.5 text-sm font-medium text-[#6B8BA8] transition hover:opacity-90"
-                      >
-                        Open
-                      </button>
-                      <button
-                        onClick={() => startEdit(course)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          startEdit(course);
+                        }}
                         className="rounded-lg border border-[#D4CFC7] bg-[#FFFFFF] p-2 text-[#6B6560] transition hover:bg-[#F5F1EB]"
                         aria-label={`Edit ${course.name}`}
                       >
                         <Pencil size={18} />
                       </button>
                       <button
-                        onClick={() => handleDeleteCourse(course.course_id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDeleteCourse(course.course_id);
+                        }}
                         disabled={deletingCourseId === course.course_id}
                         className="rounded-lg border border-[#B86B6B] bg-[#F9EAEA] p-2 text-[#B86B6B] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                         aria-label={`Delete ${course.name}`}

@@ -22,6 +22,8 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
   const isExploreView = pathname.startsWith("/setup/explore");
   const isManageView = pathname.startsWith("/setup/manage");
   const isRiskCenterView = pathname.startsWith("/setup/risk-center");
+  const isUploadView = pathname.startsWith("/setup/upload");
+  const isStructureView = pathname.startsWith("/setup/structure");
 
   const showStepProgress =
     !isExploreView && !isManageView && !isRiskCenterView;
@@ -60,20 +62,22 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
             const validSavedId = courses.find((course) => course.course_id === savedId);
             const targetId = validSavedId ? savedId : courses[0].course_id;
 
-            if (targetId) {
+            // Keep upload/structure in "new course draft" mode instead of forcing
+            // an existing course context while the user is creating a fresh course.
+            if (targetId && !isUploadView && !isStructureView) {
               setCourseId(targetId);
             }
 
             if (
               pathname === "/setup" ||
-              pathname === "/setup/" ||
-              pathname === "/setup/upload"
+              pathname === "/setup/"
             ) {
               router.replace("/setup/dashboard");
               return;
             }
           } else if (
-            pathname !== "/setup/upload" &&
+            !isUploadView &&
+            !isStructureView &&
             !isExploreView &&
             !isManageView
           ) {
@@ -98,7 +102,15 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, [pathname, router, setCourseId, isExploreView, isManageView]);
+  }, [
+    pathname,
+    router,
+    setCourseId,
+    isExploreView,
+    isManageView,
+    isUploadView,
+    isStructureView,
+  ]);
 
   if (!authChecked && pathname.startsWith("/setup")) {
     return (
