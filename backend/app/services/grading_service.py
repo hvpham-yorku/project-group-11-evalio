@@ -1,4 +1,5 @@
 from typing import Any
+from uuid import UUID
 
 from app.models import CourseCreate
 
@@ -88,6 +89,17 @@ def resolve_assessment_target(course: CourseCreate, assessment_name: str):
         )
 
     raise ValueError(f"Assessment '{assessment_name}' not found")
+
+
+def resolve_assessment_target_by_id(course: CourseCreate, assessment_id: UUID | str):
+    normalized_id = str(assessment_id)
+    for assessment in course.assessments:
+        if assessment.assessment_id is not None and str(assessment.assessment_id) == normalized_id:
+            return assessment, None
+        for child in assessment.children or []:
+            if child.assessment_id is not None and str(child.assessment_id) == normalized_id:
+                return assessment, child
+    raise ValueError(f"Assessment '{assessment_id}' not found")
 
 
 def _is_target_fully_graded(parent, child) -> bool:

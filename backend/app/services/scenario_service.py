@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.repositories.base import ScenarioRepository, StoredScenario, StoredScenarioEntry
 from app.services.course_service import (
@@ -8,7 +8,12 @@ from app.services.course_service import (
     CourseService,
     CourseValidationError,
 )
-from app.services.grading_service import _is_assessment_fully_graded
+from app.services.grading_service import (
+    _is_assessment_fully_graded,
+    _target_label,
+    resolve_assessment_target,
+    resolve_assessment_target_by_id,
+)
 from app.services.strategy_service import compute_multi_whatif
 
 
@@ -42,34 +47,67 @@ class ScenarioService:
             user_id=user_id,
             course_id=course_id,
         )
-        top_level_assessment_names = {
-            assessment.name for assessment in stored_course.course.assessments
-        }
-        assessments_by_name = {
-            assessment.name: assessment for assessment in stored_course.course.assessments
-        }
-
-        seen_names: set[str] = set()
-        normalized_entries: list[StoredScenarioEntry] = []
+        pending_entries: list[dict] = []
+        unresolved_names: list[str] = []
         for entry in entries:
-            assessment_name = str(entry.get("assessment_name", "")).strip()
-            if not assessment_name:
-                raise ScenarioValidationError("assessment_name is required for each scenario entry")
-            if assessment_name in seen_names:
-                raise ScenarioValidationError(
-                    f"Duplicate assessment '{assessment_name}' in scenario payload"
+            raw_name = str(entry.get("assessment_name", "")).strip()
+            raw_id = entry.get("assessment_id")
+            input_label = raw_name or str(raw_id)
+            try:
+                target = self._resolve_scenario_entry_target(stored_course.course, entry)
+            except ScenarioValidationError as exc:
+                if "not found in course" not in str(exc):
+                    raise
+                unresolved_names.append(input_label or "unknown")
+                pending_entries.append(
+                    {
+                        "input_label": input_label or "unknown",
+                        "resolved": False,
+                    }
                 )
-            seen_names.add(assessment_name)
-            if assessment_name not in top_level_assessment_names:
+                continue
+
+            pending_entries.append(
+                {
+                    "input_label": target["assessment_name"],
+                    "resolved": True,
+                    "duplicate_key": (
+                        str(target["assessment"].assessment_id)
+                        if target["assessment"].assessment_id is not None
+                        else target["assessment_name"].strip().casefold()
+                    ),
+                    "assessment_id": target["assessment_id"],
+                    "assessment_name": target["assessment_name"],
+                    "assessment": target["assessment"],
+                    "score": entry.get("score"),
+                }
+            )
+
+        seen_assessment_keys: set[str] = set()
+        for entry in pending_entries:
+            if not entry["resolved"]:
+                continue
+            duplicate_key = entry["duplicate_key"]
+            if duplicate_key in seen_assessment_keys:
                 raise ScenarioValidationError(
-                    f"Assessment '{assessment_name}' not found in course"
+                    f"Duplicate assessment '{entry['assessment_name']}' in scenario payload"
                 )
-            if _is_assessment_fully_graded(assessments_by_name[assessment_name]):
+            seen_assessment_keys.add(duplicate_key)
+
+        if unresolved_names:
+            missing_label = unresolved_names[0]
+            raise ScenarioValidationError(f"Assessment '{missing_label}' not found in course")
+
+        normalized_entries: list[StoredScenarioEntry] = []
+        for entry in pending_entries:
+            assessment_name = entry["assessment_name"]
+            assessment = entry["assessment"]
+            if _is_assessment_fully_graded(assessment):
                 raise ScenarioValidationError(
                     f"Assessment '{assessment_name}' is already graded and cannot be simulated"
                 )
 
-            score = entry.get("score")
+            score = entry["score"]
             if score is None:
                 raise ScenarioValidationError(
                     f"Score is required for assessment '{assessment_name}'"
@@ -85,7 +123,11 @@ class ScenarioService:
                     f"Score for assessment '{assessment_name}' must be between 0 and 100"
                 )
             normalized_entries.append(
-                StoredScenarioEntry(assessment_name=assessment_name, score=score)
+                StoredScenarioEntry(
+                    assessment_id=entry["assessment_id"],
+                    assessment_name=assessment_name,
+                    score=score,
+                )
             )
 
         try:
@@ -152,22 +194,32 @@ class ScenarioService:
                 "Saved scenario has no entries and cannot be executed"
             )
 
-        known_assessment_names = {
-            assessment.name for assessment in stored_course.course.assessments
-        }
-        missing = [
-            entry.assessment_name
-            for entry in scenario.entries
-            if entry.assessment_name not in known_assessment_names
-        ]
+        resolved_entries: list[StoredScenarioEntry] = []
+        missing: list[str] = []
+        for entry in scenario.entries:
+            try:
+                current_name = self._resolve_entry_display_name(
+                    stored_course.course,
+                    entry,
+                )
+            except ValueError:
+                missing.append(entry.assessment_name)
+                continue
+            resolved_entries.append(
+                StoredScenarioEntry(
+                    assessment_id=entry.assessment_id,
+                    assessment_name=current_name,
+                    score=entry.score,
+                )
+            )
         if missing:
             missing_joined = ", ".join(sorted(set(missing)))
             raise ScenarioValidationError(
                 f"Saved scenario references stale assessments: {missing_joined}"
             )
 
-        if len(scenario.entries) == 1:
-            entry = scenario.entries[0]
+        if len(resolved_entries) == 1:
+            entry = resolved_entries[0]
             try:
                 result = self._course_service.run_whatif_scenario(
                     user_id=user_id,
@@ -185,12 +237,19 @@ class ScenarioService:
                         "assessment_name": entry.assessment_name,
                         "score": entry.score,
                     }
-                    for entry in scenario.entries
+                    for entry in resolved_entries
                 ],
             )
 
         return {
-            "scenario": self._to_dict(scenario),
+            "scenario": self._to_dict(
+                StoredScenario(
+                    scenario_id=scenario.scenario_id,
+                    name=scenario.name,
+                    entries=resolved_entries,
+                    created_at=scenario.created_at,
+                )
+            ),
             "result": result,
             "execution_mode": "simulation",
             "mutates_real_grades": False,
@@ -208,6 +267,7 @@ class ScenarioService:
             "created_at": scenario.created_at,
             "entries": [
                 {
+                    "assessment_id": str(entry.assessment_id),
                     "assessment_name": entry.assessment_name,
                     "score": entry.score,
                 }
@@ -215,3 +275,69 @@ class ScenarioService:
             ],
             "entry_count": len(scenario.entries),
         }
+
+    @staticmethod
+    def _resolve_scenario_entry_target(course, entry: dict) -> dict:
+        assessment_id = entry.get("assessment_id")
+        assessment_name = str(entry.get("assessment_name", "")).strip()
+
+        if assessment_id is not None:
+            try:
+                parent, child = resolve_assessment_target_by_id(course, assessment_id)
+            except ValueError as exc:
+                raise ScenarioValidationError(
+                    f"Assessment '{assessment_id}' not found in course"
+                ) from exc
+        else:
+            if not assessment_name:
+                raise ScenarioValidationError(
+                    "assessment_id or assessment_name is required for each scenario entry"
+                )
+            try:
+                parent, child = resolve_assessment_target(course, assessment_name)
+            except ValueError as exc:
+                normalized_name = assessment_name.casefold()
+                parent = next(
+                    (
+                        assessment
+                        for assessment in course.assessments
+                        if assessment.name.strip().casefold() == normalized_name
+                    ),
+                    None,
+                )
+                child = None
+                if parent is None:
+                    raise ScenarioValidationError(
+                        f"Assessment '{assessment_name}' not found in course"
+                    ) from exc
+
+        label = _target_label(parent.name, child.name if child is not None else None)
+        target = child if child is not None else parent
+        resolved_assessment_id = target.assessment_id or uuid4()
+        return {
+            "assessment_id": resolved_assessment_id,
+            "assessment_name": label,
+            "assessment": target,
+        }
+
+    @staticmethod
+    def _resolve_entry_display_name(course, entry: StoredScenarioEntry) -> str:
+        try:
+            parent, child = resolve_assessment_target_by_id(course, entry.assessment_id)
+        except ValueError:
+            try:
+                parent, child = resolve_assessment_target(course, entry.assessment_name)
+            except ValueError as exc:
+                normalized_name = entry.assessment_name.strip().casefold()
+                parent = next(
+                    (
+                        assessment
+                        for assessment in course.assessments
+                        if assessment.name.strip().casefold() == normalized_name
+                    ),
+                    None,
+                )
+                child = None
+                if parent is None:
+                    raise exc
+        return _target_label(parent.name, child.name if child is not None else None)

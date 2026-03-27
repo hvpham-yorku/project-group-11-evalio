@@ -1,6 +1,8 @@
 import os
 from datetime import date, datetime, time
 from uuid import UUID, uuid4
+from sqlalchemy import text
+from sqlalchemy import select
 
 from sqlalchemy import (
     Boolean,
@@ -213,6 +215,12 @@ class DeadlineDB(Base):
     course_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    assessment_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("assessments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     deadline_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -229,6 +237,7 @@ class DeadlineDB(Base):
     )
 
     course: Mapped[CourseDB] = relationship(back_populates="deadlines")
+    assessment: Mapped["AssessmentDB | None"] = relationship()
     exports: Mapped[list["DeadlineExportDB"]] = relationship(
         back_populates="deadline", cascade="all, delete-orphan"
     )
@@ -332,6 +341,7 @@ def init_db() -> None:
     _ensure_courses_bonus_policy_columns()
     _ensure_deadlines_due_date_column()
     _ensure_deadlines_deadline_type_column()
+    _ensure_deadlines_assessment_id_column()
     _ensure_rules_rule_type_constraint()
 
 
@@ -492,6 +502,98 @@ $$;
 
     with engine.begin() as connection:
         connection.execute(text(ddl))
+
+
+def _ensure_deadlines_assessment_id_column() -> None:
+    if engine.dialect.name != "postgresql":
+        return
+
+    ddl = """
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'deadlines'
+    ) THEN
+        IF NOT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_name = 'deadlines' AND column_name = 'assessment_id'
+        ) THEN
+            ALTER TABLE deadlines
+            ADD COLUMN assessment_id UUID;
+        END IF;
+
+        ALTER TABLE deadlines
+        DROP CONSTRAINT IF EXISTS deadlines_assessment_id_fkey;
+
+        ALTER TABLE deadlines
+        ADD CONSTRAINT deadlines_assessment_id_fkey
+        FOREIGN KEY (assessment_id)
+        REFERENCES assessments(id)
+        ON DELETE SET NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_deadlines_assessment_id
+        ON deadlines(assessment_id);
+    END IF;
+END
+$$;
+"""
+
+    with engine.begin() as connection:
+        connection.execute(text(ddl))
+
+    with SessionLocal() as session:
+        deadline_rows = session.scalars(
+            select(DeadlineDB).where(
+                DeadlineDB.assessment_id.is_(None),
+                DeadlineDB.assessment_name.is_not(None),
+            )
+        ).all()
+        changed = False
+        for deadline_row in deadline_rows:
+            raw_name = (deadline_row.assessment_name or "").strip()
+            if not raw_name:
+                continue
+
+            if "::" in raw_name:
+                parent_name, child_name = [part.strip() for part in raw_name.split("::", 1)]
+                parent_row = session.scalar(
+                    select(AssessmentDB).where(
+                        AssessmentDB.course_id == deadline_row.course_id,
+                        AssessmentDB.parent_assessment_id.is_(None),
+                        AssessmentDB.name == parent_name,
+                    )
+                )
+                if parent_row is None:
+                    continue
+                child_rows = session.scalars(
+                    select(AssessmentDB).where(
+                        AssessmentDB.course_id == deadline_row.course_id,
+                        AssessmentDB.parent_assessment_id == parent_row.id,
+                        AssessmentDB.name == child_name,
+                    )
+                ).all()
+                if len(child_rows) != 1:
+                    continue
+                deadline_row.assessment_id = child_rows[0].id
+                changed = True
+                continue
+
+            matched_rows = session.scalars(
+                select(AssessmentDB).where(
+                    AssessmentDB.course_id == deadline_row.course_id,
+                    AssessmentDB.name == raw_name,
+                )
+            ).all()
+            if len(matched_rows) != 1:
+                continue
+            deadline_row.assessment_id = matched_rows[0].id
+            changed = True
+
+        if changed:
+            session.commit()
 
 
 def _ensure_rules_rule_type_constraint() -> None:

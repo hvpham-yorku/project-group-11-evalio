@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import delete, select
+from sqlalchemy.orm import aliased
 
 from app.db import (
     AssessmentDB,
@@ -53,28 +54,18 @@ class PostgresScenarioRepository:
             )
         )
 
-    def _load_top_level_assessment_ids_by_name(
-        self,
-        session,
-        course_id: UUID,
-    ) -> dict[str, UUID]:
-        rows = session.scalars(
-            select(AssessmentDB).where(
-                AssessmentDB.course_id == course_id,
-                AssessmentDB.parent_assessment_id.is_(None),
-            )
-        ).all()
-        return {row.name: row.id for row in rows}
-
     def _hydrate_scenario(self, session, row: ScenarioDB) -> StoredScenario:
+        parent_alias = aliased(AssessmentDB)
         score_rows = session.execute(
             select(
                 ScenarioScoreDB.simulated_score,
-                AssessmentDB.name,
-                AssessmentDB.position,
                 AssessmentDB.id,
+                AssessmentDB.name,
+                parent_alias.name,
+                AssessmentDB.position,
             )
             .join(AssessmentDB, ScenarioScoreDB.assessment_id == AssessmentDB.id)
+            .outerjoin(parent_alias, AssessmentDB.parent_assessment_id == parent_alias.id)
             .where(ScenarioScoreDB.scenario_id == row.id)
             .order_by(
                 AssessmentDB.position.asc().nulls_last(),
@@ -84,10 +75,11 @@ class PostgresScenarioRepository:
         ).all()
         entries = [
             StoredScenarioEntry(
-                assessment_name=name,
+                assessment_id=assessment_id,
+                assessment_name=f"{parent_name}::{name}" if parent_name else name,
                 score=_to_float(simulated_score) or 0.0,
             )
-            for simulated_score, name, _position, _assessment_id in score_rows
+            for simulated_score, assessment_id, name, parent_name, _position in score_rows
         ]
         created_at = row.created_at
         if created_at.tzinfo is None:
@@ -112,30 +104,30 @@ class PostgresScenarioRepository:
             if course is None:
                 raise KeyError(course_id)
 
-            assessment_ids_by_name = self._load_top_level_assessment_ids_by_name(
-                session=session,
-                course_id=course_id,
-            )
-
             scenario_row = ScenarioDB(course_id=course_id, name=name)
             session.add(scenario_row)
             session.flush()
 
-            seen_names: set[str] = set()
+            valid_assessment_ids = {
+                assessment_id
+                for assessment_id in session.scalars(
+                    select(AssessmentDB.id).where(AssessmentDB.course_id == course_id)
+                ).all()
+            }
+            seen_assessment_ids: set[UUID] = set()
             for entry in entries:
-                if entry.assessment_name in seen_names:
+                if entry.assessment_id in seen_assessment_ids:
                     raise ValueError(f"Duplicate assessment '{entry.assessment_name}' in scenario")
-                seen_names.add(entry.assessment_name)
+                seen_assessment_ids.add(entry.assessment_id)
 
-                assessment_id = assessment_ids_by_name.get(entry.assessment_name)
-                if assessment_id is None:
+                if entry.assessment_id not in valid_assessment_ids:
                     raise ValueError(
                         f"Assessment '{entry.assessment_name}' not found in course"
                     )
                 session.add(
                     ScenarioScoreDB(
                         scenario_id=scenario_row.id,
-                        assessment_id=assessment_id,
+                        assessment_id=entry.assessment_id,
                         simulated_score=float(entry.score),
                     )
                 )

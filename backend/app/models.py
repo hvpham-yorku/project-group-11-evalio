@@ -1,4 +1,5 @@
 from typing import Any, List, Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -17,12 +18,14 @@ SUPPORTED_BONUS_POLICIES = {
 
 
 class ChildAssessment(BaseModel):
+    assessment_id: Optional[UUID] = None
     name: str = Field(..., min_length=1)
     weight: float = Field(..., gt=0)
     raw_score: Optional[float] = Field(None, ge=0)
     total_score: Optional[float] = Field(None, gt=0)
 
 class Assessment(BaseModel):
+    assessment_id: Optional[UUID] = None
     name: str = Field(..., min_length=1)
     weight: float = Field(..., gt=0)
     raw_score: Optional[float] = Field(None, ge=0)

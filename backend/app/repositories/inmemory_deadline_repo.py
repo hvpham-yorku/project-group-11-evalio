@@ -39,6 +39,7 @@ class InMemoryDeadlineRepository:
         deadline = Deadline(
             deadline_id=deadline_id,
             course_id=course_id,
+            assessment_id=data.assessment_id,
             title=data.title,
             deadline_type=data.deadline_type,
             due_date=data.due_date,
