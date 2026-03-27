@@ -464,3 +464,66 @@ def test_minimum_required_invalid_assessment_returns_400(auth_client):
         json={"target": 80, "assessment_name": "Unknown Assessment"},
     )
     assert response.status_code == 400
+
+
+def test_capped_bonus_policy_applies_to_planning_and_whatif(auth_client):
+    course_id = _create_course(
+        auth_client,
+        {
+            "name": "Capped Bonus Planning",
+            "term": "W26",
+            "bonus_policy": "capped",
+            "bonus_cap_percentage": 95,
+            "assessments": [
+                {"name": "Assignments", "weight": 40},
+                {
+                    "name": "Final Exam",
+                    "weight": 60,
+                    "rule_type": "mandatory_pass",
+                    "rule_config": {"pass_threshold": 50},
+                },
+                {
+                    "name": "Participation Bonus",
+                    "weight": 10,
+                    "is_bonus": True,
+                },
+            ],
+        },
+    )
+
+    _update_grades(
+        auth_client,
+        course_id,
+        [
+            {"name": "Assignments", "raw_score": 95, "total_score": 100},
+            {"name": "Participation Bonus", "raw_score": 100, "total_score": 100},
+        ],
+    )
+
+    dashboard = auth_client.get(f"/courses/{course_id}/dashboard")
+    assert dashboard.status_code == 200
+    dashboard_body = dashboard.json()
+
+    assert dashboard_body["current_grade"] == pytest.approx(48.0, abs=0.01)
+    assert dashboard_body["core_grade"] == pytest.approx(38.0, abs=0.01)
+    assert dashboard_body["bonus_contribution"] == pytest.approx(10.0, abs=0.01)
+    assert dashboard_body["mandatory_pass_status"]["pending_assessments"] == ["Final Exam"]
+
+    whatif = auth_client.post(
+        f"/courses/{course_id}/dashboard/whatif",
+        json={"scenarios": [{"assessment_name": "Final Exam", "score": 90}]},
+    )
+    assert whatif.status_code == 200
+    whatif_body = whatif.json()
+
+    assert whatif_body["projected_grade"] == pytest.approx(95.0, abs=0.01)
+    assert whatif_body["projected_core_grade"] == pytest.approx(92.0, abs=0.01)
+    assert whatif_body["projected_bonus_contribution"] == pytest.approx(10.0, abs=0.01)
+    assert whatif_body["mandatory_pass_status"]["requirements_met"] is True
+
+    target_response = auth_client.post(f"/courses/{course_id}/target", json={"target": 96})
+    assert target_response.status_code == 200
+    target_body = target_response.json()
+
+    assert target_body["maximum_possible"] == pytest.approx(95.0, abs=0.01)
+    assert target_body["feasible"] is False

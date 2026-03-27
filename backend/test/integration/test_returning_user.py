@@ -1,3 +1,8 @@
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
 def _create_course(client, name="Course A"):
     payload = {
         "name": name,
@@ -106,3 +111,43 @@ def test_state_includes_assessment_count(auth_client):
     response = auth_client.get("/auth/me/state")
     data = response.json()
     assert data["courses"][0]["assessment_count"] == 2
+
+
+def test_multicourse_targets_restore_on_new_client_refresh(auth_client):
+    course_a = _create_course(auth_client, name="Resume Course A")
+    course_b = _create_course(auth_client, name="Resume Course B")
+
+    first_target = auth_client.post(f"/courses/{course_a}/target", json={"target": 91})
+    second_target = auth_client.post(f"/courses/{course_b}/target", json={"target": 74})
+    assert first_target.status_code == 200
+    assert second_target.status_code == 200
+
+    logout_response = auth_client.post("/auth/logout")
+    assert logout_response.status_code == 200
+
+    with TestClient(app) as refreshed_client:
+        login_response = refreshed_client.post(
+            "/auth/login",
+            json={"email": "user@example.com", "password": "password123"},
+        )
+        assert login_response.status_code == 200
+
+        state_response = refreshed_client.get("/auth/me/state")
+        assert state_response.status_code == 200
+        state = state_response.json()
+
+        by_id = {course["course_id"]: course for course in state["courses"]}
+        assert by_id[course_a]["target_percentage"] == 91.0
+        assert by_id[course_b]["target_percentage"] == 74.0
+
+        course_a_target = refreshed_client.get(f"/courses/{course_a}/target")
+        assert course_a_target.status_code == 200
+        assert course_a_target.json()["target_percentage"] == 91.0
+
+        course_b_target = refreshed_client.get(f"/courses/{course_b}/target")
+        assert course_b_target.status_code == 200
+        assert course_b_target.json()["target_percentage"] == 74.0
+
+        course_a_target_again = refreshed_client.get(f"/courses/{course_a}/target")
+        assert course_a_target_again.status_code == 200
+        assert course_a_target_again.json()["target_percentage"] == 91.0

@@ -21,6 +21,28 @@ def _create_course(auth_client, name="EECS2311"):
     return str(data["course_id"])
 
 
+def _create_hierarchical_course(auth_client, name="Hierarchical Scenarios"):
+    payload = {
+        "name": name,
+        "term": "W26",
+        "assessments": [
+            {"name": "Midterm", "weight": 40, "raw_score": 80, "total_score": 100},
+            {
+                "name": "Labs",
+                "weight": 20,
+                "children": [
+                    {"name": "Lab 1", "weight": 10, "raw_score": 90, "total_score": 100},
+                    {"name": "Lab 2", "weight": 10, "raw_score": None, "total_score": None},
+                ],
+            },
+            {"name": "Final", "weight": 40, "raw_score": None, "total_score": None},
+        ],
+    }
+    response = auth_client.post("/courses/", json=payload)
+    assert response.status_code == 200
+    return str(response.json()["course_id"])
+
+
 def _get_course_from_list(auth_client, course_id: str) -> dict:
     r = auth_client.get("/courses/")
     assert r.status_code == 200
@@ -166,3 +188,38 @@ def test_scenario_score_out_of_range_rejected_by_schema(auth_client):
     }
     r = auth_client.post(f"/courses/{course_id}/scenarios", json=payload)
     assert r.status_code == 422  # Pydantic schema validation
+
+
+def test_saved_parent_scenario_run_is_read_only_and_keeps_nested_course_state(auth_client):
+    course_id = _create_hierarchical_course(auth_client)
+    before = copy.deepcopy(_get_course_from_list(auth_client, course_id))
+
+    created = auth_client.post(
+        f"/courses/{course_id}/scenarios",
+        json={
+            "name": "Nested push",
+            "scenarios": [
+                {"assessment_name": "Labs", "score": 95},
+                {"assessment_name": "Final", "score": 88},
+            ],
+        },
+    )
+    assert created.status_code == 200
+    scenario_id = created.json()["scenario"]["scenario_id"]
+
+    run = auth_client.get(f"/courses/{course_id}/scenarios/{scenario_id}/run")
+    assert run.status_code == 200
+    body = run.json()
+
+    assert body["execution_mode"] == "simulation"
+    assert body["mutates_real_grades"] is False
+    assert body["result"]["scenarios_applied"] == 2
+    assert body["result"]["projected_grade"] == pytest.approx(86.2, abs=0.1)
+
+    labs = next(item for item in body["result"]["breakdown"] if item["name"] == "Labs")
+    assert labs["source"] == "whatif"
+    assert labs["hypothetical_score"] == 95
+    assert all(child["score_percent"] == pytest.approx(95.0, abs=0.1) for child in labs["children"])
+
+    after = _get_course_from_list(auth_client, course_id)
+    assert after == before
