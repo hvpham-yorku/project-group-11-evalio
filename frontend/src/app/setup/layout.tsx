@@ -1,30 +1,35 @@
 "use client";
 
-import { Fragment, useEffect, useState, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Check } from "lucide-react";
+
 import {
   SetupCourseProvider,
   useSetupCourse,
 } from "@/app/setup/course-context";
-import { getMe, getCourses } from "@/lib/api";
+import { getMe, listCourses } from "@/lib/api";
 import { CourseSelector } from "@/components/setup/CourseSelector";
 
 function SetupLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
   const router = useRouter();
   const { setCourseId } = useSetupCourse();
+
   const [authChecked, setAuthChecked] = useState(false);
   const checkInProgress = useRef(false);
 
   const isExploreView = pathname.startsWith("/setup/explore");
   const isManageView = pathname.startsWith("/setup/manage");
+  const isRiskCenterView = pathname.startsWith("/setup/risk-center");
+
+  const showStepProgress =
+    !isExploreView && !isManageView && !isRiskCenterView;
 
   useEffect(() => {
     let mounted = true;
 
     async function verifyAndRoute() {
-      // Safety: Don't run if already checking or if not in a setup route
       if (checkInProgress.current || !pathname.startsWith("/setup")) {
         setAuthChecked(true);
         return;
@@ -33,42 +38,32 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
       checkInProgress.current = true;
 
       try {
-        // 1. Try to get the user, but don't let a failure kill the app
         const user = await getMe().catch(() => null);
 
         if (!user) {
           if (mounted) {
-            // Only redirect if trying to access sensitive dashboard/structure areas
-            if (
-              pathname.includes("dashboard") ||
-              pathname.includes("structure")
-            ) {
+            if (pathname.includes("dashboard") || pathname.includes("structure")) {
               router.replace(`/login?next=${encodeURIComponent(pathname)}`);
               return;
             }
-            // Otherwise, let them stay and try to load the page
             setAuthChecked(true);
           }
           return;
         }
 
-        // 2. User exists, check for courses
-        const courses = await getCourses().catch(() => []);
+        const courses = await listCourses().catch(() => []);
         const hasCourses = Array.isArray(courses) && courses.length > 0;
 
         if (mounted) {
           if (hasCourses) {
-            const savedId = window.localStorage.getItem(
-              "evalio_active_course_id"
-            );
-            const validSavedId = courses.find(
-              (c: any) => c.course_id === savedId
-            );
+            const savedId = window.localStorage.getItem("evalio_active_course_id");
+            const validSavedId = courses.find((course) => course.course_id === savedId);
             const targetId = validSavedId ? savedId : courses[0].course_id;
 
-            if (targetId) setCourseId(targetId);
+            if (targetId) {
+              setCourseId(targetId);
+            }
 
-            // If landing on setup root or upload, skip to dashboard
             if (
               pathname === "/setup" ||
               pathname === "/setup/" ||
@@ -77,39 +72,39 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
               router.replace("/setup/dashboard");
               return;
             }
-          } else {
-            // New user routing: force upload if not on utility pages
-            if (
-              pathname !== "/setup/upload" &&
-              !isExploreView &&
-              !isManageView
-            ) {
-              router.replace("/setup/upload");
-              return;
-            }
+          } else if (
+            pathname !== "/setup/upload" &&
+            !isExploreView &&
+            !isManageView
+          ) {
+            router.replace("/setup/upload");
+            return;
           }
+
           setAuthChecked(true);
         }
       } catch (err) {
         console.error("Layout Guard caught an error:", err);
-        if (mounted) setAuthChecked(true); // Fail open to prevent loops
+        if (mounted) {
+          setAuthChecked(true);
+        }
       } finally {
         checkInProgress.current = false;
       }
     }
 
     verifyAndRoute();
+
     return () => {
       mounted = false;
     };
   }, [pathname, router, setCourseId, isExploreView, isManageView]);
 
-  // Loading state
   if (!authChecked && pathname.startsWith("/setup")) {
     return (
       <div className="flex h-screen items-center justify-center text-sm text-gray-500">
         <div className="flex flex-col items-center gap-2">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600"></div>
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-slate-600" />
           <span>Loading workspace...</span>
         </div>
       </div>
@@ -121,8 +116,9 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
     if (
       pathname.startsWith("/setup/manage") ||
       pathname.startsWith("/setup/structure")
-    )
+    ) {
       return 2;
+    }
     if (pathname.startsWith("/setup/grades")) return 3;
     if (pathname.startsWith("/setup/goals")) return 4;
     if (pathname.startsWith("/setup/deadlines")) return 5;
@@ -131,7 +127,6 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
   })();
 
   const showCourseSelector = activeStep > 1;
-  const showStepProgress = !isExploreView && !isManageView;
 
   const stepRoutes: Record<number, string> = {
     1: "/setup/upload",
@@ -144,38 +139,44 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="p-8">
-      <div className="flex justify-between items-center mb-8 border-b pb-4">
+      <div className="mb-8 flex items-center justify-between border-b pb-4">
         <div>
           <h1
             onClick={() => router.push("/")}
-            className="text-2xl font-bold cursor-pointer"
+            className="cursor-pointer text-2xl font-bold"
           >
             Evalio
           </h1>
-          <p className="text-gray-500 text-sm">
+          <p className="text-sm text-gray-500">
             Plan your academic success with confidence
           </p>
         </div>
         <div className="flex gap-4">
           <button
             onClick={() => router.push("/setup/dashboard")}
-            className="bg-[#F3F0EC] px-4 py-2 rounded-lg text-sm font-medium transition hover:bg-[#E9E5E0]"
+            className="flex items-center gap-2 rounded-lg bg-[#F3F0EC] px-4 py-2 text-sm font-medium transition hover:bg-[#E9E5E0]"
           >
             Dashboard
           </button>
           <button
             onClick={() => router.push("/setup/explore")}
-            className="bg-[#E9E5E0] px-4 py-2 rounded-lg text-sm font-medium transition hover:bg-[#DCD7D0]"
+            className="flex items-center gap-2 rounded-lg bg-[#E9E5E0] px-4 py-2 text-sm font-medium transition hover:bg-[#DCD7D0]"
           >
             Explore Scenarios
+          </button>
+          <button
+            onClick={() => router.push("/setup/risk-center")}
+            className="flex items-center gap-2 rounded-lg bg-[#E9E5E0] px-4 py-2 text-sm font-medium transition hover:bg-[#DCD7D0]"
+          >
+            Risk Center
           </button>
         </div>
       </div>
 
       {showCourseSelector && <CourseSelector />}
 
-      {showStepProgress && (
-        <div className="flex justify-between items-center max-w-6xl mx-auto mb-12 text-sm text-gray-400">
+      {showStepProgress ? (
+        <div className="mx-auto mb-12 flex max-w-6xl items-center justify-between text-sm text-gray-400">
           {[1, 2, 3, 4, 5, 6].map((step, index) => {
             const labels = [
               "Upload",
@@ -185,16 +186,17 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
               "Deadlines",
               "Dashboard",
             ];
+
             return (
               <Fragment key={step}>
                 <div
                   onClick={() => router.push(stepRoutes[step])}
-                  className={`flex items-center gap-2 cursor-pointer ${
-                    activeStep >= step ? "text-slate-600 font-semibold" : ""
-                  }`}
+                  className={`cursor-pointer items-center gap-2 ${
+                    activeStep >= step ? "font-semibold text-slate-600" : ""
+                  } flex`}
                 >
                   <span
-                    className={`w-6 h-6 flex items-center justify-center rounded-full text-xs ${
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
                       activeStep >= step
                         ? "bg-slate-600 text-white"
                         : "bg-gray-200 text-gray-500"
@@ -204,16 +206,14 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
                   </span>
                   {labels[index]}
                 </div>
-                {step < 6 && (
-                  <div className="h-[1px] bg-gray-200 flex-1 mx-4" />
-                )}
+                {step < 6 ? <div className="mx-4 h-[1px] flex-1 bg-gray-200" /> : null}
               </Fragment>
             );
           })}
         </div>
-      )}
+      ) : null}
 
-      <main className="max-w-6xl mx-auto">{children}</main>
+      <main className="mx-auto max-w-6xl">{children}</main>
     </div>
   );
 }

@@ -94,6 +94,11 @@ type DashboardDeadline = {
   source?: string;
 };
 
+type RiskSummaryAlert = {
+  text: string;
+  severity: "critical" | "warning";
+};
+
 function resolveCurrentGrade(result: TargetCheckResponse | null): number {
   if (!result) return 0;
   return Number.isFinite(result.final_total) ? Number(result.final_total) : result.current_standing;
@@ -348,6 +353,10 @@ export function Dashboard() {
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [deadlines, setDeadlines] = useState<DashboardDeadline[]>([]);
+  const [riskDeadlines, setRiskDeadlines] = useState<ApiDeadline[]>([]);
+  const [riskTargetResults, setRiskTargetResults] = useState<
+    Record<string, TargetCheckResponse>
+  >({});
   const [gpaScale, setGpaScale] = useState<GpaScale>("4.0");
   const [termGpa, setTermGpa] = useState<CgpaResponse | null>(null);
   const [termGpaCourses, setTermGpaCourses] = useState<CourseGpaResponse[]>([]);
@@ -435,6 +444,8 @@ export function Dashboard() {
           allCourseResults,
           summary,
           deadlineResponse,
+          allDeadlineResponses,
+          allTargetResults,
         ] =
           await Promise.all([
             checkTarget(resolvedCourseId, {
@@ -486,6 +497,27 @@ export function Dashboard() {
               deadlines: [],
               count: 0,
             })),
+            Promise.all(
+              courses.map(async (course) => {
+                try {
+                  return await listDeadlinesApi(course.course_id);
+                } catch {
+                  return { deadlines: [], count: 0 };
+                }
+              })
+            ),
+            Promise.all(
+              courses.map(async (course) => {
+                try {
+                  const result = await checkTarget(course.course_id, {
+                    target: resolvedTarget,
+                  });
+                  return [course.course_id, result] as const;
+                } catch {
+                  return null;
+                }
+              })
+            ),
           ]);
 
         setTargetResult(target);
@@ -543,6 +575,17 @@ export function Dashboard() {
           })
         );
         setDeadlines(decoratedDeadlines);
+        setRiskDeadlines(
+          allDeadlineResponses.flatMap((response) => response.deadlines ?? [])
+        );
+        setRiskTargetResults(
+          Object.fromEntries(
+            allTargetResults.filter(
+              (entry): entry is readonly [string, TargetCheckResponse] =>
+                entry !== null
+            )
+          )
+        );
 
         const validTermCourseResults = termCourseResults.filter(
           (item): item is CourseGpaResponse => item !== null
@@ -590,6 +633,8 @@ export function Dashboard() {
         setCumulativeGpa(null);
         setLearningStrategies([]);
         setDeadlines([]);
+        setRiskDeadlines([]);
+        setRiskTargetResults({});
       } finally {
         setLoading(false);
       }
@@ -833,6 +878,154 @@ export function Dashboard() {
         };
       }),
     [learningStrategies]
+  );
+
+  const riskSummary = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    let criticalCount = 0;
+    let dueSoonCount = 0;
+    let targetRiskCount = 0;
+    let highWeightUngradedCount = 0;
+    const topAlerts: RiskSummaryAlert[] = [];
+
+    riskDeadlines.forEach((deadline) => {
+      const dueDate = new Date(deadline.due_date);
+      dueDate.setHours(0, 0, 0, 0);
+      const daysOverdue = Math.floor(
+        (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      if (daysOverdue > 0) {
+        criticalCount += 1;
+        const courseName =
+          courses.find((course) => course.course_id === deadline.course_id)
+            ?.course_name ||
+          courses.find((course) => course.course_id === deadline.course_id)?.name ||
+          "Unknown";
+
+        if (topAlerts.length < 3) {
+          topAlerts.push({
+            text: `${courseName} - ${deadline.title} overdue`,
+            severity: "critical",
+          });
+        }
+      }
+    });
+
+    riskDeadlines.forEach((deadline) => {
+      const dueDate = new Date(deadline.due_date);
+      dueDate.setHours(0, 0, 0, 0);
+      const hoursUntil = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      if (hoursUntil > 0 && hoursUntil <= 72) {
+        dueSoonCount += 1;
+        if (hoursUntil <= 24) criticalCount += 1;
+
+        const courseName =
+          courses.find((course) => course.course_id === deadline.course_id)
+            ?.course_name ||
+          courses.find((course) => course.course_id === deadline.course_id)?.name ||
+          "Unknown";
+
+        if (topAlerts.length < 3) {
+          topAlerts.push({
+            text: `${courseName} - ${deadline.title} due in ${Math.ceil(hoursUntil)}h`,
+            severity: hoursUntil <= 24 ? "critical" : "warning",
+          });
+        }
+      }
+    });
+
+    courses.forEach((course) => {
+      const targetCheck = riskTargetResults[course.course_id];
+      if (targetCheck?.classification === "Not Possible") {
+        targetRiskCount += 1;
+        if (topAlerts.length < 3) {
+          topAlerts.push({
+            text: `${course.course_name || course.name} - Target not achievable`,
+            severity: "warning",
+          });
+        }
+      }
+    });
+
+    courses.forEach((course) => {
+      course.assessments.forEach((assessment) => {
+        const children = Array.isArray(assessment.children) ? assessment.children : [];
+        if (children.length) {
+          children.forEach((child) => {
+            const isUngraded = !(
+              typeof child.raw_score === "number" &&
+              typeof child.total_score === "number" &&
+              child.total_score > 0
+            );
+            if (isUngraded && child.weight >= 25) {
+              highWeightUngradedCount += 1;
+            }
+          });
+          return;
+        }
+
+        const isUngraded = !(
+          typeof assessment.raw_score === "number" &&
+          typeof assessment.total_score === "number" &&
+          assessment.total_score > 0
+        );
+        if (isUngraded && assessment.weight >= 25) {
+          highWeightUngradedCount += 1;
+        }
+      });
+    });
+
+    const totalAlerts =
+      criticalCount + dueSoonCount + targetRiskCount + highWeightUngradedCount;
+
+    return {
+      criticalCount,
+      dueSoonCount,
+      targetRiskCount,
+      highWeightUngradedCount,
+      totalAlerts,
+      topAlerts,
+    };
+  }, [courses, riskDeadlines, riskTargetResults]);
+
+  const boundaryCurrentContributionTotal = useMemo(
+    () =>
+      boundaryBreakdown.reduce(
+        (sum, entry) => sum + entry.current_contribution,
+        0
+      ),
+    [boundaryBreakdown]
+  );
+
+  const boundaryRemainingPotentialTotal = useMemo(
+    () =>
+      boundaryBreakdown.reduce(
+        (sum, entry) => sum + entry.remaining_potential,
+        0
+      ),
+    [boundaryBreakdown]
+  );
+
+  const boundaryMaxContributionTotal = useMemo(
+    () =>
+      boundaryBreakdown.reduce((sum, entry) => sum + entry.max_contribution, 0),
+    [boundaryBreakdown]
+  );
+
+  const projectionContributionTotal = useMemo(
+    () =>
+      projectionBreakdown.reduce((sum, entry) => sum + entry.contribution, 0),
+    [projectionBreakdown]
+  );
+
+  const projectionMaxContributionTotal = useMemo(
+    () =>
+      projectionBreakdown.reduce((sum, entry) => sum + entry.max_contribution, 0),
+    [projectionBreakdown]
   );
 
   return (
@@ -1100,180 +1293,63 @@ export function Dashboard() {
 
         {showBoundaryMath ? (
           <div className="mt-6 space-y-3 border-t border-[#E6E2DB] pt-6">
-            {boundaryBreakdown.map((entry) => (
-              <div
-                key={`${entry.name}-boundary`}
-                className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-4"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800">{entry.name}</p>
-                    <p className="text-[11px] text-gray-500">
-                      Weight {formatCompactNumber(entry.weight)}% {entry.is_bonus ? "• Bonus" : ""}
-                    </p>
-                    {entry.is_mandatory_pass ? (
-                      <p
-                        className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${
-                          entry.pass_status === "passed"
-                            ? "bg-green-50 text-green-700"
-                            : entry.pass_status === "failed"
-                              ? "bg-red-50 text-red-700"
-                              : "bg-amber-50 text-amber-700"
-                        }`}
-                      >
-                        Mandatory {"\u2265"} {(entry.pass_threshold ?? 50).toFixed(1)}% •{" "}
-                        {entry.pass_status ?? "pending"}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="grid grid-cols-3 gap-4 text-right text-xs">
-                    <div>
-                      <p className="uppercase text-gray-400">Current</p>
-                      <p className="font-semibold text-gray-800">
-                        {entry.current_contribution.toFixed(2)}%
-                      </p>
-                    </div>
-                    <div>
-                      <p className="uppercase text-gray-400">Max</p>
-                      <p className="font-semibold text-gray-800">
-                        {entry.max_contribution.toFixed(2)}%
-                      </p>
-                    </div>
-                    <div>
-                      <p className="uppercase text-gray-400">Remaining</p>
-                      <p className="font-semibold text-gray-800">
-                        {entry.remaining_potential.toFixed(2)}%
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                {typeof entry.score_percent === "number" ? (
-                  <p className="mt-2 text-xs text-gray-500">
-                    Saved score: {entry.score_percent.toFixed(1)}%.
-                  </p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      {/* 5. Performance Assumption */}
-      <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
-        <div className="mb-2 flex items-center justify-between gap-4">
-          <h3 className="font-bold text-gray-800">Performance Assumption</h3>
-          <button
-            type="button"
-            onClick={() => setShowProjectionMath((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#F6F1EA] px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-[#ECE6DD]"
-          >
-            <Sigma size={14} />
-            {showProjectionMath ? "Hide Math" : "Show Math"}
-          </button>
-        </div>
-        <p className="mb-6 text-xs text-gray-400">
-          Adjust the slider to apply a temporary what-if score to every remaining assessment.
-        </p>
-        <div className="mb-8 flex items-center gap-6">
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={assumedPerformance}
-            onChange={(e) => setAssumedPerformance(Number(e.target.value))}
-            className="flex-1 h-2 bg-gray-200 rounded-full appearance-none cursor-pointer accent-[#5D737E]"
-          />
-          <span className="text-3xl font-bold text-[#5D737E]">
-            {clampedPerformanceAssumption.toFixed(0)}%
-          </span>
-        </div>
-        <div className="flex items-center justify-between rounded-2xl bg-[#F9F8F6] p-6">
-          <div>
-            <p className="text-[10px] text-gray-400 uppercase">
-              Projected Final Grade
-            </p>
-            <p className="text-4xl font-bold text-gray-800">
-              {projectedFinal.toFixed(1)}%
-            </p>
-            <p className="mt-2 text-[10px] text-gray-400 uppercase">
-              Max reachable under this plan: {projectedMaximum.toFixed(1)}%
-            </p>
-          </div>
-          <div className="text-right">
-            {belowTarget ? (
-              <p className="flex items-center justify-end gap-1 text-xs font-bold text-orange-600">
-                <AlertTriangle size={14} /> Below Target
+            <div className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                Boundary Totals
               </p>
-            ) : (
-              <p className="text-xs font-bold text-green-600">On Track</p>
-            )}
-            <p className="mt-1 text-[10px] text-gray-400">
-              {belowTarget
-                ? `Short by ${shortfall.toFixed(1)}%.`
-                : `Above by ${(projectedFinal - targetGrade).toFixed(1)}%.`}
-            </p>
-          </div>
-        </div>
-
-        {showProjectionMath ? (
-          <div className="mt-6 space-y-3 border-t border-[#E6E2DB] pt-6">
-            {projectionBreakdown.length === 0 ? (
-              <div className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-4 text-sm text-gray-500">
-                No hypothetical scores applied yet.
-              </div>
-            ) : (
-              projectionBreakdown.map((entry) => (
-                <div
-                  key={`${entry.name}-projection`}
-                  className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">{entry.name}</p>
-                      <p className="text-[11px] text-gray-500">
-                        Source: {entry.source}
-                        {typeof entry.hypothetical_score === "number"
-                          ? ` • What-if ${entry.hypothetical_score.toFixed(0)}%`
-                          : ""}
-                      </p>
-                      {entry.is_mandatory_pass ? (
-                        <p
-                          className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${
-                            entry.pass_status === "passed"
-                              ? "bg-green-50 text-green-700"
-                              : entry.pass_status === "failed"
-                                ? "bg-red-50 text-red-700"
-                                : "bg-amber-50 text-amber-700"
-                          }`}
-                        >
-                          Mandatory {"\u2265"} {(entry.pass_threshold ?? 50).toFixed(1)}% •{" "}
-                          {entry.pass_status ?? "pending"}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-right text-xs">
-                      <div>
-                        <p className="uppercase text-gray-400">Projected</p>
-                        <p className="font-semibold text-gray-800">
-                          {entry.contribution.toFixed(2)}%
-                        </p>
-                      </div>
-                      <div>
-                        <p className="uppercase text-gray-400">Max</p>
-                        <p className="font-semibold text-gray-800">
-                          {entry.max_contribution.toFixed(2)}%
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+              <div className="mt-3 space-y-3 text-xs text-gray-600">
+                <div>
+                  <p className="font-semibold text-gray-800">Current</p>
+                  <p className="font-mono">
+                    {boundaryBreakdown
+                      .map((entry) => entry.current_contribution.toFixed(2))
+                      .join(" + ") || "0.00"}
+                    {" = "}
+                    {boundaryCurrentContributionTotal.toFixed(2)}%
+                  </p>
                 </div>
-              ))
-            )}
+                <div>
+                  <p className="font-semibold text-gray-800">Worst Case</p>
+                  <p className="font-mono">
+                    {boundaryCurrentContributionTotal.toFixed(2)} + 0.00
+                    {" = "}
+                    {boundaryWorstCase.toFixed(2)}%
+                  </p>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800">Best Case</p>
+                  <p className="font-mono">
+                    {boundaryCurrentContributionTotal.toFixed(2)} +{" "}
+                    {boundaryRemainingPotentialTotal.toFixed(2)}
+                    {" = "}
+                    {boundaryBestCase.toFixed(2)}%
+                  </p>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800">Core + Bonus</p>
+                  <p className="font-mono">
+                    {coreGrade.toFixed(2)} + {bonusContribution.toFixed(2)}
+                    {" = "}
+                    {(coreGrade + bonusContribution).toFixed(2)}%
+                  </p>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800">Max Contribution Sum</p>
+                  <p className="font-mono">
+                    {boundaryBreakdown
+                      .map((entry) => entry.max_contribution.toFixed(2))
+                      .join(" + ") || "0.00"}
+                    {" = "}
+                    {boundaryMaxContributionTotal.toFixed(2)}%
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         ) : null}
       </div>
 
-      {/* 6. Breakdown List */}
+      {/* 5. Breakdown List */}
       <div className="space-y-4">
         <h3 className="font-bold text-gray-800">Assessment Breakdown</h3>
         {(loading ? [] : assessmentGroups).map((group) => {
@@ -1399,6 +1475,199 @@ export function Dashboard() {
             </div>
           );
         })}
+      </div>
+
+      <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-800">Risk Center</h3>
+          {riskSummary.totalAlerts > 0 ? (
+            <div
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                riskSummary.criticalCount > 0
+                  ? "bg-red-50 text-red-700"
+                  : "bg-amber-50 text-amber-700"
+              }`}
+            >
+              {riskSummary.totalAlerts} alert{riskSummary.totalAlerts !== 1 ? "s" : ""}
+            </div>
+          ) : null}
+        </div>
+
+        {riskSummary.totalAlerts > 0 ? (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="rounded-2xl bg-red-50 p-4 text-center">
+                <div className="mb-0.5 text-3xl font-semibold text-red-700">
+                  {riskSummary.criticalCount}
+                </div>
+                <div className="text-sm text-gray-500">Critical</div>
+              </div>
+              <div className="rounded-2xl bg-amber-50 p-4 text-center">
+                <div className="mb-0.5 text-3xl font-semibold text-amber-700">
+                  {riskSummary.dueSoonCount}
+                </div>
+                <div className="text-sm text-gray-500">Due 72h</div>
+              </div>
+              <div className="rounded-2xl bg-amber-50 p-4 text-center">
+                <div className="mb-0.5 text-3xl font-semibold text-amber-700">
+                  {riskSummary.targetRiskCount}
+                </div>
+                <div className="text-sm text-gray-500">Target Risk</div>
+              </div>
+              <div className="rounded-2xl bg-slate-100 p-4 text-center">
+                <div className="mb-0.5 text-3xl font-semibold text-slate-600">
+                  {riskSummary.highWeightUngradedCount}
+                </div>
+                <div className="text-sm text-gray-500">High-Weight</div>
+              </div>
+            </div>
+
+            {riskSummary.topAlerts.length > 0 ? (
+              <div className="mb-4 space-y-2">
+                {riskSummary.topAlerts.map((alert, index) => (
+                  <div
+                    key={`${alert.text}-${index}`}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
+                      alert.severity === "critical"
+                        ? "border border-red-200 bg-red-50"
+                        : "border border-amber-200 bg-amber-50"
+                    }`}
+                  >
+                    <AlertTriangle
+                      size={14}
+                      className={
+                        alert.severity === "critical"
+                          ? "text-red-700"
+                          : "text-amber-700"
+                      }
+                    />
+                    <span className="flex-1 text-sm text-gray-800">{alert.text}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <button
+              onClick={() => router.push("/setup/risk-center")}
+              className="w-full rounded-2xl bg-[#688295] px-4 py-4 text-lg font-medium text-white transition hover:bg-[#587182]"
+            >
+              View All Alerts
+            </button>
+          </>
+        ) : (
+          <div className="py-6 text-center">
+            <CheckCircle2 className="mx-auto mb-2 h-10 w-10 text-green-600" />
+            <p className="mb-3 text-sm text-gray-500">No urgent issues detected</p>
+            <button
+              onClick={() => router.push("/setup/risk-center")}
+              className="rounded-lg border border-[#E6E2DB] bg-[#F6F1EA] px-4 py-2 text-xs text-gray-700 transition hover:bg-[#EFE8DE]"
+            >
+              View Risk Center
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 6. Performance Assumption */}
+      <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+        <div className="mb-2 flex items-center justify-between gap-4">
+          <h3 className="font-bold text-gray-800">Performance Assumption</h3>
+          <button
+            type="button"
+            onClick={() => setShowProjectionMath((value) => !value)}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#F6F1EA] px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-[#ECE6DD]"
+          >
+            <Sigma size={14} />
+            {showProjectionMath ? "Hide Math" : "Show Math"}
+          </button>
+        </div>
+        <p className="mb-6 text-xs text-gray-400">
+          Adjust the slider to apply a temporary what-if score to every remaining assessment.
+        </p>
+        <div className="mb-8 flex items-center gap-6">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={assumedPerformance}
+            onChange={(e) => setAssumedPerformance(Number(e.target.value))}
+            className="flex-1 h-2 bg-gray-200 rounded-full appearance-none cursor-pointer accent-[#5D737E]"
+          />
+          <span className="text-3xl font-bold text-[#5D737E]">
+            {clampedPerformanceAssumption.toFixed(0)}%
+          </span>
+        </div>
+        <div className="flex items-center justify-between rounded-2xl bg-[#F9F8F6] p-6">
+          <div>
+            <p className="text-[10px] text-gray-400 uppercase">
+              Projected Final Grade
+            </p>
+            <p className="text-4xl font-bold text-gray-800">
+              {projectedFinal.toFixed(1)}%
+            </p>
+            <p className="mt-2 text-[10px] text-gray-400 uppercase">
+              Max reachable under this plan: {projectedMaximum.toFixed(1)}%
+            </p>
+          </div>
+          <div className="text-right">
+            {belowTarget ? (
+              <p className="flex items-center justify-end gap-1 text-xs font-bold text-orange-600">
+                <AlertTriangle size={14} /> Below Target
+              </p>
+            ) : (
+              <p className="text-xs font-bold text-green-600">On Track</p>
+            )}
+            <p className="mt-1 text-[10px] text-gray-400">
+              {belowTarget
+                ? `Short by ${shortfall.toFixed(1)}%.`
+                : `Above by ${(projectedFinal - targetGrade).toFixed(1)}%.`}
+            </p>
+          </div>
+        </div>
+
+        {showProjectionMath ? (
+          <div className="mt-6 space-y-3 border-t border-[#E6E2DB] pt-6">
+            <div className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                Projection Totals
+              </p>
+              <div className="mt-3 space-y-3 text-xs text-gray-600">
+                <div>
+                  <p className="font-semibold text-gray-800">Projected Final Grade</p>
+                  <p className="font-mono">
+                    {(projectionBreakdown.length
+                      ? projectionBreakdown
+                          .map((entry) => entry.contribution.toFixed(2))
+                          .join(" + ")
+                      : currentContribution.toFixed(2)) || "0.00"}
+                    {" = "}
+                    {(projectionBreakdown.length
+                      ? projectionContributionTotal
+                      : projectedFinal
+                    ).toFixed(2)}
+                    %
+                  </p>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800">Max Reachable Under This Plan</p>
+                  <p className="font-mono">
+                    {(projectionBreakdown.length
+                      ? projectionBreakdown
+                          .map((entry) => entry.max_contribution.toFixed(2))
+                          .join(" + ")
+                      : projectedMaximum.toFixed(2)) || "0.00"}
+                    {" = "}
+                    {(projectionBreakdown.length
+                      ? projectionMaxContributionTotal
+                      : projectedMaximum
+                    ).toFixed(2)}
+                    %
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* 7. Learning Strategy */}
