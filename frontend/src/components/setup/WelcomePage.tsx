@@ -55,6 +55,9 @@ export function WelcomePage() {
   const journey = useReveal<HTMLDivElement>();
   const features = useReveal<HTMLDivElement>();
   const cta = useReveal<HTMLDivElement>();
+  const scrollToExplore = () => {
+    journey.ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F1EB] text-[#3A3530] antialiased">
@@ -203,9 +206,14 @@ export function WelcomePage() {
           <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#C4B5A6]">
             Scroll to explore
           </span>
-          <div className="mt-3 flex h-10 w-10 items-center justify-center rounded-full border border-[#D4CFC7] bg-[#FFFFFF]/80 text-[#5F7A8A] shadow-sm">
+          <button
+            type="button"
+            onClick={scrollToExplore}
+            aria-label="Scroll to next section"
+            className="mt-3 flex h-10 w-10 items-center justify-center rounded-full border border-[#D4CFC7] bg-[#FFFFFF]/80 text-[#5F7A8A] shadow-sm transition hover:bg-[#FFFFFF] focus-visible:ring-2 focus-visible:ring-[#5F7A8A]/30"
+          >
             <ChevronDown className="h-4 w-4 animate-bounce" />
-          </div>
+          </button>
         </div>
       </section>
 
