@@ -61,12 +61,12 @@ function resolveCurrentGrade(result: TargetCheckResponse): number {
 
 function getRiskBadge(analytics: CourseAnalytics) {
   if (!analytics.feasible || analytics.classification === "Not Possible") {
-    return { label: "Risky", className: "bg-orange-50 text-orange-700" };
+    return { label: "Risky", className: "bg-[#FDF3E7] text-[#C9945F]" };
   }
   if (analytics.classification === "Comfortable" || analytics.classification === "Complete") {
-    return { label: "On Track", className: "bg-green-50 text-green-700" };
+    return { label: "On Track", className: "bg-[#E8F2EA] text-[#6B9B7A]" };
   }
-  return { label: "Watch", className: "bg-amber-50 text-amber-700" };
+  return { label: "Watch", className: "bg-[#FDF3E7] text-[#C9945F]" };
 }
 
 export function ManageCourses() {
@@ -235,31 +235,31 @@ export function ManageCourses() {
 
   return (
     <div className="max-w-5xl mx-auto pb-16">
-      <section className="rounded-2xl border border-gray-200 bg-[#F7F6F4] p-6 shadow-sm">
-        <h2 className="text-3xl font-semibold tracking-tight text-gray-800">Manage Courses</h2>
-        <p className="mt-2 text-base text-gray-500">
+      <section className="rounded-2xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm">
+        <h2 className="text-3xl font-semibold tracking-tight text-[#3A3530]">Manage Courses</h2>
+        <p className="mt-2 text-base text-[#6B6560]">
           View, edit, and organize all your courses in one place.
         </p>
 
         <button
           onClick={() => router.push("/setup/upload")}
-          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#5D737E] px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:bg-[#4A5D66]"
+          className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#5F7A8A] px-5 py-3 text-base font-semibold text-white shadow-sm transition hover:opacity-90"
         >
           <Plus size={18} />
           Add New Course
         </button>
 
-        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mt-4 text-sm text-[#B86B6B]">{error}</p> : null}
 
         <div className="mt-6 space-y-4">
           {loading ? (
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
+            <div className="rounded-2xl border border-[#D4CFC7] bg-[#FFFFFF] p-5 text-sm text-[#6B6560]">
               Loading courses...
             </div>
           ) : null}
 
           {!loading && !sortedCourses.length ? (
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
+            <div className="rounded-2xl border border-[#D4CFC7] bg-[#FFFFFF] p-5 text-sm text-[#6B6560]">
               No courses found yet. Add a new course to get started.
             </div>
           ) : null}
@@ -280,30 +280,30 @@ export function ManageCourses() {
               return (
                 <article
                   key={course.course_id}
-                  className="rounded-2xl border border-[#7E9CAE] bg-white px-5 py-4 shadow-sm"
+                  className="rounded-2xl border border-[#C4D6E4] bg-[#FFFFFF] px-5 py-4 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-xl font-semibold text-gray-800">{course.name}</h3>
+                        <h3 className="text-xl font-semibold text-[#3A3530]">{course.name}</h3>
                         {isCurrent ? (
-                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+                          <span className="rounded-full bg-[#E8EFF5] px-2.5 py-0.5 text-xs font-semibold text-[#6B8BA8]">
                             Current
                           </span>
                         ) : null}
                       </div>
-                      <p className="mt-1.5 text-sm text-gray-600">
-                        Current Grade: <span className="font-semibold text-gray-800">{toFixedOne(analytics.current)}%</span>
-                        <span className="mx-2.5 text-gray-300">•</span>
-                        Target: <span className="font-semibold text-gray-800">{toFixedOne(analytics.target)}%</span>
-                        <span className="mx-2.5 text-gray-300">•</span>
+                      <p className="mt-1.5 text-sm text-[#6B6560]">
+                        Current Grade: <span className="font-semibold text-[#3A3530]">{toFixedOne(analytics.current)}%</span>
+                        <span className="mx-2.5 text-[#C4B5A6]">•</span>
+                        Target: <span className="font-semibold text-[#3A3530]">{toFixedOne(analytics.target)}%</span>
+                        <span className="mx-2.5 text-[#C4B5A6]">•</span>
                         <span
                           className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${riskBadge.className}`}
                         >
                           {riskBadge.label}
                         </span>
                       </p>
-                      <p className="mt-1 text-sm text-gray-600">
+                      <p className="mt-1 text-sm text-[#6B6560]">
                         {analytics.assessmentCount} assessment{analytics.assessmentCount === 1 ? "" : "s"}
                       </p>
                     </div>
@@ -311,13 +311,13 @@ export function ManageCourses() {
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => handleOpenCourse(course.course_id)}
-                        className="rounded-lg bg-slate-100 px-3.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+                        className="rounded-lg bg-[#E8EFF5] px-3.5 py-1.5 text-sm font-medium text-[#6B8BA8] transition hover:opacity-90"
                       >
                         Open
                       </button>
                       <button
                         onClick={() => startEdit(course)}
-                        className="rounded-lg border border-gray-200 bg-white p-2 text-gray-600 transition hover:bg-gray-50"
+                        className="rounded-lg border border-[#D4CFC7] bg-[#FFFFFF] p-2 text-[#6B6560] transition hover:bg-[#F5F1EB]"
                         aria-label={`Edit ${course.name}`}
                       >
                         <Pencil size={18} />
@@ -325,7 +325,7 @@ export function ManageCourses() {
                       <button
                         onClick={() => handleDeleteCourse(course.course_id)}
                         disabled={deletingCourseId === course.course_id}
-                        className="rounded-lg border border-red-100 bg-red-50 p-2 text-red-500 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+                        className="rounded-lg border border-[#B86B6B] bg-[#F9EAEA] p-2 text-[#B86B6B] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                         aria-label={`Delete ${course.name}`}
                       >
                         <Trash2 size={18} />
@@ -334,32 +334,32 @@ export function ManageCourses() {
                   </div>
 
                   {isEditing ? (
-                    <div className="mt-6 rounded-2xl border border-gray-200 bg-[#FAFAF9] p-4">
+                    <div className="mt-6 rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-4">
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                        <label className="text-sm text-gray-600">
+                        <label className="text-sm text-[#6B6560]">
                           Course Name
                           <input
-                            className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+                            className="mt-1 w-full rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] px-3 py-2 text-sm text-[#3A3530]"
                             value={editName}
                             onChange={(event) => setEditName(event.target.value)}
                           />
                         </label>
-                        <label className="text-sm text-gray-600">
+                        <label className="text-sm text-[#6B6560]">
                           Term
                           <input
-                            className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+                            className="mt-1 w-full rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] px-3 py-2 text-sm text-[#3A3530]"
                             value={editTerm}
                             onChange={(event) => setEditTerm(event.target.value)}
                             placeholder="e.g., W26"
                           />
                         </label>
-                        <label className="text-sm text-gray-600">
+                        <label className="text-sm text-[#6B6560]">
                           Target (%)
                           <input
                             type="number"
                             min={0}
                             max={100}
-                            className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
+                            className="mt-1 w-full rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] px-3 py-2 text-sm text-[#3A3530]"
                             value={editTarget}
                             onChange={(event) =>
                               setEditTarget(normalizeTarget(Number(event.target.value)))
@@ -371,14 +371,14 @@ export function ManageCourses() {
                         <button
                           onClick={handleSaveEdit}
                           disabled={savingEdit}
-                          className="rounded-xl bg-[#5D737E] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#4A5D66] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-xl bg-[#5F7A8A] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           {savingEdit ? "Saving..." : "Save"}
                         </button>
                         <button
                           onClick={cancelEdit}
                           disabled={savingEdit}
-                          className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] px-4 py-2 text-sm font-semibold text-[#3A3530] transition hover:bg-[#F5F1EB] disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           Cancel
                         </button>

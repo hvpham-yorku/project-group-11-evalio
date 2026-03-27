@@ -106,52 +106,52 @@ function LoginPageContent() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-b from-[#F7F3ED] to-[#F3EEE7]">
+    <main className="flex min-h-screen items-center justify-center bg-[#F5F1EB] p-6">
       <div className="w-full max-w-md">
-        <div className="bg-white border border-gray-200 rounded-3xl p-8 shadow-sm">
+        <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
           {/* Header */}
           <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-gray-800">
+            <h2 className="text-2xl font-semibold text-[#3A3530]">
               {mode === "login" ? "Sign in to Evalio" : "Create your Evalio account"}
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-[#6B6560]">
               {mode === "login" ? "Continue your setup securely." : "It takes less than a minute."}
             </p>
           </div>
 
           {/* Success */}
           {message ? (
-            <div className="mb-4 rounded-2xl p-3 flex items-center gap-2 border border-green-200 bg-green-50">
-              <CheckCircle2 size={18} className="text-green-700" />
-              <p className="text-sm text-green-700">{message}</p>
+            <div className="mb-4 flex items-center gap-2 rounded-2xl border border-[#6B9B7A] bg-[#E8F2EA] p-3">
+              <CheckCircle2 size={18} className="text-[#6B9B7A]" />
+              <p className="text-sm text-[#6B9B7A]">{message}</p>
             </div>
           ) : null}
 
           {/* Error */}
           {error ? (
-            <div className="mb-4 rounded-2xl p-3 flex items-center gap-2 border border-red-200 bg-red-50">
-              <AlertCircle size={18} className="text-red-700" />
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="mb-4 flex items-center gap-2 rounded-2xl border border-[#B86B6B] bg-[#F9EAEA] p-3">
+              <AlertCircle size={18} className="text-[#B86B6B]" />
+              <p className="text-sm text-[#B86B6B]">{error}</p>
             </div>
           ) : null}
 
           {/* Form */}
           <form onSubmit={onSubmit} className="space-y-4">
             <label className="block">
-              <span className="block text-sm mb-2 text-gray-800">Email</span>
+              <span className="mb-2 block text-sm text-[#3A3530]">Email</span>
               <input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
-                className="w-full px-4 py-2.5 rounded-xl outline-none transition-all bg-[#FBFAF8] border border-[#E6E2DB] text-gray-800 focus:border-[#5D737E] focus:ring-4 focus:ring-[#DDE7EC]"
+                className="w-full rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] px-4 py-2.5 text-[#3A3530] outline-none transition-all focus:border-[#5F7A8A] focus:ring-4 focus:ring-[#E8EFF5]"
                 placeholder="you@example.com"
               />
             </label>
 
             <label className="block">
-              <span className="block text-sm mb-2 text-gray-800">Password</span>
+              <span className="mb-2 block text-sm text-[#3A3530]">Password</span>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -160,14 +160,14 @@ function LoginPageContent() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
-                  className="w-full px-4 py-2.5 pr-12 rounded-xl outline-none transition-all bg-[#FBFAF8] border border-[#E6E2DB] text-gray-800 focus:border-[#5D737E] focus:ring-4 focus:ring-[#DDE7EC]"
+                  className="w-full rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] px-4 py-2.5 pr-12 text-[#3A3530] outline-none transition-all focus:border-[#5F7A8A] focus:ring-4 focus:ring-[#E8EFF5]"
                   placeholder="At least 8 characters"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   disabled={loading}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-lg text-gray-500 hover:opacity-70"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-[#6B6560] hover:opacity-70"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -178,7 +178,7 @@ function LoginPageContent() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 text-white px-6 py-3 rounded-xl font-medium transition disabled:opacity-60 bg-[#5D737E] hover:bg-[#4A5D66] shadow-sm"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#5F7A8A] px-6 py-3 font-medium text-white shadow-sm transition hover:opacity-90 disabled:opacity-60"
             >
               {loading ? <Loader2 size={18} className="animate-spin" /> : null}
               {loading
@@ -195,28 +195,28 @@ function LoginPageContent() {
               type="button"
               onClick={toggleMode}
               disabled={loading}
-              className="text-sm text-gray-500 hover:opacity-70"
+              className="text-sm text-[#6B6560] hover:opacity-70"
             >
               {mode === "login" ? (
                 <>
-                  Need an account? <span className="text-[#5D737E]">Create one</span>
+                  Need an account? <span className="text-[#5F7A8A]">Create one</span>
                 </>
               ) : (
                 <>
                   Already have an account?{" "}
-                  <span className="text-[#5D737E]">Sign in</span>
+                  <span className="text-[#5F7A8A]">Sign in</span>
                 </>
               )}
             </button>
           </div>
 
           {/* Existing session */}
-          <div className="mt-4 text-center pt-4 border-t border-[#E6E2DB]">
+          <div className="mt-4 border-t border-[#E8E3DC] pt-4 text-center">
             <button
               type="button"
               onClick={onUseExistingSession}
               disabled={loading}
-              className="text-sm underline text-[#B8A89A] hover:opacity-70"
+              className="text-sm text-[#C4B5A6] underline hover:opacity-70"
             >
               Use existing session
             </button>
@@ -229,7 +229,7 @@ function LoginPageContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<main className="min-h-screen bg-gradient-to-b from-[#F7F3ED] to-[#F3EEE7]" />}>
+    <Suspense fallback={<main className="min-h-screen bg-[#F5F1EB]" />}>
       <LoginPageContent />
     </Suspense>
   );

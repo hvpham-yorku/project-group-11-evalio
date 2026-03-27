@@ -688,24 +688,24 @@ export function ExploreScenarios() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 pb-20">
-      <h2 className="text-3xl font-bold text-gray-800">Scenario Explorer</h2>
-      <p className="mt-2 text-gray-500 text-sm leading-relaxed max-w-4xl">
+    <div className="mx-auto max-w-6xl px-4 pb-20">
+      <h2 className="text-3xl font-bold text-[#3A3530]">Scenario Explorer</h2>
+      <p className="mt-2 max-w-4xl text-sm leading-relaxed text-[#6B6560]">
         This is your sandbox. Experiment freely with different grade
         possibilities. Nothing here affects your actual grades unless you choose
         to apply it.
       </p>
 
-      {error ? <p className="mt-4 text-sm text-red-500">{error}</p> : null}
+      {error ? <p className="mt-4 text-sm text-[#B86B6B]">{error}</p> : null}
 
-      <div className="mt-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* LEFT: WHAT-IF */}
         <div className="lg:col-span-2">
-          <div className="bg-white border border-gray-200 rounded-3xl p-8 shadow-sm">
+          <div className="rounded-3xl border border-[#D4CFC7] bg-white p-8 shadow-sm">
             <div className="flex justify-between items-center mb-6 gap-4">
               <div className="flex items-center gap-3">
-                <Lightbulb className="text-[#C8833F]" size={22} />
-                <h3 className="text-lg font-semibold text-gray-800">
+                <Lightbulb className="text-[#C9945F]" size={22} />
+                <h3 className="text-lg font-semibold text-[#3A3530]">
                   What-If Exploration
                 </h3>
               </div>
@@ -713,7 +713,7 @@ export function ExploreScenarios() {
                 value={selectedScenarioId}
                 onChange={(e) => handleSelectScenario(e.target.value)}
                 disabled={loadingScenario}
-                className="min-w-[180px] rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 focus:border-[#5D737E] focus:outline-none disabled:opacity-70"
+                className="min-w-[180px] rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] px-4 py-2 text-sm text-[#6B6560] focus:border-[#5F7A8A] focus:outline-none disabled:opacity-70"
               >
                 <option value="">Select Scenario</option>
                 {savedScenarios.map((scenario) => (
@@ -725,7 +725,7 @@ export function ExploreScenarios() {
             </div>
 
             {mandatoryPassWarnings.length > 0 ? (
-              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <div className="mb-4 rounded-xl border border-[#F1DCC4] bg-[#FDF3E7] px-4 py-3 text-sm text-[#C9945F]">
                 <div className="mb-1 flex items-center gap-2 font-semibold">
                   <AlertTriangle size={16} />
                   Mandatory pass warning
@@ -759,8 +759,8 @@ export function ExploreScenarios() {
                     key={group.key}
                     className={`rounded-2xl p-5 border ${
                       isModified
-                        ? "border-[#5D737E] bg-[#E9EFF1]"
-                        : "border-gray-100 bg-[#F6F1EA]"
+                        ? "border-[#C4D6E4] bg-[#E8EFF5]"
+                        : "border-[#E8E3DC] bg-[#F5F1EB]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-6 mb-4">
@@ -774,7 +774,7 @@ export function ExploreScenarios() {
                                 [group.key]: !prev[group.key],
                               }))
                             }
-                            className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#D4DDE1] bg-white text-[#5D737E] hover:bg-[#F1F5F7]"
+                            className="mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#C4D6E4] bg-white text-[#5F7A8A] hover:bg-[#E8EFF5]"
                             aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.displayName}`}
                           >
                             <ChevronDown
@@ -785,11 +785,11 @@ export function ExploreScenarios() {
                             />
                           </button>
                         ) : (
-                          <span className="mt-3 h-2.5 w-2.5 rounded-full bg-[#B8C6CC]" />
+                          <span className="mt-3 h-2.5 w-2.5 rounded-full bg-[#C4B5A6]" />
                         )}
                         <div>
-                          <h4 className="font-semibold text-gray-800">{group.displayName}</h4>
-                          <p className="text-sm text-gray-500">
+                          <h4 className="font-semibold text-[#3A3530]">{group.displayName}</h4>
+                          <p className="text-sm text-[#6B6560]">
                             {formatCompactNumber(group.weight)}% •{" "}
                             {typeof parentActual === "number"
                               ? `Current: ${parentActual.toFixed(1)}%`
@@ -803,10 +803,10 @@ export function ExploreScenarios() {
                           </p>
                           {group.is_mandatory_pass ? (
                             <p
-                              className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${
+                                className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${
                                 parentBelowThreshold
-                                  ? "bg-red-50 text-red-700"
-                                  : "bg-green-50 text-green-700"
+                                  ? "bg-[#F9EAEA] text-[#B86B6B]"
+                                  : "bg-[#E8F2EA] text-[#6B9B7A]"
                               }`}
                             >
                               Mandatory pass threshold: {(parentThreshold ?? 50).toFixed(1)}%
@@ -815,7 +815,7 @@ export function ExploreScenarios() {
                         </div>
                       </div>
 
-                      <div className="text-3xl font-semibold text-[#5D737E]">
+                      <div className="text-3xl font-semibold text-[#5F7A8A]">
                         {parentValue.toFixed(1)}%
                       </div>
                     </div>
@@ -832,17 +832,17 @@ export function ExploreScenarios() {
                       className="mt-4 w-full h-2 rounded-full appearance-none cursor-pointer"
                       style={{
                         background: `linear-gradient(to right, ${
-                          parentBelowThreshold ? "#DC2626" : "#5D737E"
+                          parentBelowThreshold ? "#B86B6B" : "#5F7A8A"
                         } 0%, ${
-                          parentBelowThreshold ? "#DC2626" : "#5D737E"
-                        } ${parentValue}%, #E6E2DB ${parentValue}%, #E6E2DB 100%)`,
+                          parentBelowThreshold ? "#B86B6B" : "#5F7A8A"
+                        } ${parentValue}%, #E8E3DC ${parentValue}%, #E8E3DC 100%)`,
                         WebkitAppearance: "none",
                       }}
                     />
                     {group.is_mandatory_pass ? (
                       <p
                         className={`mt-2 text-xs ${
-                          parentBelowThreshold ? "text-red-600" : "text-green-700"
+                          parentBelowThreshold ? "text-[#B86B6B]" : "text-[#6B9B7A]"
                         }`}
                       >
                         {parentBelowThreshold
@@ -852,7 +852,7 @@ export function ExploreScenarios() {
                     ) : null}
 
                     {hasChildren && isExpanded ? (
-                      <div className="mt-4 space-y-3 border-l border-[#D4DDE1] pl-5">
+                      <div className="mt-4 space-y-3 border-l border-[#D4CFC7] pl-5">
                         {group.children.map((child) => {
                           const childActual = getActualPercent(
                             child.raw_score,
@@ -869,16 +869,16 @@ export function ExploreScenarios() {
                               key={child.key}
                               className={`rounded-xl border px-4 py-3 ${
                                 childModified
-                                  ? "border-[#AFC2CC] bg-[#F4F8FA]"
-                                  : "border-[#E8E3DC] bg-[#FBF8F3]"
+                                  ? "border-[#C4D6E4] bg-[#E8EFF5]"
+                                  : "border-[#D4CFC7] bg-[#FCFAF7]"
                               }`}
                             >
                               <div className="mb-2 flex items-center justify-between gap-4">
                                 <div>
-                                  <p className="text-sm font-medium text-gray-800">
+                                  <p className="text-sm font-medium text-[#3A3530]">
                                     {child.name}
                                   </p>
-                                  <p className="text-xs text-gray-500">
+                                  <p className="text-xs text-[#6B6560]">
                                     {formatCompactNumber(child.weight)}% •{" "}
                                     {typeof childActual === "number"
                                       ? `Current: ${childActual.toFixed(1)}%`
@@ -889,7 +889,7 @@ export function ExploreScenarios() {
                                     )})`}
                                   </p>
                                 </div>
-                                <span className="text-xl font-semibold text-[#5D737E]">
+                                <span className="text-xl font-semibold text-[#5F7A8A]">
                                   {childValue.toFixed(1)}%
                                 </span>
                               </div>
@@ -908,7 +908,7 @@ export function ExploreScenarios() {
                                 }
                                 className="w-full h-2 rounded-full appearance-none cursor-pointer"
                                 style={{
-                                  background: `linear-gradient(to right, #5D737E 0%, #5D737E ${childValue}%, #E6E2DB ${childValue}%, #E6E2DB 100%)`,
+                                  background: `linear-gradient(to right, #5F7A8A 0%, #5F7A8A ${childValue}%, #E8E3DC ${childValue}%, #E8E3DC 100%)`,
                                   WebkitAppearance: "none",
                                 }}
                               />
@@ -927,7 +927,7 @@ export function ExploreScenarios() {
                   appearance: none;
                   width: 18px;
                   height: 18px;
-                  background: #5d737e;
+                  background: #5f7a8a;
                   border-radius: 9999px;
                   border: none;
                   cursor: pointer;
@@ -937,7 +937,7 @@ export function ExploreScenarios() {
                 input[type="range"]::-moz-range-thumb {
                   width: 18px;
                   height: 18px;
-                  background: #5d737e;
+                  background: #5f7a8a;
                   border-radius: 9999px;
                   border: none;
                   cursor: pointer;
@@ -947,25 +947,25 @@ export function ExploreScenarios() {
 
             {/* Controls appear only when changed */}
             {hasChanges ? (
-              <div className="mt-8 pt-6 border-t border-gray-100">
+              <div className="mt-8 border-t border-[#E8E3DC] pt-6">
                 <div className="inline-flex items-center gap-3">
                   <button
                     onClick={handleOpenSaveDialog}
                     disabled={savingScenario}
-                    className="inline-flex items-center gap-2 bg-green-600 text-white px-5 py-3 rounded-xl font-medium hover:opacity-90 transition shadow-sm disabled:opacity-70"
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#6B9B7A] px-5 py-3 font-medium text-white transition shadow-sm hover:opacity-90 disabled:opacity-70"
                   >
                     Save Scenario
                   </button>
                   <button
                     onClick={handleDeleteScenarioClick}
                     disabled={deletingScenario}
-                    className="inline-flex items-center gap-2 bg-red-600 text-white px-5 py-3 rounded-xl font-medium hover:opacity-90 transition shadow-sm disabled:opacity-70"
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#B86B6B] px-5 py-3 font-medium text-white transition shadow-sm hover:opacity-90 disabled:opacity-70"
                   >
                     Delete Scenario
                   </button>
                   <button
                     onClick={handleResetAll}
-                    className="inline-flex items-center gap-2 bg-[#E6E2DB] text-gray-800 px-5 py-3 rounded-xl font-medium hover:opacity-90 transition shadow-sm"
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#F5F1EB] px-5 py-3 font-medium text-[#3A3530] transition shadow-sm hover:opacity-90"
                   >
                     <RotateCcw size={16} />
                     Reset All
@@ -978,17 +978,17 @@ export function ExploreScenarios() {
 
         {/* RIGHT: LIVE PROJECTION */}
         <div className="lg:col-span-1">
-          <div className="bg-white border border-gray-200 rounded-3xl p-8 shadow-lg lg:sticky lg:top-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-6">
+          <div className="rounded-3xl border border-[#D4CFC7] bg-white p-8 shadow-lg lg:sticky lg:top-6">
+            <h3 className="mb-6 text-lg font-semibold text-[#3A3530]">
               Live Projection
             </h3>
 
-            <div className="rounded-3xl p-8 text-center bg-[#EEF3F5] border border-gray-100">
-              <p className="text-sm text-gray-500">Projected Final Grade</p>
-              <p className="mt-3 text-6xl font-semibold text-[#5D737E]">
+            <div className="rounded-3xl border border-[#C4D6E4] bg-[#E8EFF5] p-8 text-center">
+              <p className="text-sm text-[#6B6560]">Projected Final Grade</p>
+              <p className="mt-3 text-6xl font-semibold text-[#5F7A8A]">
                 {projectedFinal.toFixed(2)}%
               </p>
-              <p className="mt-3 text-xs text-gray-500">
+              <p className="mt-3 text-xs text-[#6B6560]">
                 {normalisationApplied
                   ? "Displayed as the normalized course result."
                   : "Displayed as the raw weighted course result."}
@@ -996,35 +996,35 @@ export function ExploreScenarios() {
             </div>
 
             <div className="mt-6 grid grid-cols-1 gap-3">
-              <div className="rounded-2xl border border-gray-100 bg-[#F6F1EA] px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">
+              <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-[#6B6560]">
                   Current Standing
                 </p>
-                <p className="mt-1 text-2xl font-semibold text-gray-800">
+                <p className="mt-1 text-2xl font-semibold text-[#3A3530]">
                   {currentStanding.toFixed(2)}%
                 </p>
               </div>
-              <div className="rounded-2xl border border-gray-100 bg-[#EEF3F5] px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">
+              <div className="rounded-2xl border border-[#C4D6E4] bg-[#E8EFF5] px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-[#6B6560]">
                   Scenario Projection
                 </p>
-                <p className="mt-1 text-2xl font-semibold text-[#5D737E]">
+                <p className="mt-1 text-2xl font-semibold text-[#5F7A8A]">
                   {projectedFinal.toFixed(2)}%
                 </p>
               </div>
-              <div className="rounded-2xl border border-gray-100 bg-green-50 px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">
+              <div className="rounded-2xl border border-[#D4CFC7] bg-[#E8F2EA] px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-[#6B6560]">
                   Best Case Reachable
                 </p>
-                <p className="mt-1 text-2xl font-semibold text-green-700">
+                <p className="mt-1 text-2xl font-semibold text-[#6B9B7A]">
                   {bestCaseReachable.toFixed(2)}%
                 </p>
               </div>
-              <div className="rounded-2xl border border-gray-100 bg-red-50 px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">
+              <div className="rounded-2xl border border-[#D4CFC7] bg-[#F9EAEA] px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-[#6B6560]">
                   Worst Case Floor
                 </p>
-                <p className="mt-1 text-2xl font-semibold text-red-600">
+                <p className="mt-1 text-2xl font-semibold text-[#B86B6B]">
                   {worstCaseFloor.toFixed(2)}%
                 </p>
               </div>
@@ -1045,10 +1045,10 @@ export function ExploreScenarios() {
                         className="flex items-center justify-between gap-4 text-sm"
                       >
                         <div>
-                          <span className="text-gray-500">{entry.name}</span>
-                          <p className="text-xs text-gray-400">{sourceLabel}</p>
+                          <span className="text-[#6B6560]">{entry.name}</span>
+                          <p className="text-xs text-[#C4B5A6]">{sourceLabel}</p>
                         </div>
-                        <span className="font-semibold text-gray-800">
+                        <span className="font-semibold text-[#3A3530]">
                           +{entry.contribution.toFixed(2)}%
                         </span>
                       </div>
@@ -1092,10 +1092,10 @@ export function ExploreScenarios() {
                         className="flex items-center justify-between gap-4 text-sm"
                       >
                         <div>
-                          <span className="text-gray-500">{entry.label}</span>
-                          <p className="text-xs text-gray-400">{entry.sourceLabel}</p>
+                          <span className="text-[#6B6560]">{entry.label}</span>
+                          <p className="text-xs text-[#C4B5A6]">{entry.sourceLabel}</p>
                         </div>
-                        <span className="font-semibold text-gray-800">
+                        <span className="font-semibold text-[#3A3530]">
                           +{entry.contribution.toFixed(2)}%
                         </span>
                       </div>
@@ -1107,11 +1107,11 @@ export function ExploreScenarios() {
                 <button
                   onClick={handleApplyToGrades}
                   disabled={saving}
-                  className="w-full bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition disabled:opacity-70"
+                  className="w-full rounded-xl bg-[#5F7A8A] py-4 font-semibold text-white shadow-lg transition hover:bg-[#6B8BA8] disabled:opacity-70"
                 >
                   Apply to Actual Grades
                 </button>
-                <p className="mt-2 text-xs text-center text-[#B8A89A]">
+                <p className="mt-2 text-center text-xs text-[#C4B5A6]">
                   This will update your grades page with these values
                 </p>
               </div>
@@ -1122,9 +1122,9 @@ export function ExploreScenarios() {
 
       {showSaveDialog ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <h4 className="text-lg font-semibold text-gray-800">Save Scenario</h4>
-            <p className="mt-2 text-sm text-gray-600">
+          <div className="w-full max-w-md rounded-2xl border border-[#D4CFC7] bg-white p-6 shadow-2xl">
+            <h4 className="text-lg font-semibold text-[#3A3530]">Save Scenario</h4>
+            <p className="mt-2 text-sm text-[#6B6560]">
               Enter a name for this scenario
             </p>
 
@@ -1132,7 +1132,7 @@ export function ExploreScenarios() {
               type="text"
               value={scenarioName}
               onChange={(e) => setScenarioName(e.target.value)}
-              className="mt-4 w-full rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-[#5D737E] focus:outline-none"
+              className="mt-4 w-full rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] px-4 py-3 text-sm text-[#3A3530] focus:border-[#5F7A8A] focus:outline-none"
               placeholder="Scenario name"
               autoFocus
             />
@@ -1144,14 +1144,14 @@ export function ExploreScenarios() {
                   setShowSaveDialog(false);
                   setScenarioName("");
                 }}
-                className="rounded-xl bg-[#E6E2DB] px-4 py-2 text-sm font-medium text-gray-800 hover:opacity-90 transition"
+                className="rounded-xl bg-[#F5F1EB] px-4 py-2 text-sm font-medium text-[#3A3530] transition hover:opacity-90"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveScenario}
                 disabled={savingScenario}
-                className="rounded-xl bg-green-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition disabled:opacity-70"
+                className="rounded-xl bg-[#6B9B7A] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-70"
               >
                 Save
               </button>
@@ -1162,11 +1162,11 @@ export function ExploreScenarios() {
 
       {showDeleteDialog ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <h4 className="text-lg font-semibold text-gray-800">
+          <div className="w-full max-w-md rounded-2xl border border-[#D4CFC7] bg-white p-6 shadow-2xl">
+            <h4 className="text-lg font-semibold text-[#3A3530]">
               Delete this scenario?
             </h4>
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-[#6B6560]">
               This action cannot be undone.
             </p>
 
@@ -1176,14 +1176,14 @@ export function ExploreScenarios() {
                   if (deletingScenario) return;
                   setShowDeleteDialog(false);
                 }}
-                className="rounded-xl bg-[#E6E2DB] px-4 py-2 text-sm font-medium text-gray-800 hover:opacity-90 transition"
+                className="rounded-xl bg-[#F5F1EB] px-4 py-2 text-sm font-medium text-[#3A3530] transition hover:opacity-90"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteScenario}
                 disabled={deletingScenario}
-                className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition disabled:opacity-70"
+                className="rounded-xl bg-[#B86B6B] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-70"
               >
                 Delete
               </button>

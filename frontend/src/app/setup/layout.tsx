@@ -102,9 +102,9 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
 
   if (!authChecked && pathname.startsWith("/setup")) {
     return (
-      <div className="flex h-screen items-center justify-center text-sm text-gray-500">
+      <div className="flex h-screen items-center justify-center bg-[#F5F1EB] text-sm text-[#6B6560]">
         <div className="flex flex-col items-center gap-2">
-          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-slate-600" />
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#5F7A8A]" />
           <span>Loading workspace...</span>
         </div>
       </div>
@@ -127,6 +127,7 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
   })();
 
   const showCourseSelector = activeStep > 1;
+  const isDashboardView = pathname.startsWith("/setup/dashboard");
 
   const stepRoutes: Record<number, string> = {
     1: "/setup/upload",
@@ -138,82 +139,98 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="p-8">
-      <div className="mb-8 flex items-center justify-between border-b pb-4">
-        <div>
-          <h1
-            onClick={() => router.push("/")}
-            className="cursor-pointer text-2xl font-bold"
-          >
-            Evalio
-          </h1>
-          <p className="text-sm text-gray-500">
-            Plan your academic success with confidence
-          </p>
+    <div className="min-h-screen bg-[#F5F1EB]">
+      <div className="border-b border-[#E8E3DC] bg-[#FFFFFF]">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-8 py-7">
+          <div>
+            <h1
+              onClick={() => router.push("/")}
+              className="cursor-pointer text-2xl font-bold text-[#3A3530]"
+            >
+              Evalio
+            </h1>
+            <p className="text-sm text-[#6B6560]">
+              Plan your academic success with confidence
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <button
+              onClick={() => router.push("/setup/dashboard")}
+              className={`flex items-center gap-2 rounded-full bg-[#F5F1EB] px-5 py-3 text-sm font-medium transition hover:bg-[#E8E3DC] ${
+                isDashboardView ? "text-[#3A3530]" : "text-[#6B6560]"
+              }`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => router.push("/setup/explore")}
+              className={`flex items-center gap-2 rounded-full bg-[#F5F1EB] px-5 py-3 text-sm font-medium transition hover:bg-[#E8E3DC] ${
+                isExploreView ? "text-[#3A3530]" : "text-[#6B6560]"
+              }`}
+            >
+              Explore Scenarios
+            </button>
+            <button
+              onClick={() => router.push("/setup/risk-center")}
+              className={`flex items-center gap-2 rounded-full bg-[#F5F1EB] px-5 py-3 text-sm font-medium transition hover:bg-[#E8E3DC] ${
+                isRiskCenterView ? "text-[#3A3530]" : "text-[#6B6560]"
+              }`}
+            >
+              Risk Center
+            </button>
+          </div>
         </div>
-        <div className="flex gap-4">
-          <button
-            onClick={() => router.push("/setup/dashboard")}
-            className="flex items-center gap-2 rounded-lg bg-[#F3F0EC] px-4 py-2 text-sm font-medium transition hover:bg-[#E9E5E0]"
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => router.push("/setup/explore")}
-            className="flex items-center gap-2 rounded-lg bg-[#E9E5E0] px-4 py-2 text-sm font-medium transition hover:bg-[#DCD7D0]"
-          >
-            Explore Scenarios
-          </button>
-          <button
-            onClick={() => router.push("/setup/risk-center")}
-            className="flex items-center gap-2 rounded-lg bg-[#E9E5E0] px-4 py-2 text-sm font-medium transition hover:bg-[#DCD7D0]"
-          >
-            Risk Center
-          </button>
+
+        <div className={showStepProgress ? "border-t border-[#E8E3DC]" : ""}>
+          <div className="mx-auto max-w-6xl px-8 pt-3 pb-1">
+            {showCourseSelector ? <CourseSelector /> : null}
+          </div>
         </div>
+
+        {showStepProgress ? (
+          <div className="border-t border-[#E8E3DC]">
+            <div className="mx-auto flex max-w-6xl items-center justify-between px-8 py-8 text-sm text-[#6B6560]">
+              {[1, 2, 3, 4, 5, 6].map((step, index) => {
+                const labels = [
+                  "Upload",
+                  "Structure",
+                  "Grades",
+                  "Goals",
+                  "Deadlines",
+                  "Dashboard",
+                ];
+
+                return (
+                  <Fragment key={step}>
+                    <div
+                      onClick={() => router.push(stepRoutes[step])}
+                      className={`flex cursor-pointer items-center gap-3 ${
+                        activeStep >= step ? "font-medium text-[#3A3530]" : ""
+                      }`}
+                    >
+                      <span
+                        className={`flex h-9 w-9 items-center justify-center rounded-full text-sm ${
+                          activeStep >= step
+                            ? "bg-[#6B8BA8] text-white"
+                            : "bg-[#F5F1EB] text-[#6B6560]"
+                        }`}
+                      >
+                        {activeStep > step ? <Check size={14} /> : step}
+                      </span>
+                      {labels[index]}
+                    </div>
+                    {step < 6 ? (
+                      <div className="mx-5 h-[1px] flex-1 bg-[#E8E3DC]" />
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      {showCourseSelector && <CourseSelector />}
-
-      {showStepProgress ? (
-        <div className="mx-auto mb-12 flex max-w-6xl items-center justify-between text-sm text-gray-400">
-          {[1, 2, 3, 4, 5, 6].map((step, index) => {
-            const labels = [
-              "Upload",
-              "Structure",
-              "Grades",
-              "Goals",
-              "Deadlines",
-              "Dashboard",
-            ];
-
-            return (
-              <Fragment key={step}>
-                <div
-                  onClick={() => router.push(stepRoutes[step])}
-                  className={`cursor-pointer items-center gap-2 ${
-                    activeStep >= step ? "font-semibold text-slate-600" : ""
-                  } flex`}
-                >
-                  <span
-                    className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-                      activeStep >= step
-                        ? "bg-slate-600 text-white"
-                        : "bg-gray-200 text-gray-500"
-                    }`}
-                  >
-                    {activeStep > step ? <Check size={12} /> : step}
-                  </span>
-                  {labels[index]}
-                </div>
-                {step < 6 ? <div className="mx-4 h-[1px] flex-1 bg-gray-200" /> : null}
-              </Fragment>
-            );
-          })}
-        </div>
-      ) : null}
-
-      <main className="mx-auto max-w-6xl">{children}</main>
+      <main className="mx-auto max-w-6xl px-8 pt-7 pb-10">{children}</main>
     </div>
   );
 }

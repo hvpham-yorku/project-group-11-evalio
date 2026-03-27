@@ -122,12 +122,12 @@ export function GoalsStep() {
       return {
         label: classification,
         icon: TrendingUp,
-        pillBg: "bg-green-50",
-        pillText: "text-green-700",
-        bar: "bg-green-600",
-        noteBg: "bg-green-50",
-        noteBorder: "border-green-200",
-        noteText: "text-green-700",
+        pillBg: "bg-[#E8F2EA]",
+        pillText: "text-[#6B9B7A]",
+        bar: "bg-[#6B9B7A]",
+        noteBg: "bg-[#E8F2EA]",
+        noteBorder: "border-[#6B9B7A]",
+        noteText: "text-[#6B9B7A]",
       };
     }
 
@@ -135,24 +135,24 @@ export function GoalsStep() {
       return {
         label: classification,
         icon: TrendingUp,
-        pillBg: "bg-red-50",
-        pillText: "text-red-700",
-        bar: "bg-red-500",
-        noteBg: "bg-red-50",
-        noteBorder: "border-red-200",
-        noteText: "text-red-700",
+        pillBg: "bg-[#F9EAEA]",
+        pillText: "text-[#B86B6B]",
+        bar: "bg-[#B86B6B]",
+        noteBg: "bg-[#F9EAEA]",
+        noteBorder: "border-[#B86B6B]",
+        noteText: "text-[#B86B6B]",
       };
     }
 
     return {
       label: classification,
       icon: TrendingUp,
-      pillBg: "bg-[#FFF3E6]",
-      pillText: "text-[#C8833F]",
-      bar: "bg-[#C8833F]",
-      noteBg: "bg-[#FFF6EC]",
-      noteBorder: "border-[#F2D7BD]",
-      noteText: "text-[#C8833F]",
+      pillBg: "bg-[#FDF3E7]",
+      pillText: "text-[#C9945F]",
+      bar: "bg-[#C9945F]",
+      noteBg: "bg-[#FDF3E7]",
+      noteBorder: "border-[#F1DCC4]",
+      noteText: "text-[#C9945F]",
     };
   }, [classification]);
 
@@ -177,16 +177,16 @@ export function GoalsStep() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 pb-20">
-      <h2 className="text-3xl font-bold text-gray-800">Set Your Target</h2>
-      <p className="mt-2 text-gray-500 text-sm leading-relaxed">
+      <h2 className="text-3xl font-bold text-[#3A3530]">Set Your Target</h2>
+      <p className="mt-2 text-sm leading-relaxed text-[#6B6560]">
         Choose a target grade and we&apos;ll show you exactly what&apos;s needed to reach it.
       </p>
 
       {/* TARGET CARD */}
-      <div className="mt-8 bg-white border border-gray-200 rounded-3xl p-8 shadow-sm">
+      <div className="mt-8 rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
         <div className="flex items-center gap-3 mb-6">
-          <Target className="text-[#5D737E]" size={22} />
-          <h3 className="text-lg font-semibold text-gray-700">Target Grade</h3>
+          <Target className="text-[#5F7A8A]" size={22} />
+          <h3 className="text-lg font-semibold text-[#3A3530]">Target Grade</h3>
         </div>
 
         <div className="max-w-xl">
@@ -201,24 +201,24 @@ export function GoalsStep() {
                 onChange={(e) => setTarget(parseInt(e.target.value, 10))}
                 className="w-full h-2 rounded-full appearance-none cursor-pointer"
                 style={{
-                  background: "#E6E2DB",
+                  background: "#E8E3DC",
                   outline: "none",
                 }}
               />
             </div>
 
             <div className="w-28 text-right">
-              <div className="text-4xl font-semibold text-[#5D737E]">{target}%</div>
+              <div className="text-4xl font-semibold text-[#5F7A8A]">{target}%</div>
             </div>
           </div>
 
-          <div className="flex justify-between text-xs text-[#C6B8A8]">
+          <div className="flex justify-between text-xs text-[#C4B5A6]">
             <span>Pass (50%)</span>
             <span>Average (70%)</span>
             <span>Excellence (90%)</span>
           </div>
 
-          <p className="mt-2 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-[#6B6560]">
             YorkU equivalent: {yorkEquivalent.letter} ({yorkEquivalent.grade_point}) -{" "}
             {yorkEquivalent.description}
           </p>
@@ -226,13 +226,13 @@ export function GoalsStep() {
       </div>
 
       {/* WHAT YOU NEED CARD */}
-      <div className="mt-8 bg-white border border-gray-200 rounded-3xl p-8 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-700 mb-6">What You Need</h3>
+      <div className="mt-8 rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
+        <h3 className="mb-6 text-lg font-semibold text-[#3A3530]">What You Need</h3>
 
         <div className="space-y-6">
           {/* Header row */}
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Required average on remaining work</span>
+            <span className="text-sm text-[#6B6560]">Required average on remaining work</span>
 
             <div
               className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${statusUI.pillBg} ${statusUI.pillText}`}
@@ -243,11 +243,11 @@ export function GoalsStep() {
           </div>
 
           {/* Big required number box */}
-          <div className="rounded-2xl p-8 text-center bg-[#F6F1EA] border border-gray-100">
+          <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-8 text-center">
             <div className={`text-6xl font-semibold ${statusUI.pillText}`}>
               {requiredAverageDisplay}
             </div>
-            <div className="mt-2 text-sm text-gray-500">{requiredFractionDisplay}</div>
+            <div className="mt-2 text-sm text-[#6B6560]">{requiredFractionDisplay}</div>
           </div>
 
           {/* NEW: Evaluation Breakdown (Collapsible) */}
@@ -255,13 +255,13 @@ export function GoalsStep() {
             <button
               type="button"
               onClick={() => setIsEvaluationExpanded((v) => !v)}
-              className="w-full flex items-center justify-between rounded-2xl px-5 py-4 bg-[#F6F1EA] border border-gray-100 hover:border-gray-200 transition"
+              className="w-full rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] px-5 py-4 transition hover:border-[#D4CFC7]"
             >
-              <span className="text-base font-semibold text-gray-700">Evaluation Breakdown</span>
+              <span className="text-base font-semibold text-[#3A3530]">Evaluation Breakdown</span>
               {isEvaluationExpanded ? (
-                <ChevronUp className="text-gray-500" size={20} />
+                <ChevronUp className="text-[#6B6560]" size={20} />
               ) : (
-                <ChevronDown className="text-gray-500" size={20} />
+                <ChevronDown className="text-[#6B6560]" size={20} />
               )}
             </button>
 
@@ -270,42 +270,42 @@ export function GoalsStep() {
                 isEvaluationExpanded ? "max-h-[520px] opacity-100" : "max-h-0 opacity-0"
               }`}
             >
-              <div className="mt-4 rounded-2xl bg-[#F6F1EA] border border-gray-100 p-5">
+              <div className="mt-4 rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-5">
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white border border-gray-100">
-                    <span className="text-sm text-gray-500">Target percentage</span>
-                    <span className="text-sm font-semibold text-gray-800">{target.toFixed(1)}%</span>
+                  <div className="flex items-center justify-between rounded-2xl border border-[#E8E3DC] bg-[#FFFFFF] px-4 py-3">
+                    <span className="text-sm text-[#6B6560]">Target percentage</span>
+                    <span className="text-sm font-semibold text-[#3A3530]">{target.toFixed(1)}%</span>
                   </div>
 
-                  <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white border border-gray-100">
-                    <span className="text-sm text-gray-500">Earned so far</span>
-                    <span className="text-sm font-semibold text-green-700">
+                  <div className="flex items-center justify-between rounded-2xl border border-[#E8E3DC] bg-[#FFFFFF] px-4 py-3">
+                    <span className="text-sm text-[#6B6560]">Earned so far</span>
+                    <span className="text-sm font-semibold text-[#6B9B7A]">
                       {earnedSoFar.toFixed(1)}%
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white border border-gray-100">
-                    <span className="text-sm text-gray-500">Remaining weight</span>
-                    <span className="text-sm font-semibold text-[#5D737E]">
+                  <div className="flex items-center justify-between rounded-2xl border border-[#E8E3DC] bg-[#FFFFFF] px-4 py-3">
+                    <span className="text-sm text-[#6B6560]">Remaining weight</span>
+                    <span className="text-sm font-semibold text-[#5F7A8A]">
                       {Number.isFinite(remainingWeight) ? remainingWeight.toFixed(1) : "0.0"}%
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-white border border-gray-100">
-                    <span className="text-sm text-gray-500">Required remaining average</span>
+                  <div className="flex items-center justify-between rounded-2xl border border-[#E8E3DC] bg-[#FFFFFF] px-4 py-3">
+                    <span className="text-sm text-[#6B6560]">Required remaining average</span>
                     <span className={`text-sm font-semibold ${statusUI.pillText}`}>
                       {Number.isFinite(requiredAverage) ? requiredAverage.toFixed(1) : "0.0"}%
                     </span>
                   </div>
                 </div>
 
-                <div className="mt-5 pt-4 border-t border-[#E6E2DB]">
-                  <div className="text-xs font-semibold text-[#C6B8A8] mb-2">Formula</div>
-                  <div className="px-4 py-3 rounded-2xl bg-white border border-gray-100 text-sm text-gray-500">
+                <div className="mt-5 border-t border-[#E8E3DC] pt-4">
+                  <div className="mb-2 text-xs font-semibold text-[#C4B5A6]">Formula</div>
+                  <div className="rounded-2xl border border-[#E8E3DC] bg-[#FFFFFF] px-4 py-3 text-sm text-[#6B6560]">
                     {formulaText}
                   </div>
 
-                  <p className="mt-3 text-xs text-gray-500">
+                  <p className="mt-3 text-xs text-[#6B6560]">
                     This evaluation is deterministic and does not modify stored grade data.
                   </p>
                 </div>
@@ -315,13 +315,13 @@ export function GoalsStep() {
 
           {/* Progress bar */}
           <div>
-            <div className="w-full bg-[#E6E2DB] h-3 rounded-full overflow-hidden">
+            <div className="h-3 w-full overflow-hidden rounded-full bg-[#E8E3DC]">
               <div
                 className={`h-full rounded-full ${statusUI.bar}`}
                 style={{ width: `${Math.min(requiredAverage, 100)}%` }}
               />
             </div>
-            <div className="flex justify-between text-xs text-[#C6B8A8] mt-2">
+            <div className="mt-2 flex justify-between text-xs text-[#C4B5A6]">
               <span>0%</span>
               <span>50%</span>
               <span>100%</span>
@@ -335,28 +335,28 @@ export function GoalsStep() {
 
           {/* Bottom mini cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-2xl p-5 bg-[#F6F1EA] border border-gray-100">
-              <div className="text-sm text-gray-500">Current Standing</div>
-              <div className="mt-1 text-2xl font-semibold text-gray-800">
+            <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-5">
+              <div className="text-sm text-[#6B6560]">Current Standing</div>
+              <div className="mt-1 text-2xl font-semibold text-[#3A3530]">
                 {currentStanding.toFixed(1)}%
               </div>
-              <div className="mt-1 text-xs text-[#C6B8A8]">{gradedWeight}% graded</div>
+              <div className="mt-1 text-xs text-[#C4B5A6]">{gradedWeight}% graded</div>
             </div>
 
-            <div className="rounded-2xl p-5 bg-[#F6F1EA] border border-gray-100">
-              <div className="text-sm text-gray-500">Remaining Weight</div>
-              <div className="mt-1 text-2xl font-semibold text-[#5D737E]">{remainingWeight}%</div>
-              <div className="mt-1 text-xs text-[#C6B8A8]">Still ahead</div>
+            <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-5">
+              <div className="text-sm text-[#6B6560]">Remaining Weight</div>
+              <div className="mt-1 text-2xl font-semibold text-[#5F7A8A]">{remainingWeight}%</div>
+              <div className="mt-1 text-xs text-[#C4B5A6]">Still ahead</div>
             </div>
           </div>
         </div>
       </div>
 
-      {error ? <p className="mt-4 text-sm text-red-500">{error}</p> : null}
+      {error ? <p className="mt-4 text-sm text-[#B86B6B]">{error}</p> : null}
 
       <button
         onClick={() => router.push("/setup/deadlines")}
-        className="mt-8 w-full bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition"
+        className="mt-8 w-full rounded-xl bg-[#5F7A8A] py-4 font-semibold text-white shadow-lg transition hover:opacity-90"
       >
         Continue to Deadlines
       </button>

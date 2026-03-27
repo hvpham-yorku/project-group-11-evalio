@@ -54,7 +54,7 @@ export function CourseSelector() {
     current: 0,
     target: DEFAULT_TARGET,
     riskLabel: "Risky",
-    riskClass: "bg-orange-50 text-orange-600",
+    riskClass: "bg-[#FDF3E7] text-[#C9945F]",
   });
   const { courseId, setCourseId } = useSetupCourse();
 
@@ -68,7 +68,7 @@ export function CourseSelector() {
           current: 0,
           target: DEFAULT_TARGET,
           riskLabel: "Risky",
-          riskClass: "bg-orange-50 text-orange-600",
+          riskClass: "bg-[#FDF3E7] text-[#C9945F]",
         });
         return;
       }
@@ -90,7 +90,9 @@ export function CourseSelector() {
         current: resolveCurrentGrade(targetCheck),
         target,
         riskLabel: risky ? "Risky" : "On Track",
-        riskClass: risky ? "bg-orange-50 text-orange-600" : "bg-green-50 text-green-700",
+        riskClass: risky
+          ? "bg-[#FDF3E7] text-[#C9945F]"
+          : "bg-[#E8F2EA] text-[#6B9B7A]",
       });
     } catch (error) {
       console.error(error);
@@ -125,10 +127,10 @@ export function CourseSelector() {
     <div className="max-w-6xl mx-auto mb-6 relative">
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center justify-between bg-[#F9F8F6] border border-gray-200 rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 transition-all"
+        className="flex cursor-pointer items-center justify-between rounded-[1.25rem] border border-[#E8E3DC] bg-[#F5F1EB] px-5 py-3 transition-all hover:bg-[#E8E3DC]"
       >
         <div className="flex items-center gap-3">
-          <span className="font-bold text-gray-800 text-sm">
+          <span className="text-sm font-bold text-[#3A3530]">
             {currentCourse?.course_name ?? currentCourse?.name ?? "Select Course"}
           </span>
           <ChevronDown
@@ -138,11 +140,11 @@ export function CourseSelector() {
         </div>
 
         <div className="flex items-center gap-4 text-[11px]">
-          <span className="text-gray-400">
-            Current: <b className="text-gray-700">{toFixedOne(summary.current)}%</b>
+          <span className="text-[#6B6560]">
+            Current: <b className="text-[#3A3530]">{toFixedOne(summary.current)}%</b>
           </span>
-          <span className="text-gray-400">
-            Target: <b className="text-gray-700">{toFixedOne(summary.target)}%</b>
+          <span className="text-[#6B6560]">
+            Target: <b className="text-[#3A3530]">{toFixedOne(summary.target)}%</b>
           </span>
           <span className={`px-2 py-0.5 rounded-full font-bold uppercase ${summary.riskClass}`}>
             {summary.riskLabel}
@@ -151,7 +153,7 @@ export function CourseSelector() {
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden">
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-[1.25rem] border border-[#D4CFC7] bg-[#FFFFFF] shadow-xl">
           {courses.map((course) => (
             <div
               key={course.course_id}
@@ -159,11 +161,11 @@ export function CourseSelector() {
                 setCourseId(course.course_id);
                 setIsOpen(false);
               }}
-              className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-50 text-sm"
+              className="flex cursor-pointer items-center justify-between border-b border-[#E8E3DC] px-4 py-3 text-sm hover:bg-[#F5F1EB]"
             >
               <span>{course.course_name ?? course.name}</span>
               {course.course_id === courseId && (
-                <Check size={14} className="text-slate-600" />
+                <Check size={14} className="text-[#5F7A8A]" />
               )}
             </div>
           ))}
@@ -173,7 +175,7 @@ export function CourseSelector() {
               setIsOpen(false);
               router.push("/setup/upload");
             }}
-            className="flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-gray-50 cursor-pointer border-b border-gray-50"
+            className="flex cursor-pointer items-center gap-2 border-b border-[#E8E3DC] px-4 py-3 text-sm text-[#5F7A8A] hover:bg-[#F5F1EB]"
           >
             <Plus size={14} />
             <span>Add New Course</span>
@@ -184,7 +186,7 @@ export function CourseSelector() {
               setIsOpen(false);
               router.push("/setup/manage");
             }}
-            className="flex items-center gap-2 px-4 py-3 text-sm text-slate-600 hover:bg-gray-50 cursor-pointer"
+            className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm text-[#5F7A8A] hover:bg-[#F5F1EB]"
           >
             <Settings size={14} />
             <span>Manage Courses</span>

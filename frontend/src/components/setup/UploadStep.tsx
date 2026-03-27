@@ -222,22 +222,22 @@ export function UploadStep() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4">
-      <h2 className="text-2xl font-bold text-gray-800">Upload Your Syllabus</h2>
-      <p className="mt-2 text-gray-500 text-sm leading-relaxed">
+    <div className="mx-auto max-w-3xl px-4">
+      <h2 className="text-2xl font-bold text-[#3A3530]">Upload Your Syllabus</h2>
+      <p className="mt-2 text-sm leading-relaxed text-[#6B6560]">
         {
           "We'll extract your course's grading structure automatically. Don't worry, you can review and adjust everything before moving forward."
         }
       </p>
 
-      <div className="mt-8 bg-white border border-gray-200 rounded-3xl p-12 shadow-sm text-center">
+      <div className="mt-8 rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-12 text-center shadow-sm">
         <div className="flex justify-center mb-4">
-          <Upload className="w-12 h-12 text-gray-300" />
+          <Upload className="h-12 w-12 text-[#C4B5A6]" />
         </div>
-        <h3 className="text-xl font-medium text-gray-700">
+        <h3 className="text-xl font-medium text-[#3A3530]">
           Drop your syllabus here
         </h3>
-        <p className="text-gray-400 text-sm mt-1 mb-6">
+        <p className="mb-6 mt-1 text-sm text-[#6B6560]">
           or click to browse files
         </p>
 
@@ -253,57 +253,57 @@ export function UploadStep() {
         <button
           onClick={handleChooseFile}
           disabled={loading}
-          className="flex items-center gap-2 mx-auto bg-[#5D737E] text-white px-8 py-3 rounded-xl font-medium hover:bg-[#4A5D66] transition disabled:opacity-60 disabled:cursor-not-allowed"
+          className="mx-auto flex items-center gap-2 rounded-xl bg-[#5F7A8A] px-8 py-3 font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <FileText size={18} />
           {selectedFile ? "Choose Different File" : "Choose File"}
         </button>
 
         {selectedFile ? (
-          <p className="mt-3 text-sm text-gray-600">{selectedFile.name}</p>
+          <p className="mt-3 text-sm text-[#6B6560]">{selectedFile.name}</p>
         ) : null}
 
         <button
           onClick={handleUpload}
           disabled={!selectedFile || loading}
-          className="mt-4 flex items-center justify-center gap-2 mx-auto border border-gray-200 text-gray-700 px-8 py-3 rounded-xl font-medium hover:bg-gray-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+          className="mx-auto mt-4 flex items-center justify-center gap-2 rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] px-8 py-3 font-medium text-[#3A3530] transition hover:bg-[#E8E3DC] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading ? <Loader2 size={16} className="animate-spin" /> : null}
           {loading ? "Extracting..." : "Upload and Extract"}
         </button>
 
         {loading ? (
-          <div className="flex items-center justify-center gap-2 mt-4 text-sm text-gray-600">
+          <div className="mt-4 flex items-center justify-center gap-2 text-sm text-[#6B6560]">
             <Loader2 size={16} className="animate-spin" />
             <p>Extracting outline...</p>
           </div>
         ) : null}
 
         {error ? (
-          <p className="mt-4 text-sm text-red-500">{error}</p>
+          <p className="mt-4 text-sm text-[#B86B6B]">{error}</p>
         ) : null}
 
         {failClosedMessage ? (
-          <p className="mt-4 text-sm text-amber-700">{failClosedMessage}</p>
+          <p className="mt-4 text-sm text-[#C9945F]">{failClosedMessage}</p>
         ) : null}
 
         {diagnostics ? (
-          <div className="mt-6 text-left bg-[#F9F8F6] border border-gray-200 rounded-2xl p-4">
-            <p className="text-xs text-gray-500">
+          <div className="mt-6 rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-4 text-left">
+            <p className="text-xs text-[#6B6560]">
               Confidence: {diagnostics.confidence_score} ({diagnostics.confidence_level})
             </p>
           </div>
         ) : null}
 
-        <p className="mt-4 text-xs text-gray-300">
+        <p className="mt-4 text-xs text-[#C4B5A6]">
           Supports PDF, DOCX, text, and image files (PNG/JPG)
         </p>
 
-        <div className="my-10 h-[1px] bg-gray-100 w-full" />
+        <div className="my-10 h-[1px] w-full bg-[#E8E3DC]" />
 
         <button
           onClick={handleManualSetup}
-          className="border border-gray-200 text-gray-600 px-8 py-2 rounded-xl text-sm font-medium hover:bg-gray-50 transition"
+          className="rounded-xl border border-[#C4D6E4] bg-[#E8EFF5] px-8 py-2 text-sm font-medium text-[#5F7A8A] transition hover:opacity-90"
         >
           Set up course manually
         </button>

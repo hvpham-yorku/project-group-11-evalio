@@ -600,91 +600,91 @@ export function GradesStep() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 pb-20">
-      <h2 className="text-2xl font-bold text-gray-800">Enter Your Grades</h2>
-      <p className="mt-2 text-gray-500 text-sm leading-relaxed">
+    <div className="mx-auto max-w-4xl px-4 pb-20">
+      <h2 className="text-2xl font-bold text-[#3A3530]">Enter Your Grades</h2>
+      <p className="mt-2 text-sm leading-relaxed text-[#6B6560]">
         Add grades as you receive them. We&apos;ll calculate your standing in
         real-time.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
-          <p className="text-sm text-gray-500">Current Grade</p>
-          <p className="mt-2 text-3xl font-semibold text-gray-800">
+      <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm">
+          <p className="text-sm text-[#6B6560]">Current Grade</p>
+          <p className="mt-2 text-3xl font-semibold text-[#3A3530]">
             {currentGrade.toFixed(1)}%
           </p>
-          <p className="mt-2 text-xs text-[#B8A89A]">
+          <p className="mt-2 text-xs text-[#C4B5A6]">
             Overall standing out of 100
           </p>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
-          <p className="text-sm text-gray-500">Graded</p>
-          <p className="mt-2 text-3xl font-semibold text-green-600">
+        <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm">
+          <p className="text-sm text-[#6B6560]">Graded</p>
+          <p className="mt-2 text-3xl font-semibold text-[#6B9B7A]">
             {gradedWeight.toFixed(1)}%
           </p>
-          <p className="mt-2 text-xs text-[#B8A89A]">Of total non-bonus weight</p>
+          <p className="mt-2 text-xs text-[#C4B5A6]">Of total non-bonus weight</p>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
-          <p className="text-sm text-gray-500">Remaining</p>
-          <p className="mt-2 text-3xl font-semibold text-[#5D737E]">
+        <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm">
+          <p className="text-sm text-[#6B6560]">Remaining</p>
+          <p className="mt-2 text-3xl font-semibold text-[#5F7A8A]">
             {remainingWeight.toFixed(1)}%
           </p>
-          <p className="mt-2 text-xs text-[#B8A89A]">Still to be graded</p>
+          <p className="mt-2 text-xs text-[#C4B5A6]">Still to be graded</p>
         </div>
       </div>
 
-      <div className="mt-6 bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
-        <h3 className="mt-2 text leading-tight font-medium text-[#3B3735]">
+      <div className="mt-6 rounded-2xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm">
+        <h3 className="mt-2 text font-medium leading-tight text-[#3A3530]">
           Institutional Evaluation ({institutionalMeta.institutionName})
         </h3>
-        <p className="mt-2 text-base text-[#6A6561]">
+        <p className="mt-2 text-base text-[#6B6560]">
           Your current standing expressed using the selected institutional grading rules.
         </p>
 
         {gradedWeight > 0 ? (
           <div className="mt-6 space-y-3">
-            <div className="flex items-center justify-between rounded-xl bg-[#EAE6E0] px-4 py-3">
-              <span className="text-sm text-[#6A6561]">Current Percentage</span>
-              <span className="mt-2 text-[#3B3735]">{currentGrade.toFixed(1)}%</span>
+            <div className="flex items-center justify-between rounded-xl bg-[#F5F1EB] px-4 py-3">
+              <span className="text-sm text-[#6B6560]">Current Percentage</span>
+              <span className="mt-2 text-[#3A3530]">{currentGrade.toFixed(1)}%</span>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl bg-[#EAE6E0] px-4 py-3">
-              <span className="text-sm text-[#6A6561]">Letter Grade</span>
-              <span className="mt-2 text-[#3B3735]">{institutionalMeta.letter}</span>
+            <div className="flex items-center justify-between rounded-xl bg-[#F5F1EB] px-4 py-3">
+              <span className="text-sm text-[#6B6560]">Letter Grade</span>
+              <span className="mt-2 text-[#3A3530]">{institutionalMeta.letter}</span>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl bg-[#EAE6E0] px-4 py-3">
-              <span className="text-sm text-[#6A6561]">Grade Point</span>
-              <span className="mt-2 text-[#597183]">
+            <div className="flex items-center justify-between rounded-xl bg-[#F5F1EB] px-4 py-3">
+              <span className="text-sm text-[#6B6560]">Grade Point</span>
+              <span className="mt-2 text-[#5F7A8A]">
                 {institutionalMeta.points.toFixed(1)} / {institutionalMeta.scale}
               </span>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl bg-[#EAE6E0] px-4 py-3">
-              <span className="text-sm text-[#6A6561]">Descriptor</span>
-              <span className="mt-2 text-[#B5A897]">
+            <div className="flex items-center justify-between rounded-xl bg-[#F5F1EB] px-4 py-3">
+              <span className="text-sm text-[#6B6560]">Descriptor</span>
+              <span className="mt-2 text-[#C4B5A6]">
                 {institutionalMeta.descriptor}
               </span>
             </div>
 
-            <div className="pt-4 border-t border-[#D5D1CC]">
-              <p className="text-xs text-[#6A6561]">
+            <div className="border-t border-[#E8E3DC] pt-4">
+              <p className="text-xs text-[#6B6560]">
                 Based on graded assessments only. This does not modify your stored grades.
               </p>
             </div>
           </div>
         ) : (
-          <div className="mt-6 rounded-xl border border-dashed border-[#95A0A9] bg-[#EAE6E0] py-8 text-center">
-            <p className="text-sm text-[#6A6561]">
+          <div className="mt-6 rounded-xl border border-dashed border-[#C4D6E4] bg-[#E8EFF5] py-8 text-center">
+            <p className="text-sm text-[#6B6560]">
               No graded work yet — enter a grade to see your institutional evaluation.
             </p>
           </div>
         )}
       </div>
 
-      <div className="mt-8 bg-white border border-gray-200 rounded-3xl p-6 shadow-sm">
+      <div className="mt-8 rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm">
         <div className="space-y-4">
           {assessments.map((a) => {
             const raw = parseNumberOrNull(a.raw_score);
@@ -739,14 +739,14 @@ export function GradesStep() {
             return (
               <div
                 key={a.id}
-                className="rounded-2xl p-5 border border-gray-100 bg-[#F3F0EA]"
+                className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-5"
               >
                 <div className="flex items-start gap-4">
                   <div className="mt-1">
                     {hasGrade ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-600" />
+                      <CheckCircle2 className="h-5 w-5 text-[#6B9B7A]" />
                     ) : (
-                      <Circle className="w-5 h-5 text-gray-300" />
+                      <Circle className="h-5 w-5 text-[#C4B5A6]" />
                     )}
                   </div>
 
@@ -763,7 +763,7 @@ export function GradesStep() {
                                   [String(a.id)]: !prev[String(a.id)],
                                 }))
                               }
-                              className="inline-flex items-center text-gray-500"
+                              className="inline-flex items-center text-[#6B6560]"
                               aria-label={isExpanded ? "Collapse children" : "Expand children"}
                             >
                               <ChevronDown
@@ -772,32 +772,32 @@ export function GradesStep() {
                               />
                             </button>
                           ) : null}
-                          <h4 className="font-semibold text-gray-800">{a.name}</h4>
+                          <h4 className="font-semibold text-[#3A3530]">{a.name}</h4>
                           {mandatoryPassThreshold !== null ? (
                             <span
                               className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
                                 mandatoryPassStatus === "passed"
-                                  ? "bg-green-50 text-green-700"
+                                  ? "bg-[#E8F2EA] text-[#6B9B7A]"
                                   : mandatoryPassStatus === "failed"
-                                    ? "bg-red-50 text-red-700"
-                                    : "bg-amber-50 text-amber-700"
+                                    ? "bg-[#F9EAEA] text-[#B86B6B]"
+                                    : "bg-[#FDF3E7] text-[#C9945F]"
                               }`}
                             >
                               Must pass {"\u2265"} {mandatoryPassThreshold.toFixed(1)}%
                             </span>
                           ) : null}
                         </div>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-[#6B6560]">
                           {a.weight}% of final grade
                         </p>
                         {mandatoryPassThreshold !== null ? (
                           <p
                             className={`mt-1 text-xs ${
                               mandatoryPassStatus === "passed"
-                                ? "text-green-700"
+                                ? "text-[#6B9B7A]"
                                 : mandatoryPassStatus === "failed"
-                                  ? "text-red-700"
-                                  : "text-amber-700"
+                                  ? "text-[#B86B6B]"
+                                  : "text-[#C9945F]"
                             }`}
                           >
                             {mandatoryPassStatus === "pending"
@@ -820,9 +820,9 @@ export function GradesStep() {
                           placeholder="Received"
                           min={0}
                           step={0.1}
-                          className="w-28 h-10 px-3 bg-white rounded-xl text-center text-sm leading-5 border border-gray-200 shadow-sm focus:outline-none"
+                          className="h-10 w-28 rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] px-3 text-center text-sm leading-5 shadow-sm focus:outline-none"
                         />
-                        <span className="text-sm text-gray-500">/</span>
+                        <span className="text-sm text-[#6B6560]">/</span>
                         <input
                           type="number"
                           value={a.total_score ?? ""}
@@ -833,12 +833,12 @@ export function GradesStep() {
                           placeholder="Total"
                           min={0}
                           step={0.1}
-                          className="w-28 h-10 px-3 bg-white rounded-xl text-center text-sm leading-5 border border-gray-200 shadow-sm focus:outline-none"
+                          className="h-10 w-28 rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] px-3 text-center text-sm leading-5 shadow-sm focus:outline-none"
                         />
                         {hasGrade && (
                           <button
                             onClick={() => handleClearSingleGrade(a)}
-                            className="ml-2 p-1 text-gray-400 hover:text-red-500 transition"
+                            className="ml-2 p-1 text-[#C4B5A6] transition hover:text-[#B86B6B]"
                             title="Clear this grade"
                           >
                             <X size={16} />
@@ -849,13 +849,13 @@ export function GradesStep() {
 
                     {hasGrade && (
                       <div>
-                        <div className="w-full bg-gray-200 h-2 rounded-full">
+                        <div className="h-2 w-full rounded-full bg-[#E8E3DC]">
                           <div
-                            className="h-2 rounded-full bg-[#6D9A7C]"
+                            className="h-2 rounded-full bg-[#6B9B7A]"
                             style={{ width: `${Math.max(0, Math.min(percent, 100))}%` }}
                           />
                         </div>
-                        <p className="text-xs mt-2 text-[#B8A89A]">
+                        <p className="mt-2 text-xs text-[#C4B5A6]">
                           Contributing {contribution.toFixed(1)}% to your final
                           grade
                         </p>
@@ -872,15 +872,15 @@ export function GradesStep() {
                           return (
                             <div
                               key={child.id}
-                              className="ml-4 rounded-xl border border-gray-200 bg-white px-4 py-3"
+                              className="ml-4 rounded-xl border border-[#D4CFC7] bg-[#FFFFFF] px-4 py-3"
                             >
                               <div className="flex items-center justify-between gap-3 mb-2">
-                                <p className="text-sm text-gray-700">{child.name}</p>
+                                <p className="text-sm text-[#3A3530]">{child.name}</p>
                                 <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-gray-700">
+                                  <span className="text-sm font-medium text-[#3A3530]">
                                     {formatScore(child.weight)}
                                   </span>
-                                  <p className="text-sm text-gray-500">%</p>
+                                  <p className="text-sm text-[#6B6560]">%</p>
                                 </div>
                               </div>
 
@@ -895,9 +895,9 @@ export function GradesStep() {
                                   placeholder="Received"
                                   min={0}
                                   step={0.1}
-                                  className="w-28 h-9 px-3 bg-white rounded-lg text-center text-xs leading-5 border border-gray-200 shadow-sm focus:outline-none"
+                                  className="h-9 w-28 rounded-lg border border-[#D4CFC7] bg-[#FFFFFF] px-3 text-center text-xs leading-5 shadow-sm focus:outline-none"
                                 />
-                                <span className="text-xs text-gray-500">/</span>
+                                <span className="text-xs text-[#6B6560]">/</span>
                                 <input
                                   type="number"
                                   value={child.total_score ?? ""}
@@ -908,11 +908,11 @@ export function GradesStep() {
                                   placeholder="Total"
                                   min={0}
                                   step={0.1}
-                                  className="w-28 h-9 px-3 bg-white rounded-lg text-center text-xs leading-5 border border-gray-200 shadow-sm focus:outline-none"
+                                  className="h-9 w-28 rounded-lg border border-[#D4CFC7] bg-[#FFFFFF] px-3 text-center text-xs leading-5 shadow-sm focus:outline-none"
                                 />
                               </div>
 
-                              <p className="mt-2 text-xs text-gray-500">
+                              <p className="mt-2 text-xs text-[#6B6560]">
                                 {childHasGrade
                                   ? `Received ${child.raw_score}/${child.total_score}`
                                   : "No score entered yet"}
@@ -921,7 +921,7 @@ export function GradesStep() {
                           );
                         })}
                         {childWeightMismatch ? (
-                          <p className="ml-4 text-xs text-amber-700">
+                          <p className="ml-4 text-xs text-[#C9945F]">
                             {a.rule_type === "best_of"
                               ? `Top ${bestOfEffectiveCount} child weights should sum to ${a.weight}% (current: ${formatScore(bestOfChildWeightSum)}%).`
                               : a.rule_type === "drop_lowest"
@@ -939,21 +939,21 @@ export function GradesStep() {
         </div>
       </div>
 
-      <div className="mt-6 bg-blue-50 border border-blue-200 rounded-2xl p-5">
-        <p className="text-sm font-semibold text-blue-800">
+      <div className="mt-6 rounded-2xl border border-[#C4D6E4] bg-[#E8EFF5] p-5">
+        <p className="text-sm font-semibold text-[#5F7A8A]">
           About &quot;Not graded yet&quot;
         </p>
-        <p className="mt-1 text-sm text-blue-700 leading-relaxed">
+        <p className="mt-1 text-sm leading-relaxed text-[#6B8BA8]">
           Empty grades are treated as 0 contribution to your overall standing
           out of 100.
         </p>
       </div>
-      {error ? <p className="mt-4 text-sm text-red-500">{error}</p> : null}
+      {error ? <p className="mt-4 text-sm text-[#B86B6B]">{error}</p> : null}
 
-      <div className="mt-8 flex flex-col md:flex-row gap-4">
+      <div className="mt-8 flex flex-col gap-4 md:flex-row">
         <button
           onClick={handleResetAllGrades}
-          className="md:w-[240px] bg-white border border-gray-200 rounded-xl px-6 py-4 text-sm font-medium text-red-500 hover:bg-gray-50 transition flex items-center justify-center gap-2"
+          className="flex items-center justify-center gap-2 rounded-xl border border-[#B86B6B] bg-[#F9EAEA] px-6 py-4 text-sm font-medium text-[#B86B6B] transition hover:opacity-90 md:w-[240px]"
         >
           <RotateCcw size={16} />
           Reset All Grades
@@ -961,7 +961,7 @@ export function GradesStep() {
 
         <button
           onClick={() => router.push("/setup/goals")}
-          className="flex-1 bg-[#5D737E] text-white py-4 rounded-xl font-semibold shadow-lg hover:bg-[#4A5D66] transition"
+          className="flex-1 rounded-xl bg-[#5F7A8A] py-4 font-semibold text-white shadow-lg transition hover:opacity-90"
         >
           Continue to Goals
         </button>

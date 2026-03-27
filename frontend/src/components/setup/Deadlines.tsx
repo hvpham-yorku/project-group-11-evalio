@@ -276,8 +276,8 @@ export default function DeadlinesPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 pb-20">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-800">Deadline Assistant</h2>
-        <p className="mt-2 text-gray-500 text-sm">
+        <h2 className="text-3xl font-bold text-[#3A3530]">Deadline Assistant</h2>
+        <p className="mt-2 text-sm text-[#6B6560]">
           {hasConfirmed
             ? "Review and sync your academic schedule."
             : "Confirm the deadlines extracted from your outline."}
@@ -309,37 +309,37 @@ export default function DeadlinesPage() {
             <div
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold border transition-all ${
                 s.active
-                  ? "bg-[#5D737E] text-white border-[#5D737E] shadow-md"
-                  : "bg-gray-50 text-gray-400 border-gray-100"
+                  ? "border-[#5F7A8A] bg-[#5F7A8A] text-white shadow-md"
+                  : "border-[#E8E3DC] bg-[#F5F1EB] text-[#6B6560]"
               }`}
             >
               {s.icon} {s.label}
             </div>
-            {s.step < 3 && <div className="h-[1px] w-4 bg-gray-200" />}
+            {s.step < 3 && <div className="h-[1px] w-4 bg-[#E8E3DC]" />}
           </div>
         ))}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-[2rem] p-8 shadow-sm">
+      <div className="rounded-[2rem] border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h3 className="text-lg font-bold text-gray-800">{courseName}</h3>
-            <p className="text-xs text-gray-400">
+            <h3 className="text-lg font-bold text-[#3A3530]">{courseName}</h3>
+            <p className="text-xs text-[#6B6560]">
               Total Deadlines: {displayDeadlines.length}
             </p>
           </div>
           <button
             onClick={() => setShowAddModal(true)}
-            className="bg-[#5D737E] text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-[#4A5D66] transition"
+            className="flex items-center gap-2 rounded-xl bg-[#5F7A8A] px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
           >
             <Plus size={18} /> New Deadline
           </button>
         </div>
 
         {sortedDisplayDeadlines.length === 0 ? (
-          <div className="text-center py-20 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-100">
-            <Calendar size={48} className="mx-auto text-gray-200 mb-4" />
-            <p className="text-gray-400 font-medium">
+          <div className="rounded-3xl border-2 border-dashed border-[#E8E3DC] bg-[#F5F1EB] py-20 text-center">
+            <Calendar size={48} className="mx-auto mb-4 text-[#C4B5A6]" />
+            <p className="font-medium text-[#6B6560]">
               No deadlines found. Add one to get started.
             </p>
           </div>
@@ -363,12 +363,12 @@ export default function DeadlinesPage() {
         )}
 
         {displayDeadlines.length > 0 && (
-          <div className="mt-10 pt-8 border-t flex flex-col md:flex-row gap-4 justify-between items-center">
+          <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-[#E8E3DC] pt-8 md:flex-row">
             {!isCalendarConnected ? (
               <button
                 onClick={handleConnectCalendar}
                 disabled={isConnecting}
-                className="w-full md:w-auto px-8 py-4 bg-slate-800 text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-xl"
+                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#5F7A8A] px-8 py-4 font-bold text-white shadow-xl md:w-auto"
               >
                 {isConnecting ? (
                   <Loader2 size={18} className="animate-spin" />
@@ -381,12 +381,12 @@ export default function DeadlinesPage() {
               <button
                 onClick={() => setShowExportModal(true)}
                 disabled={selectedDeadlines.size === 0}
-                className="w-full md:w-auto px-8 py-4 bg-blue-600 text-white rounded-2xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-blue-100 disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-[#5F7A8A] px-8 py-4 font-bold text-white shadow-lg disabled:opacity-50 md:w-auto"
               >
                 Export Selected ({selectedDeadlines.size})
               </button>
             )}
-            <p className="text-xs text-gray-400 italic">
+            <p className="text-xs italic text-[#6B6560]">
               Select individual items to export them selectively.
             </p>
           </div>
@@ -394,10 +394,10 @@ export default function DeadlinesPage() {
       </div>
 
       {!hasConfirmed && extractedDeadlines.length > 0 && (
-        <div className="mt-8 p-8 rounded-[2rem] bg-[#5D737E] text-white shadow-2xl flex flex-col md:flex-row items-center justify-between gap-6 animate-in fade-in zoom-in-95">
+        <div className="mt-8 flex animate-in zoom-in-95 flex-col items-center justify-between gap-6 rounded-[2rem] bg-[#5F7A8A] p-8 text-white shadow-2xl fade-in md:flex-row">
           <div>
             <h4 className="text-xl font-bold">Review AI Extraction</h4>
-            <p className="text-gray-300 text-sm">
+            <p className="text-sm text-white/70">
               We've pre-filled your schedule. Review the list above and confirm
               to save.
             </p>
@@ -409,13 +409,13 @@ export default function DeadlinesPage() {
                 setHasConfirmed(true);
                 window.localStorage.removeItem(PENDING_DEADLINES_KEY);
               }}
-              className="flex-1 md:flex-none px-6 py-3 font-bold bg-white/10 rounded-xl hover:bg-white/20 transition"
+              className="flex-1 rounded-xl bg-white/10 px-6 py-3 font-bold transition hover:bg-white/20 md:flex-none"
             >
               Discard
             </button>
             <button
               onClick={handleConfirmSave}
-              className="flex-1 md:flex-none px-8 py-3 font-bold bg-white text-[#5D737E] rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all"
+              className="flex-1 rounded-xl bg-white px-8 py-3 font-bold text-[#5F7A8A] shadow-lg transition-all hover:scale-105 active:scale-95 md:flex-none"
             >
               Looks Correct
             </button>
@@ -440,30 +440,30 @@ function DeadlineRow({
     <div
       className={`group flex items-center gap-4 p-5 rounded-2xl border transition-all ${
         isSelected
-          ? "bg-blue-50/50 border-blue-200"
-          : "bg-white border-gray-100 hover:border-gray-300"
+          ? "border-[#C4D6E4] bg-[#E8EFF5]"
+          : "border-[#E8E3DC] bg-[#FFFFFF] hover:border-[#D4CFC7]"
       }`}
     >
       <input
         type="checkbox"
         checked={isSelected}
         onChange={onToggleSelect}
-        className="w-5 h-5 accent-blue-600 rounded-lg cursor-pointer"
+        className="h-5 w-5 cursor-pointer rounded-lg accent-[#5F7A8A]"
       />
       <div className="flex-1">
         <div className="flex items-center gap-2 mb-1">
-          <h4 className="font-bold text-gray-800">{deadline.title}</h4>
+          <h4 className="font-bold text-[#3A3530]">{deadline.title}</h4>
           <span
             className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
               deadline.source === "From Outline"
-                ? "bg-blue-100 text-blue-700"
-                : "bg-gray-100 text-gray-500"
+                ? "bg-[#E8EFF5] text-[#6B8BA8]"
+                : "bg-[#F5F1EB] text-[#6B6560]"
             }`}
           >
             {deadline.source === "From Outline" ? "AI Identified" : "Manual"}
           </span>
         </div>
-        <div className="flex items-center gap-4 text-xs text-gray-400">
+        <div className="flex items-center gap-4 text-xs text-[#6B6560]">
           <span className="flex items-center gap-1">
             <Calendar size={12} /> {formatDateLabel(deadline.due_date)}
           </span>
@@ -475,10 +475,10 @@ function DeadlineRow({
       <div
         className={`text-sm font-black text-right ${
           days <= 3
-            ? "text-red-500"
+            ? "text-[#B86B6B]"
             : days <= 7
-            ? "text-amber-500"
-            : "text-green-600"
+            ? "text-[#C9945F]"
+            : "text-[#6B9B7A]"
         }`}
       >
         {formatCountdown(days)}

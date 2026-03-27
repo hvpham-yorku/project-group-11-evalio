@@ -314,28 +314,28 @@ export default function RiskCenter() {
 
   const severityConfig = {
     critical: {
-      color: "text-red-700",
-      bgColor: "bg-red-50",
-      borderColor: "border-red-200",
+      color: "text-[#B86B6B]",
+      bgColor: "bg-[#F9EAEA]",
+      borderColor: "border-[#F1DCC4]",
       icon: AlertTriangle,
       label: "Critical",
-      accent: "#dc2626",
+      accent: "#B86B6B",
     },
     high: {
-      color: "text-amber-700",
-      bgColor: "bg-amber-50",
-      borderColor: "border-amber-200",
+      color: "text-[#C9945F]",
+      bgColor: "bg-[#FDF3E7]",
+      borderColor: "border-[#F1DCC4]",
       icon: AlertCircle,
       label: "High",
-      accent: "#d97706",
+      accent: "#C9945F",
     },
     medium: {
-      color: "text-sky-700",
-      bgColor: "bg-sky-50",
-      borderColor: "border-sky-200",
+      color: "text-[#6B8BA8]",
+      bgColor: "bg-[#E8EFF5]",
+      borderColor: "border-[#C4D6E4]",
       icon: AlertCircle,
       label: "Medium",
-      accent: "#0369a1",
+      accent: "#6B8BA8",
     },
   } as const;
 
@@ -347,17 +347,17 @@ export default function RiskCenter() {
   } as const;
 
   if (loading) {
-    return <div className="p-6 text-sm text-gray-500">Loading risk center...</div>;
+    return <div className="p-6 text-sm text-[#6B6560]">Loading risk center...</div>;
   }
 
   return (
     <div className="mx-auto max-w-5xl">
       <div className="mb-8">
-        <h2 className="mb-2 text-2xl font-bold text-gray-800">Risk &amp; Alerts Center</h2>
-        <p className="text-gray-500">
+        <h2 className="mb-2 text-2xl font-bold text-[#3A3530]">Risk &amp; Alerts Center</h2>
+        <p className="text-[#6B6560]">
           See urgent academic issues across all your courses in one place.
         </p>
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mt-3 text-sm text-[#B86B6B]">{error}</p> : null}
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -365,30 +365,30 @@ export default function RiskCenter() {
           {
             value: criticalCount,
             label: "Critical Alerts",
-            color: "text-red-700",
+            color: "text-[#B86B6B]",
           },
           {
             value: dueSoonCount,
             label: "Due in 72 Hours",
-            color: "text-amber-700",
+            color: "text-[#C9945F]",
           },
           {
             value: impossibleTargetsCount,
             label: "Impossible Targets",
-            color: "text-amber-700",
+            color: "text-[#C9945F]",
           },
           {
             value: highWeightUngradedCount,
             label: "High-Weight Ungraded",
-            color: "text-sky-700",
+            color: "text-[#6B8BA8]",
           },
         ].map((card) => (
           <div
             key={card.label}
-            className="rounded-2xl bg-white p-5 text-center shadow-sm ring-1 ring-gray-100"
+            className="rounded-2xl border border-[#D4CFC7] bg-white p-5 text-center shadow-sm"
           >
             <div className={`mb-1 text-3xl font-semibold ${card.color}`}>{card.value}</div>
-            <div className="text-sm text-gray-500">{card.label}</div>
+            <div className="text-sm text-[#6B6560]">{card.label}</div>
           </div>
         ))}
       </div>
@@ -408,8 +408,8 @@ export default function RiskCenter() {
               onClick={() => setActiveFilter(filter.value as FilterType)}
               className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                 activeFilter === filter.value
-                  ? "bg-[#5D737E] text-white"
-                  : "border border-[#E6E2DB] bg-[#F6F1EA] text-gray-700 hover:bg-[#EFE8DE]"
+                  ? "bg-[#5F7A8A] text-white"
+                  : "border border-[#D4CFC7] bg-[#F5F1EB] text-[#6B6560] hover:bg-[#E8E3DC]"
               }`}
             >
               {filter.label}
@@ -429,7 +429,7 @@ export default function RiskCenter() {
             return (
               <div
                 key={alert.id}
-                className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100"
+                className={`rounded-2xl border bg-white p-6 shadow-sm ${config.borderColor}`}
                 style={{ borderLeft: `4px solid ${config.accent}` }}
               >
                 <div className="flex items-start gap-4">
@@ -444,26 +444,26 @@ export default function RiskCenter() {
                       >
                         {config.label}
                       </span>
-                      <span className="inline-flex items-center gap-1 rounded bg-[#F6F1EA] px-2 py-0.5 text-xs text-gray-500">
+                      <span className="inline-flex items-center gap-1 rounded bg-[#F5F1EB] px-2 py-0.5 text-xs text-[#6B6560]">
                         <TypeIcon size={12} />
                         {typeInfo.label}
                       </span>
                     </div>
 
                     <div className="mb-1">
-                      <span className="font-medium text-gray-800">{alert.courseName}</span>
-                      <span className="text-gray-400"> - </span>
-                      <span className="text-gray-800">{alert.itemName}</span>
+                      <span className="font-medium text-[#3A3530]">{alert.courseName}</span>
+                      <span className="text-[#C4B5A6]"> - </span>
+                      <span className="text-[#3A3530]">{alert.itemName}</span>
                     </div>
 
-                    <p className="mb-2 text-sm text-gray-500">{alert.explanation}</p>
+                    <p className="mb-2 text-sm text-[#6B6560]">{alert.explanation}</p>
 
                     <div className="flex items-center justify-between gap-4">
                       <span className={`text-sm font-medium ${config.color}`}>{alert.context}</span>
 
                       <button
                         onClick={() => router.push(alert.actionPath)}
-                        className="rounded-lg bg-[#5D737E] px-3 py-1.5 text-sm text-white transition hover:bg-[#4A5D66]"
+                        className="rounded-lg bg-[#5F7A8A] px-3 py-1.5 text-sm text-white transition hover:bg-[#6B8BA8]"
                       >
                         {alert.actionLabel}
                       </button>
@@ -475,15 +475,15 @@ export default function RiskCenter() {
           })}
         </div>
       ) : (
-        <div className="rounded-2xl bg-white p-12 text-center shadow-sm ring-1 ring-gray-100">
-          <CheckCircle className="mx-auto mb-4 h-16 w-16 text-green-600" />
-          <h3 className="mb-2 text-xl font-semibold text-gray-800">You&apos;re in good shape.</h3>
-          <p className="mb-6 text-gray-500">
+        <div className="rounded-2xl border border-[#D4CFC7] bg-white p-12 text-center shadow-sm">
+          <CheckCircle className="mx-auto mb-4 h-16 w-16 text-[#6B9B7A]" />
+          <h3 className="mb-2 text-xl font-semibold text-[#3A3530]">You&apos;re in good shape.</h3>
+          <p className="mb-6 text-[#6B6560]">
             No urgent academic risks across your saved courses.
           </p>
           <button
             onClick={() => router.push("/setup/dashboard")}
-            className="rounded-xl bg-[#5D737E] px-6 py-3 text-white transition hover:bg-[#4A5D66]"
+            className="rounded-xl bg-[#5F7A8A] px-6 py-3 text-white transition hover:bg-[#6B8BA8]"
           >
             Go to Dashboard
           </button>

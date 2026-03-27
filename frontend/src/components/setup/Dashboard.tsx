@@ -9,7 +9,6 @@ import {
   GraduationCap,
   Calendar,
   Plus,
-  Lightbulb,
   ChevronDown,
   Sigma,
   XCircle,
@@ -21,7 +20,6 @@ import {
   computeCgpa,
   getCourseGpa,
   getDashboardSummary,
-  getLearningStrategies,
   getMinimumRequired,
   listDeadlines as listDeadlinesApi,
   listCourses,
@@ -32,7 +30,6 @@ import {
   type DashboardSummaryResponse,
   type DashboardWhatIfResponse,
   type Deadline as ApiDeadline,
-  type LearningStrategySuggestion,
   type TargetCheckResponse,
   runDashboardWhatIf,
 } from "@/lib/api";
@@ -108,8 +105,8 @@ function resolveCurrentGrade(result: TargetCheckResponse | null): number {
 function StatItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
-      <p className="text-[9px] uppercase text-gray-400">{label}</p>
-      <p className="text-sm font-bold text-gray-700">{value}</p>
+      <p className="text-[9px] uppercase text-[#6B6560]">{label}</p>
+      <p className="text-sm font-bold text-[#3A3530]">{value}</p>
     </div>
   );
 }
@@ -313,26 +310,6 @@ function normalizeTermKey(term?: string | null): string {
   return (term ?? "").trim().toLowerCase();
 }
 
-function formatPriorityLabel(priority: string): string {
-  if (!priority) return "Medium";
-  return priority.charAt(0).toUpperCase() + priority.slice(1).toLowerCase();
-}
-
-function getPriorityRank(priority: string): number {
-  switch (priority.toLowerCase()) {
-    case "critical":
-      return 4;
-    case "high":
-      return 3;
-    case "medium":
-      return 2;
-    case "low":
-      return 1;
-    default:
-      return 0;
-  }
-}
-
 export function Dashboard() {
   const router = useRouter();
   const [error, setError] = useState("");
@@ -365,9 +342,6 @@ export function Dashboard() {
     useState<DashboardSummaryResponse | null>(null);
   const [whatIfResult, setWhatIfResult] =
     useState<DashboardWhatIfResponse | null>(null);
-  const [learningStrategies, setLearningStrategies] =
-    useState<LearningStrategySuggestion[]>([]);
-  const [expandedStrategy, setExpandedStrategy] = useState<string | null>(null);
   const [showBoundaryMath, setShowBoundaryMath] = useState(false);
   const [showProjectionMath, setShowProjectionMath] = useState(false);
   const { ensureCourseIdFromList } = useSetupCourse();
@@ -401,7 +375,6 @@ export function Dashboard() {
           setTermGpa(null);
           setTermGpaCourses([]);
           setCumulativeGpa(null);
-          setLearningStrategies([]);
           setDeadlines([]);
           return;
         }
@@ -419,7 +392,6 @@ export function Dashboard() {
           setTermGpa(null);
           setTermGpaCourses([]);
           setCumulativeGpa(null);
-          setLearningStrategies([]);
           setDeadlines([]);
           return;
         }
@@ -439,7 +411,6 @@ export function Dashboard() {
         const [
           target,
           rows,
-          strategyResponse,
           termCourseResults,
           allCourseResults,
           summary,
@@ -470,10 +441,6 @@ export function Dashboard() {
                 } satisfies AssessmentBreakdownGroup;
               })
             ),
-            getLearningStrategies(resolvedCourseId).catch(() => ({
-              course_name: latest.name,
-              suggestions: [],
-            })),
             Promise.all(
               sameTermCourses.map(async (course) => {
                 try {
@@ -526,7 +493,6 @@ export function Dashboard() {
         setDashboardSummary(summary);
         setGradedWeight(summary.graded_weight);
         setCurrentContribution(summary.current_grade);
-        setLearningStrategies(strategyResponse.suggestions ?? []);
 
         const decoratedDeadlines = await Promise.all(
           (deadlineResponse.deadlines ?? []).map(async (deadline: ApiDeadline) => {
@@ -631,7 +597,6 @@ export function Dashboard() {
         setTermGpa(null);
         setTermGpaCourses([]);
         setCumulativeGpa(null);
-        setLearningStrategies([]);
         setDeadlines([]);
         setRiskDeadlines([]);
         setRiskTargetResults({});
@@ -687,24 +652,24 @@ export function Dashboard() {
 
   const targetBadgeClass =
     targetTone === "red"
-      ? "bg-red-50 text-red-700"
+      ? "bg-[#F9EAEA] text-[#B86B6B]"
       : targetTone === "green"
-      ? "bg-green-50 text-green-700"
-      : "bg-orange-50 text-orange-700";
+      ? "bg-[#E8F2EA] text-[#6B9B7A]"
+      : "bg-[#FDF3E7] text-[#C9945F]";
 
   const targetBarClass =
     targetTone === "red"
-      ? "bg-red-500"
+      ? "bg-[#B86B6B]"
       : targetTone === "green"
-      ? "bg-green-500"
-      : "bg-orange-400";
+      ? "bg-[#6B9B7A]"
+      : "bg-[#C9945F]";
 
   const targetMessageClass =
     targetTone === "red"
-      ? "border-red-100 bg-red-50 text-red-800"
+      ? "border-[#B86B6B] bg-[#F9EAEA] text-[#B86B6B]"
       : targetTone === "green"
-      ? "border-green-100 bg-green-50 text-green-800"
-      : "border-orange-100 bg-orange-50 text-orange-800";
+      ? "border-[#6B9B7A] bg-[#E8F2EA] text-[#6B9B7A]"
+      : "border-[#F1DCC4] bg-[#FDF3E7] text-[#C9945F]";
 
   const targetExplanation =
     targetResult?.explanation ??
@@ -864,22 +829,6 @@ export function Dashboard() {
     return Math.max(0, Math.min(100, (cumulativeGpa.cgpa / maxPoint) * 100));
   }, [cumulativeGpa, gpaScale]);
 
-  const strategyCards = useMemo(
-    () =>
-      learningStrategies.map((item) => {
-        const sortedTechniques = [...item.techniques].sort(
-          (a, b) => getPriorityRank(b.priority) - getPriorityRank(a.priority)
-        );
-        const topPriority = sortedTechniques[0]?.priority ?? "medium";
-        return {
-          ...item,
-          topPriority,
-          sortedTechniques,
-        };
-      }),
-    [learningStrategies]
-  );
-
   const riskSummary = useMemo(() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -1029,18 +978,18 @@ export function Dashboard() {
   );
 
   return (
-    <div className="mx-auto max-w-4xl space-y-10 px-4 pb-20">
+    <div className="mx-auto max-w-4xl space-y-10 px-4 pb-20 text-[#3A3530]">
       {/* 1. Header Section */}
       <div className="text-left">
-        <h2 className="text-2xl font-bold text-gray-800">
+        <h2 className="text-2xl font-bold text-[#3A3530]">
           Your Academic Dashboard
         </h2>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-[#6B6560]">
           {
             "How everything fits together: your grades, goals, and path forward."
           }
         </p>
-        {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
+        {error ? <p className="mt-2 text-sm text-[#B86B6B]">{error}</p> : null}
       </div>
 
       {/* 2. Top Metric Cards */}
@@ -1048,145 +997,30 @@ export function Dashboard() {
         {metrics.map((m) => (
           <div
             key={m.label}
-            className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-6 text-center shadow-sm"
+            className="rounded-2xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 text-center shadow-sm"
           >
-            <p className="mb-2 text-[10px] uppercase tracking-widest text-gray-400">
+            <p className="mb-2 text-[10px] uppercase tracking-widest text-[#6B6560]">
               {m.label}
             </p>
-            <p className="text-3xl font-bold text-gray-800">{m.value}</p>
-            <p className="mt-2 text-[10px] text-gray-300">{m.sub}</p>
+            <p className="text-3xl font-bold text-[#3A3530]">{m.value}</p>
+            <p className="mt-2 text-[10px] text-[#C4B5A6]">{m.sub}</p>
           </div>
         ))}
       </div>
 
-      {/* 3. Upcoming Deadlines */}
-      <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-xl font-bold text-gray-800">
-            Upcoming Deadlines
-          </h3>
-          <button
-            onClick={() => router.push("/setup/deadlines")}
-            className="rounded-lg bg-[#F6F1EA] px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:opacity-80"
-          >
-            Manage
-          </button>
-        </div>
-
-        {upcomingDeadlines.length === 0 ? (
-          <div className="rounded-2xl bg-[#F9F8F6] py-14 text-center">
-            <Calendar className="mx-auto mb-3 h-10 w-10 text-[#C6B8A8]" />
-            <p className="mb-3 text-sm text-gray-500">
-              No upcoming deadlines yet
-            </p>
-            <button
-              onClick={() => router.push("/setup/deadlines")}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#5D737E] px-4 py-2 text-sm text-white transition hover:bg-[#4A5D66]"
-            >
-              <Plus size={14} />
-              Add Deadline
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {upcomingDeadlines.map((deadline) => {
-              const dueDate = new Date(deadline.due_date);
-              const daysLeft = getDaysLeft(deadline.due_date);
-              const courseName =
-                courses.find(
-                  (course) => course.course_id === deadline.course_id
-                )?.course_name || "Unknown Course";
-
-              return (
-                <div
-                  key={deadline.id}
-                  className="flex items-center gap-3 rounded-lg border border-[#E6E2DB] bg-[#F6F1EA] p-3"
-                >
-                  <div className="flex-1">
-                    <div className="mb-0.5 text-sm font-semibold text-gray-800">
-                      {deadline.title}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>{courseName}</span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <Calendar size={10} />
-                        {dueDate.toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                        })}
-                        {deadline.due_time ? `, ${deadline.due_time}` : ""}
-                      </span>
-                      {deadline.source ? (
-                        <span className="rounded-full border border-[#D7E7F0] bg-[#EEF6FB] px-2 py-0.5 text-[10px] font-medium text-[#5D737E]">
-                          {deadline.source}
-                        </span>
-                      ) : null}
-                    </div>
-                    {typeof deadline.minimum_required === "number" ? (
-                      <div className="mt-1 text-[11px] text-gray-500">
-                        Need at least {deadline.minimum_required.toFixed(1)}% to hit your target.
-                      </div>
-                    ) : null}
-                  </div>
-                  <div
-                    className={`text-sm font-semibold ${
-                      daysLeft <= 3
-                        ? "text-red-600"
-                        : daysLeft <= 7
-                        ? "text-[#C8833F]"
-                        : "text-green-700"
-                    }`}
-                  >
-                    {daysLeft === 0
-                      ? "Today"
-                      : daysLeft === 1
-                      ? "Tomorrow"
-                      : `${daysLeft} days`}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* 4. Target Card */}
-      <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
-        <div className="mb-6 flex justify-between items-center">
-          <h3 className="font-bold text-gray-800">Target: {targetGrade}%</h3>
-          <span
-            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${targetBadgeClass}`}
-          >
-            <TrendingUp size={12} /> {targetClassification}
-          </span>
-        </div>
-        <div className="mb-4 h-3 w-full rounded-full bg-gray-100">
-          <div
-            className={`h-full rounded-full transition-all ${targetBarClass}`}
-            style={{ width: progressWidth }}
-          />
-        </div>
-        <div
-          className={`rounded-xl border p-4 text-xs leading-relaxed ${targetMessageClass}`}
-        >
-          {targetExplanation}
-        </div>
-      </div>
-
-      {/* 4b. Boundary Modeling */}
-      <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+      {/* 3. Grade Boundaries */}
+      <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
-            <h3 className="font-bold text-gray-800">Grade Boundaries</h3>
-            <p className="mt-1 text-xs text-gray-500">
+            <h3 className="font-bold text-[#3A3530]">Grade Boundaries</h3>
+            <p className="mt-1 text-xs text-[#6B6560]">
               Live minimum and maximum outcomes based on saved grades and remaining work.
             </p>
           </div>
           <button
             type="button"
             onClick={() => setShowBoundaryMath((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#F6F1EA] px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-[#ECE6DD]"
+            className="inline-flex items-center gap-2 rounded-xl border border-[#C4D6E4] bg-[#E8EFF5] px-3 py-2 text-xs font-medium text-[#5F7A8A] transition hover:opacity-90"
           >
             <Sigma size={14} />
             {showBoundaryMath ? "Hide Math" : "Show Math"}
@@ -1197,10 +1031,10 @@ export function Dashboard() {
           <div
             className={`mb-4 rounded-2xl border p-4 text-sm ${
               mandatoryPassStatus.requirements_met
-                ? "border-green-200 bg-green-50 text-green-800"
+                ? "border-[#6B9B7A] bg-[#E8F2EA] text-[#6B9B7A]"
                 : mandatoryPassStatus.failed_assessments.length > 0
-                  ? "border-red-200 bg-red-50 text-red-800"
-                  : "border-amber-200 bg-amber-50 text-amber-800"
+                  ? "border-[#B86B6B] bg-[#F9EAEA] text-[#B86B6B]"
+                  : "border-[#F1DCC4] bg-[#FDF3E7] text-[#C9945F]"
             }`}
           >
             <div className="flex items-center gap-2 font-semibold">
@@ -1231,75 +1065,75 @@ export function Dashboard() {
         ) : null}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-red-100 bg-red-50 p-5">
-            <p className="text-[10px] uppercase tracking-wider text-red-500">
+          <div className="rounded-2xl border border-[#B86B6B] bg-[#F9EAEA] p-5">
+            <p className="text-[10px] uppercase tracking-wider text-[#B86B6B]">
               Worst Case
             </p>
-            <p className="mt-2 text-3xl font-bold text-red-700">
+            <p className="mt-2 text-3xl font-bold text-[#B86B6B]">
               {boundaryWorstCase.toFixed(1)}%
             </p>
-            <p className="mt-1 text-xs text-red-600">
+            <p className="mt-1 text-xs text-[#B86B6B]">
               Current grade if remaining work scores 0%.
             </p>
           </div>
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-5">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+          <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-5">
+            <p className="text-[10px] uppercase tracking-wider text-[#6B6560]">
               Current
             </p>
-            <p className="mt-2 text-3xl font-bold text-slate-800">
+            <p className="mt-2 text-3xl font-bold text-[#3A3530]">
               {currentGrade.toFixed(1)}%
             </p>
-            <p className="mt-1 text-xs text-slate-600">
+            <p className="mt-1 text-xs text-[#6B6560]">
               Based on currently saved grades.
             </p>
           </div>
-          <div className="rounded-2xl border border-green-100 bg-green-50 p-5">
-            <p className="text-[10px] uppercase tracking-wider text-green-500">
+          <div className="rounded-2xl border border-[#6B9B7A] bg-[#E8F2EA] p-5">
+            <p className="text-[10px] uppercase tracking-wider text-[#6B9B7A]">
               Best Case
             </p>
-            <p className="mt-2 text-3xl font-bold text-green-700">
+            <p className="mt-2 text-3xl font-bold text-[#6B9B7A]">
               {boundaryBestCase.toFixed(1)}%
             </p>
-            <p className="mt-1 text-xs text-green-600">
+            <p className="mt-1 text-xs text-[#6B9B7A]">
               Maximum reachable if remaining work scores 100%.
             </p>
           </div>
         </div>
 
         {dashboardSummary?.normalisation_applied ? (
-          <p className="mt-4 text-xs text-gray-500">
+          <p className="mt-4 text-xs text-[#6B6560]">
             Normalisation is applied because the current core syllabus weight totals {dashboardSummary.core_weight.toFixed(1)}%.
           </p>
         ) : null}
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500">
+          <div className="rounded-xl border border-[#E8E3DC] bg-[#F5F1EB] p-4">
+            <p className="text-[10px] uppercase tracking-wider text-[#6B6560]">
               Core Grade Contribution
             </p>
-            <p className="mt-1 text-lg font-semibold text-slate-800">
+            <p className="mt-1 text-lg font-semibold text-[#3A3530]">
               {coreGrade.toFixed(2)}%
             </p>
           </div>
-          <div className="rounded-xl border border-green-100 bg-green-50 p-4">
-            <p className="text-[10px] uppercase tracking-wider text-green-500">
+          <div className="rounded-xl border border-[#6B9B7A] bg-[#E8F2EA] p-4">
+            <p className="text-[10px] uppercase tracking-wider text-[#6B9B7A]">
               Bonus Contribution
             </p>
-            <p className="mt-1 text-lg font-semibold text-green-700">
+            <p className="mt-1 text-lg font-semibold text-[#6B9B7A]">
               +{bonusContribution.toFixed(2)}%
             </p>
           </div>
         </div>
 
         {showBoundaryMath ? (
-          <div className="mt-6 space-y-3 border-t border-[#E6E2DB] pt-6">
-            <div className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+          <div className="mt-6 space-y-3 border-t border-[#E8E3DC] pt-6">
+            <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#6B6560]">
                 Boundary Totals
               </p>
-              <div className="mt-3 space-y-3 text-xs text-gray-600">
+              <div className="mt-3 space-y-3 text-xs text-[#6B6560]">
                 <div>
-                  <p className="font-semibold text-gray-800">Current</p>
+                  <p className="font-semibold text-[#3A3530]">Current</p>
                   <p className="font-mono">
                     {boundaryBreakdown
                       .map((entry) => entry.current_contribution.toFixed(2))
@@ -1309,7 +1143,7 @@ export function Dashboard() {
                   </p>
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-800">Worst Case</p>
+                  <p className="font-semibold text-[#3A3530]">Worst Case</p>
                   <p className="font-mono">
                     {boundaryCurrentContributionTotal.toFixed(2)} + 0.00
                     {" = "}
@@ -1317,7 +1151,7 @@ export function Dashboard() {
                   </p>
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-800">Best Case</p>
+                  <p className="font-semibold text-[#3A3530]">Best Case</p>
                   <p className="font-mono">
                     {boundaryCurrentContributionTotal.toFixed(2)} +{" "}
                     {boundaryRemainingPotentialTotal.toFixed(2)}
@@ -1326,7 +1160,7 @@ export function Dashboard() {
                   </p>
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-800">Core + Bonus</p>
+                  <p className="font-semibold text-[#3A3530]">Core + Bonus</p>
                   <p className="font-mono">
                     {coreGrade.toFixed(2)} + {bonusContribution.toFixed(2)}
                     {" = "}
@@ -1334,7 +1168,7 @@ export function Dashboard() {
                   </p>
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-800">Max Contribution Sum</p>
+                  <p className="font-semibold text-[#3A3530]">Max Contribution Sum</p>
                   <p className="font-mono">
                     {boundaryBreakdown
                       .map((entry) => entry.max_contribution.toFixed(2))
@@ -1349,9 +1183,9 @@ export function Dashboard() {
         ) : null}
       </div>
 
-      {/* 5. Breakdown List */}
+      {/* 4. Assessment Breakdown */}
       <div className="space-y-4">
-        <h3 className="font-bold text-gray-800">Assessment Breakdown</h3>
+        <h3 className="font-bold text-[#3A3530]">Assessment Breakdown</h3>
         {(loading ? [] : assessmentGroups).map((group) => {
           const parent = group.parent;
           const hasChildren = group.children.length > 0;
@@ -1360,7 +1194,7 @@ export function Dashboard() {
           return (
             <div
               key={group.key}
-              className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
+              className="rounded-2xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm"
             >
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -1373,7 +1207,7 @@ export function Dashboard() {
                           [group.key]: !prev[group.key],
                         }))
                       }
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#D4DDE1] bg-white text-[#5D737E] hover:bg-[#F1F5F7]"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#D4CFC7] bg-[#FFFFFF] text-[#6B6560] hover:bg-[#F5F1EB]"
                       aria-label={`${isExpanded ? "Collapse" : "Expand"} ${parent.name}`}
                     >
                       <ChevronDown
@@ -1382,19 +1216,19 @@ export function Dashboard() {
                       />
                     </button>
                   ) : (
-                    <div className="h-4 w-4 rounded-full border-2 border-orange-200" />
+                    <div className="h-4 w-4 rounded-full border-2 border-[#F1DCC4]" />
                   )}
                   <div>
-                    <p className="font-bold text-gray-800">{parent.name}</p>
-                    <p className="text-[10px] text-gray-400">{parent.weightLabel}</p>
+                    <p className="font-bold text-[#3A3530]">{parent.name}</p>
+                    <p className="text-[10px] text-[#6B6560]">{parent.weightLabel}</p>
                     {parent.isMandatoryPass ? (
                       <p
                         className={`mt-1 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold ${
                           parent.passStatus === "passed"
-                            ? "bg-green-50 text-green-700"
+                            ? "bg-[#E8F2EA] text-[#6B9B7A]"
                             : parent.passStatus === "failed"
-                              ? "bg-red-50 text-red-700"
-                              : "bg-amber-50 text-amber-700"
+                              ? "bg-[#F9EAEA] text-[#B86B6B]"
+                              : "bg-[#FDF3E7] text-[#C9945F]"
                         }`}
                       >
                         Mandatory {"\u2265"} {(parent.passThreshold ?? 50).toFixed(1)}% •{" "}
@@ -1404,67 +1238,67 @@ export function Dashboard() {
                   </div>
                 </div>
                 {hasChildren ? (
-                  <span className="rounded-full bg-[#EEF3F5] px-3 py-1 text-[10px] font-semibold text-[#5D737E]">
+                  <span className="rounded-full border border-[#C4D6E4] bg-[#E8EFF5] px-3 py-1 text-[10px] font-semibold text-[#6B8BA8]">
                     {group.children.length} {parent.name}
                   </span>
                 ) : null}
               </div>
 
-              <div className="flex justify-between items-center rounded-xl p-4 border border-orange-100 bg-orange-50/50">
+              <div className="flex items-center justify-between rounded-xl border border-[#F1DCC4] bg-[#FDF3E7] p-4">
                 <div>
-                  <p className="text-[9px] uppercase text-gray-400">
+                  <p className="text-[9px] uppercase text-[#6B6560]">
                     {parent.neededLabel}
                   </p>
                   <p
                     className={`text-xl font-bold ${
                       parent.rowType === "graded"
-                        ? "text-green-600"
-                        : "text-orange-600"
+                        ? "text-[#6B9B7A]"
+                        : "text-[#C9945F]"
                     }`}
                   >
                     {parent.needed}
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[9px] uppercase text-gray-400">
+                  <p className="text-[9px] uppercase text-[#6B6560]">
                     Would contribute
                   </p>
-                  <p className="text-sm font-bold text-gray-700">
+                  <p className="text-sm font-bold text-[#3A3530]">
                     {parent.contrib} to final
                   </p>
                 </div>
               </div>
               {parent.mandatoryWarning ? (
-                <p className="mt-2 text-xs text-amber-700">
+                <p className="mt-2 text-xs text-[#C9945F]">
                   {parent.mandatoryWarning}
                 </p>
               ) : null}
 
               {hasChildren && isExpanded ? (
-                <div className="mt-3 space-y-3 border-l border-[#D4DDE1] pl-5">
+                <div className="mt-3 space-y-3 border-l border-[#D4CFC7] pl-5">
                   {group.children.map((child) => (
                     <div
                       key={child.key}
-                      className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-4"
+                      className="flex items-center justify-between rounded-xl border border-[#E8E3DC] bg-[#F5F1EB] p-4"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-gray-800">{child.name}</p>
-                        <p className="text-[10px] text-gray-400">{child.weightLabel}</p>
+                        <p className="text-sm font-semibold text-[#3A3530]">{child.name}</p>
+                        <p className="text-[10px] text-[#6B6560]">{child.weightLabel}</p>
                         <p
                           className={`mt-1 text-sm font-semibold ${
                             child.rowType === "graded"
-                              ? "text-green-600"
-                              : "text-orange-600"
+                              ? "text-[#6B9B7A]"
+                              : "text-[#C9945F]"
                           }`}
                         >
                           {child.neededLabel}: {child.needed}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[9px] uppercase text-gray-400">
+                        <p className="text-[9px] uppercase text-[#6B6560]">
                           Would contribute
                         </p>
-                        <p className="text-sm font-bold text-gray-700">
+                        <p className="text-sm font-bold text-[#3A3530]">
                           {child.contrib} to final
                         </p>
                       </div>
@@ -1477,111 +1311,43 @@ export function Dashboard() {
         })}
       </div>
 
-      <div className="mb-6 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-800">Risk Center</h3>
-          {riskSummary.totalAlerts > 0 ? (
-            <div
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                riskSummary.criticalCount > 0
-                  ? "bg-red-50 text-red-700"
-                  : "bg-amber-50 text-amber-700"
-              }`}
-            >
-              {riskSummary.totalAlerts} alert{riskSummary.totalAlerts !== 1 ? "s" : ""}
-            </div>
-          ) : null}
+      {/* 5. Target */}
+      <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
+        <div className="mb-6 flex justify-between items-center">
+          <h3 className="font-bold text-[#3A3530]">Target: {targetGrade}%</h3>
+          <span
+            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${targetBadgeClass}`}
+          >
+            <TrendingUp size={12} /> {targetClassification}
+          </span>
         </div>
-
-        {riskSummary.totalAlerts > 0 ? (
-          <>
-            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="rounded-2xl bg-red-50 p-4 text-center">
-                <div className="mb-0.5 text-3xl font-semibold text-red-700">
-                  {riskSummary.criticalCount}
-                </div>
-                <div className="text-sm text-gray-500">Critical</div>
-              </div>
-              <div className="rounded-2xl bg-amber-50 p-4 text-center">
-                <div className="mb-0.5 text-3xl font-semibold text-amber-700">
-                  {riskSummary.dueSoonCount}
-                </div>
-                <div className="text-sm text-gray-500">Due 72h</div>
-              </div>
-              <div className="rounded-2xl bg-amber-50 p-4 text-center">
-                <div className="mb-0.5 text-3xl font-semibold text-amber-700">
-                  {riskSummary.targetRiskCount}
-                </div>
-                <div className="text-sm text-gray-500">Target Risk</div>
-              </div>
-              <div className="rounded-2xl bg-slate-100 p-4 text-center">
-                <div className="mb-0.5 text-3xl font-semibold text-slate-600">
-                  {riskSummary.highWeightUngradedCount}
-                </div>
-                <div className="text-sm text-gray-500">High-Weight</div>
-              </div>
-            </div>
-
-            {riskSummary.topAlerts.length > 0 ? (
-              <div className="mb-4 space-y-2">
-                {riskSummary.topAlerts.map((alert, index) => (
-                  <div
-                    key={`${alert.text}-${index}`}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
-                      alert.severity === "critical"
-                        ? "border border-red-200 bg-red-50"
-                        : "border border-amber-200 bg-amber-50"
-                    }`}
-                  >
-                    <AlertTriangle
-                      size={14}
-                      className={
-                        alert.severity === "critical"
-                          ? "text-red-700"
-                          : "text-amber-700"
-                      }
-                    />
-                    <span className="flex-1 text-sm text-gray-800">{alert.text}</span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            <button
-              onClick={() => router.push("/setup/risk-center")}
-              className="w-full rounded-2xl bg-[#688295] px-4 py-4 text-lg font-medium text-white transition hover:bg-[#587182]"
-            >
-              View All Alerts
-            </button>
-          </>
-        ) : (
-          <div className="py-6 text-center">
-            <CheckCircle2 className="mx-auto mb-2 h-10 w-10 text-green-600" />
-            <p className="mb-3 text-sm text-gray-500">No urgent issues detected</p>
-            <button
-              onClick={() => router.push("/setup/risk-center")}
-              className="rounded-lg border border-[#E6E2DB] bg-[#F6F1EA] px-4 py-2 text-xs text-gray-700 transition hover:bg-[#EFE8DE]"
-            >
-              View Risk Center
-            </button>
-          </div>
-        )}
+        <div className="mb-4 h-3 w-full rounded-full bg-[#E8E3DC]">
+          <div
+            className={`h-full rounded-full transition-all ${targetBarClass}`}
+            style={{ width: progressWidth }}
+          />
+        </div>
+        <div
+          className={`rounded-xl border p-4 text-xs leading-relaxed ${targetMessageClass}`}
+        >
+          {targetExplanation}
+        </div>
       </div>
 
       {/* 6. Performance Assumption */}
-      <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+      <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
         <div className="mb-2 flex items-center justify-between gap-4">
-          <h3 className="font-bold text-gray-800">Performance Assumption</h3>
+          <h3 className="font-bold text-[#3A3530]">Performance Assumption</h3>
           <button
             type="button"
             onClick={() => setShowProjectionMath((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#F6F1EA] px-3 py-2 text-xs font-medium text-gray-700 transition hover:bg-[#ECE6DD]"
+            className="inline-flex items-center gap-2 rounded-xl border border-[#C4D6E4] bg-[#E8EFF5] px-3 py-2 text-xs font-medium text-[#5F7A8A] transition hover:opacity-90"
           >
             <Sigma size={14} />
             {showProjectionMath ? "Hide Math" : "Show Math"}
           </button>
         </div>
-        <p className="mb-6 text-xs text-gray-400">
+        <p className="mb-6 text-xs text-[#6B6560]">
           Adjust the slider to apply a temporary what-if score to every remaining assessment.
         </p>
         <div className="mb-8 flex items-center gap-6">
@@ -1591,33 +1357,33 @@ export function Dashboard() {
             max="100"
             value={assumedPerformance}
             onChange={(e) => setAssumedPerformance(Number(e.target.value))}
-            className="flex-1 h-2 bg-gray-200 rounded-full appearance-none cursor-pointer accent-[#5D737E]"
+            className="flex-1 h-2 cursor-pointer appearance-none rounded-full bg-[#E8E3DC] accent-[#C9945F]"
           />
-          <span className="text-3xl font-bold text-[#5D737E]">
+          <span className="text-3xl font-bold text-[#C9945F]">
             {clampedPerformanceAssumption.toFixed(0)}%
           </span>
         </div>
-        <div className="flex items-center justify-between rounded-2xl bg-[#F9F8F6] p-6">
+        <div className="flex items-center justify-between rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-6">
           <div>
-            <p className="text-[10px] text-gray-400 uppercase">
+            <p className="text-[10px] uppercase text-[#6B6560]">
               Projected Final Grade
             </p>
-            <p className="text-4xl font-bold text-gray-800">
+            <p className="text-4xl font-bold text-[#3A3530]">
               {projectedFinal.toFixed(1)}%
             </p>
-            <p className="mt-2 text-[10px] text-gray-400 uppercase">
+            <p className="mt-2 text-[10px] uppercase text-[#6B6560]">
               Max reachable under this plan: {projectedMaximum.toFixed(1)}%
             </p>
           </div>
           <div className="text-right">
             {belowTarget ? (
-              <p className="flex items-center justify-end gap-1 text-xs font-bold text-orange-600">
+              <p className="flex items-center justify-end gap-1 text-xs font-bold text-[#C9945F]">
                 <AlertTriangle size={14} /> Below Target
               </p>
             ) : (
-              <p className="text-xs font-bold text-green-600">On Track</p>
+              <p className="text-xs font-bold text-[#6B9B7A]">On Track</p>
             )}
-            <p className="mt-1 text-[10px] text-gray-400">
+            <p className="mt-1 text-[10px] text-[#6B6560]">
               {belowTarget
                 ? `Short by ${shortfall.toFixed(1)}%.`
                 : `Above by ${(projectedFinal - targetGrade).toFixed(1)}%.`}
@@ -1626,14 +1392,14 @@ export function Dashboard() {
         </div>
 
         {showProjectionMath ? (
-          <div className="mt-6 space-y-3 border-t border-[#E6E2DB] pt-6">
-            <div className="rounded-2xl border border-gray-100 bg-[#F9F8F6] p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+          <div className="mt-6 space-y-3 border-t border-[#E8E3DC] pt-6">
+            <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#6B6560]">
                 Projection Totals
               </p>
-              <div className="mt-3 space-y-3 text-xs text-gray-600">
+              <div className="mt-3 space-y-3 text-xs text-[#6B6560]">
                 <div>
-                  <p className="font-semibold text-gray-800">Projected Final Grade</p>
+                  <p className="font-semibold text-[#3A3530]">Projected Final Grade</p>
                   <p className="font-mono">
                     {(projectionBreakdown.length
                       ? projectionBreakdown
@@ -1649,7 +1415,7 @@ export function Dashboard() {
                   </p>
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-800">Max Reachable Under This Plan</p>
+                  <p className="font-semibold text-[#3A3530]">Max Reachable Under This Plan</p>
                   <p className="font-mono">
                     {(projectionBreakdown.length
                       ? projectionBreakdown
@@ -1670,143 +1436,248 @@ export function Dashboard() {
         ) : null}
       </div>
 
-      {/* 7. Learning Strategy */}
-      <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
-        <div className="flex items-center gap-2 mb-6">
-          <Lightbulb size={20} className="text-yellow-500" />
-          <h3 className="text-xl font-bold text-gray-800">Learning Strategy</h3>
+      {/* 7. Upcoming Deadlines */}
+      <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-bold text-[#3A3530]">
+            Upcoming Deadlines
+          </h3>
+          <button
+            onClick={() => router.push("/setup/deadlines")}
+            className="rounded-lg border border-[#C4D6E4] bg-[#E8EFF5] px-3 py-1.5 text-xs font-medium text-[#5F7A8A] transition hover:opacity-90"
+          >
+            Manage
+          </button>
         </div>
-        <div className="space-y-4">
-          {strategyCards.length === 0 ? (
-            <div className="rounded-2xl bg-[#F9F8F6] py-10 text-center text-sm text-gray-500">
-              No live strategy suggestions yet. Add remaining assessments and deadlines to generate them.
-            </div>
-          ) : (
-            strategyCards.map((item) => (
-            <div
-              key={item.assessment_name}
-              className="bg-[#FAF7F2] p-5 rounded-2xl"
+
+        {upcomingDeadlines.length === 0 ? (
+          <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] py-14 text-center">
+            <Calendar className="mx-auto mb-3 h-10 w-10 text-[#C4B5A6]" />
+            <p className="mb-3 text-sm text-[#6B6560]">
+              No upcoming deadlines yet
+            </p>
+            <button
+              onClick={() => router.push("/setup/deadlines")}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#5F7A8A] px-4 py-2 text-sm text-white transition hover:opacity-90"
             >
-              <h4 className="font-bold text-gray-700">{item.assessment_name}</h4>
-              <p className="text-xs text-gray-400 mb-4">
-                {item.weight}% of final grade
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <span
-                  className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider
-                  ${
-                    item.topPriority === "critical" || item.topPriority === "high"
-                      ? "bg-red-100 text-red-600"
-                      : item.topPriority === "medium"
-                      ? "bg-orange-100 text-orange-600"
-                      : "bg-green-100 text-green-600"
-                  }`}
+              <Plus size={14} />
+              Add Deadline
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {upcomingDeadlines.map((deadline) => {
+              const dueDate = new Date(deadline.due_date);
+              const daysLeft = getDaysLeft(deadline.due_date);
+              const courseName =
+                courses.find(
+                  (course) => course.course_id === deadline.course_id
+                )?.course_name || "Unknown Course";
+
+              return (
+                <div
+                  key={deadline.id}
+                  className="flex items-center gap-3 rounded-lg border border-[#E8E3DC] bg-[#F5F1EB] p-3"
                 >
-                  {formatPriorityLabel(item.topPriority)} Priority
-                </span>
-                {item.sortedTechniques.map((technique) => (
-                  <span
-                    key={`${item.assessment_name}-${technique.name}`}
-                    className="px-3 py-1 bg-blue-50 border border-blue-100 text-[#5D737E] rounded-lg text-[10px] font-medium"
-                  >
-                    {technique.name}
-                  </span>
-                ))}
-              </div>
-              <button
-                onClick={() =>
-                  setExpandedStrategy((current) =>
-                    current === item.assessment_name ? null : item.assessment_name
-                  )
-                }
-                className="mt-4 flex items-center gap-1 text-[10px] font-bold text-gray-400 hover:text-gray-600 uppercase tracking-tight"
-              >
-                <ChevronDown size={12} /> Why this strategy
-              </button>
-              {expandedStrategy === item.assessment_name ? (
-                <div className="mt-4 space-y-3 border-t border-[#E9E2D9] pt-4">
-                  {item.sortedTechniques.map((technique) => (
-                    <div
-                      key={`${item.assessment_name}-${technique.name}-details`}
-                      className="rounded-xl bg-white p-3"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-semibold text-gray-800">
-                          {technique.name}
-                        </p>
-                        <span className="text-[10px] font-bold uppercase text-gray-400">
-                          {formatPriorityLabel(technique.priority)}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-xs text-gray-600">{technique.reason}</p>
-                      <p className="mt-2 text-xs text-gray-500">{technique.description}</p>
+                  <div className="flex-1">
+                    <div className="mb-0.5 text-sm font-semibold text-[#3A3530]">
+                      {deadline.title}
                     </div>
-                  ))}
+                    <div className="flex items-center gap-2 text-xs text-[#6B6560]">
+                      <span>{courseName}</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <Calendar size={10} />
+                        {dueDate.toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                        {deadline.due_time ? `, ${deadline.due_time}` : ""}
+                      </span>
+                      {deadline.source ? (
+                        <span className="rounded-full border border-[#C4D6E4] bg-[#E8EFF5] px-2 py-0.5 text-[10px] font-medium text-[#6B8BA8]">
+                          {deadline.source}
+                        </span>
+                      ) : null}
+                    </div>
+                    {typeof deadline.minimum_required === "number" ? (
+                      <div className="mt-1 text-[11px] text-[#6B6560]">
+                        Need at least {deadline.minimum_required.toFixed(1)}% to hit your target.
+                      </div>
+                    ) : null}
+                  </div>
+                  <div
+                    className={`text-sm font-semibold ${
+                      daysLeft <= 3
+                        ? "text-[#B86B6B]"
+                        : daysLeft <= 7
+                        ? "text-[#C9945F]"
+                        : "text-[#6B9B7A]"
+                    }`}
+                  >
+                    {daysLeft === 0
+                      ? "Today"
+                      : daysLeft === 1
+                      ? "Tomorrow"
+                      : `${daysLeft} days`}
+                  </div>
                 </div>
-              ) : null}
-            </div>
-          ))) }
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* GPA Overview Section */}
+      {/* 8. Risk Center */}
+      <div className="mb-6 rounded-3xl bg-[#FFFFFF] p-6 shadow-sm ring-1 ring-[#D4CFC7]">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-bold text-[#3A3530]">Risk Center</h3>
+          {riskSummary.totalAlerts > 0 ? (
+            <div
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                riskSummary.criticalCount > 0
+                  ? "bg-[#F9EAEA] text-[#B86B6B]"
+                  : "bg-[#FDF3E7] text-[#C9945F]"
+              }`}
+            >
+              {riskSummary.totalAlerts} alert{riskSummary.totalAlerts !== 1 ? "s" : ""}
+            </div>
+          ) : null}
+        </div>
+
+        {riskSummary.totalAlerts > 0 ? (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="rounded-2xl border border-[#B86B6B] bg-[#F9EAEA] p-4 text-center">
+                <div className="mb-0.5 text-3xl font-semibold text-[#B86B6B]">
+                  {riskSummary.criticalCount}
+                </div>
+                <div className="text-sm text-[#6B6560]">Critical</div>
+              </div>
+              <div className="rounded-2xl border border-[#F1DCC4] bg-[#FDF3E7] p-4 text-center">
+                <div className="mb-0.5 text-3xl font-semibold text-[#C9945F]">
+                  {riskSummary.dueSoonCount}
+                </div>
+                <div className="text-sm text-[#6B6560]">Due 72h</div>
+              </div>
+              <div className="rounded-2xl border border-[#F1DCC4] bg-[#FDF3E7] p-4 text-center">
+                <div className="mb-0.5 text-3xl font-semibold text-[#C9945F]">
+                  {riskSummary.targetRiskCount}
+                </div>
+                <div className="text-sm text-[#6B6560]">Target Risk</div>
+              </div>
+              <div className="rounded-2xl border border-[#C4D6E4] bg-[#E8EFF5] p-4 text-center">
+                <div className="mb-0.5 text-3xl font-semibold text-[#6B8BA8]">
+                  {riskSummary.highWeightUngradedCount}
+                </div>
+                <div className="text-sm text-[#6B6560]">High-Weight</div>
+              </div>
+            </div>
+
+            {riskSummary.topAlerts.length > 0 ? (
+              <div className="mb-4 space-y-2">
+                {riskSummary.topAlerts.map((alert, index) => (
+                  <div
+                    key={`${alert.text}-${index}`}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
+                      alert.severity === "critical"
+                        ? "border border-[#B86B6B] bg-[#F9EAEA]"
+                        : "border border-[#F1DCC4] bg-[#FDF3E7]"
+                    }`}
+                  >
+                    <AlertTriangle
+                      size={14}
+                      className={
+                        alert.severity === "critical"
+                          ? "text-[#B86B6B]"
+                          : "text-[#C9945F]"
+                      }
+                    />
+                    <span className="flex-1 text-sm text-[#3A3530]">{alert.text}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            <button
+              onClick={() => router.push("/setup/risk-center")}
+              className="w-full rounded-2xl bg-[#5F7A8A] px-4 py-4 text-lg font-medium text-white transition hover:opacity-90"
+            >
+              View All Alerts
+            </button>
+          </>
+        ) : (
+          <div className="py-6 text-center">
+            <CheckCircle2 className="mx-auto mb-2 h-10 w-10 text-[#6B9B7A]" />
+            <p className="mb-3 text-sm text-[#6B6560]">No urgent issues detected</p>
+            <button
+              onClick={() => router.push("/setup/risk-center")}
+              className="rounded-lg border border-[#C4D6E4] bg-[#E8EFF5] px-4 py-2 text-xs text-[#5F7A8A] transition hover:opacity-90"
+            >
+              View Risk Center
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 9. GPA Overview */}
       <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-bold text-gray-800">GPA Overview</h2>
-          <p className="text-xs text-gray-500">
+          <h3 className="font-bold text-[#3A3530]">GPA Overview</h3>
+          <p className="text-xs text-[#6B6560]">
             Track performance across terms and overall
           </p>
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {/* Term GPA Card */}
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
-              <GraduationCap size={18} className="text-slate-600" />
-              <h3 className="font-bold text-gray-800">Term GPA</h3>
+              <GraduationCap size={18} className="text-[#5F7A8A]" />
+              <h3 className="font-bold text-[#3A3530]">Term GPA</h3>
             </div>
             <div className="text-center py-6">
-              <div className="text-5xl font-bold text-gray-800">
+              <div className="text-5xl font-bold text-[#3A3530]">
                 {termGpa ? termGpa.cgpa.toFixed(2) : "0.00"}
               </div>
-              <p className="text-[10px] text-gray-400 mt-1">
+              <p className="mt-1 text-[10px] text-[#6B6560]">
                 Equal-weight average for courses in this term
               </p>
-              <span className="inline-block mt-2 rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-700">
+              <span className="mt-2 inline-block rounded-full bg-[#E8F2EA] px-3 py-1 text-xs font-bold text-[#6B9B7A]">
                 {termGpaCourses.length === 1
                   ? termGpaCourses[0]?.gpa.letter ?? gpaScale
                   : `${termGpaCourses.length} course${termGpaCourses.length === 1 ? "" : "s"}`}
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-2 border-t border-b border-gray-50 py-4 my-4">
+            <div className="my-4 grid grid-cols-3 gap-2 border-y border-[#E8E3DC] py-4">
               <StatItem label="Courses" value={String(termGpaCourses.length)} />
               <StatItem label="Weighting" value="Equal" />
               <StatItem label="Scale" value={gpaScale} />
             </div>
             <div className="space-y-2">
-              <p className="text-[9px] font-bold uppercase text-gray-400">
+              <p className="text-[9px] font-bold uppercase text-[#6B6560]">
                 Courses in {termLabel}
               </p>
               {termGpaCourses.length === 0 ? (
-                <div className="rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
+                <div className="rounded-xl border border-[#E8E3DC] bg-[#F5F1EB] p-3 text-xs text-[#6B6560]">
                   No GPA-ready course data yet.
                 </div>
               ) : (
                 termGpaCourses.map((course) => (
                   <div
                     key={course.course_id}
-                    className="flex justify-between items-center rounded-xl bg-gray-50 p-3"
+                    className="flex items-center justify-between rounded-xl border border-[#E8E3DC] bg-[#F5F1EB] p-3"
                   >
                     <div>
-                      <p className="text-xs font-bold text-gray-800">
+                      <p className="text-xs font-bold text-[#3A3530]">
                         {course.course_name}
                       </p>
-                      <p className="text-[10px] text-gray-400">Equal weight</p>
+                      <p className="text-[10px] text-[#6B6560]">Equal weight</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-bold text-green-600">
+                      <p className="text-xs font-bold text-[#6B9B7A]">
                         {course.percentage.toFixed(1)}%
                       </p>
-                      <p className="text-[10px] text-gray-400">
+                      <p className="text-[10px] text-[#6B6560]">
                         {course.gpa.grade_point.toFixed(2)} GP
                       </p>
                     </div>
@@ -1817,21 +1688,21 @@ export function Dashboard() {
           </div>
 
           {/* Cumulative GPA Card */}
-          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+          <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
-              <TrendingUp size={18} className="text-slate-600" />
-              <h3 className="font-bold text-gray-800">Cumulative GPA (cGPA)</h3>
+              <TrendingUp size={18} className="text-[#5F7A8A]" />
+              <h3 className="font-bold text-[#3A3530]">Cumulative GPA (cGPA)</h3>
             </div>
             <div className="flex justify-center mb-4">
-              <div className="flex rounded-lg bg-gray-100 p-1">
+              <div className="flex rounded-lg bg-[#E8EFF5] p-1">
                 {GPA_SCALES.map((s) => (
                   <button
                     key={s}
                     onClick={() => setGpaScale(s)}
                     className={`px-4 py-1 text-[10px] rounded-md ${
                       s === gpaScale
-                        ? "bg-white shadow-sm font-bold"
-                        : "text-gray-400"
+                        ? "bg-[#FFFFFF] shadow-sm font-bold text-[#3A3530]"
+                        : "text-[#6B8BA8]"
                     }`}
                   >
                     {s}
@@ -1840,11 +1711,11 @@ export function Dashboard() {
               </div>
             </div>
             <div className="text-center py-2">
-              <div className="text-5xl font-bold text-gray-800">
+              <div className="text-5xl font-bold text-[#3A3530]">
                 {cumulativeGpa ? cumulativeGpa.cgpa.toFixed(2) : "0.00"}
               </div>
-              <p className="text-[10px] text-gray-400 mt-1">Out of {gpaScale}</p>
-              <span className="inline-block mt-2 rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-700">
+              <p className="mt-1 text-[10px] text-[#6B6560]">Out of {gpaScale}</p>
+              <span className="mt-2 inline-block rounded-full bg-[#E8F2EA] px-3 py-1 text-xs font-bold text-[#6B9B7A]">
                 {cumulativeGpa?.courses.length === 1
                   ? cumulativeGpa.courses[0]?.letter ?? gpaScale
                   : `${cumulativeGpa?.courses.length ?? 0} courses`}
@@ -1864,16 +1735,16 @@ export function Dashboard() {
             </div>
             <div className="mt-6">
               <div className="flex justify-between text-[10px] mb-1">
-                <span className="text-gray-400 uppercase font-bold">
+                <span className="font-bold uppercase text-[#6B6560]">
                   Performance
                 </span>
-                <span className="text-green-600 font-bold">
+                <span className="font-bold text-[#6B9B7A]">
                   {cumulativePerformancePercent.toFixed(0)}%
                 </span>
               </div>
-              <div className="h-1.5 w-full rounded-full bg-gray-100">
+              <div className="h-1.5 w-full rounded-full bg-[#E8E3DC]">
                 <div
-                  className="h-full rounded-full bg-green-500"
+                  className="h-full rounded-full bg-[#6B9B7A]"
                   style={{ width: `${cumulativePerformancePercent}%` }}
                 />
               </div>
@@ -1886,7 +1757,7 @@ export function Dashboard() {
       <div className="text-center">
         <button
           onClick={() => router.push("/setup/explore")}
-          className="rounded-xl bg-[#5D737E] px-10 py-4 font-bold text-white shadow-lg hover:bg-[#4A5D66] transition"
+          className="rounded-xl bg-[#5F7A8A] px-10 py-4 font-bold text-white shadow-lg transition hover:opacity-90"
         >
           Try the Scenario Explorer
         </button>

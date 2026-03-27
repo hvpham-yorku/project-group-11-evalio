@@ -387,24 +387,24 @@ export default function StructureStep() {
   const weightStatus = useMemo(() => {
     if (totalWeight === 100) {
       return {
-        bg: "bg-[#DFE9E0]",
-        border: "border-[#D0DED2]",
-        text: "text-[#4F7E5A]",
+        bg: "bg-[#E8F2EA]",
+        border: "border-[#D4CFC7]",
+        text: "text-[#6B9B7A]",
         message: "Perfect! Your non-bonus weights add up to 100%.",
       };
     }
     if (totalWeight < 100) {
       return {
-        bg: "bg-[#F3EBD9]",
-        border: "border-[#E7D8B8]",
-        text: "text-[#8E7340]",
+        bg: "bg-[#FDF3E7]",
+        border: "border-[#F1DCC4]",
+        text: "text-[#C9945F]",
         message: `You need ${(100 - totalWeight).toFixed(0)}% more non-bonus weight to reach 100%.`,
       };
     }
     return {
-      bg: "bg-[#F4DEDE]",
-      border: "border-[#E4C2C2]",
-      text: "text-[#9C5D5D]",
+      bg: "bg-[#F9EAEA]",
+      border: "border-[#F1DCC4]",
+      text: "text-[#B86B6B]",
       message: `Non-bonus weights exceed 100% by ${(totalWeight - 100).toFixed(0)}%. Please adjust to continue.`,
     };
   }, [totalWeight]);
@@ -562,8 +562,8 @@ export default function StructureStep() {
         <div
           className={`rounded-2xl border px-4 py-4 ${
             isBonus
-              ? "bg-[#EDF7F0] border-[#C9E5D2]"
-              : "bg-[#EAE6E0] border-[#E2DDD6]"
+              ? "border-[#D4CFC7] bg-[#E8F2EA]"
+              : "border-[#D4CFC7] bg-[#F5F1EB]"
           }`}
         >
           <div className="flex items-start gap-3">
@@ -571,7 +571,7 @@ export default function StructureStep() {
               <button
                 type="button"
                 onClick={() => toggleExpanded(a.id)}
-                className="mt-2 text-gray-500 hover:text-gray-700 transition"
+                className="mt-2 text-[#6B6560] transition hover:text-[#3A3530]"
                 aria-label={expanded ? "Collapse" : "Expand"}
               >
                 {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
@@ -594,21 +594,21 @@ export default function StructureStep() {
                       });
                     }}
                     placeholder="Assessment name"
-                    className="w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
+                    className="w-full rounded-xl border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-2 text-sm text-[#3A3530]"
                   />
                   <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
                     {isBonus ? (
-                      <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 font-semibold text-green-700">
+                      <span className="rounded-full border border-[#D4CFC7] bg-[#E8F2EA] px-2 py-1 font-semibold text-[#6B9B7A]">
                         Bonus
                       </span>
                     ) : null}
                     {ruleSummaryLabel ? (
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
+                      <span className="rounded-full border border-[#C4D6E4] bg-[#E8EFF5] px-2 py-1 text-[#6B8BA8]">
                         {ruleSummaryLabel}
                       </span>
                     ) : null}
                     {hasUnsupportedRule ? (
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 font-semibold text-amber-700">
+                      <span className="rounded-full border border-[#F1DCC4] bg-[#FDF3E7] px-2 py-1 font-semibold text-[#C9945F]">
                         Unsupported rule text
                       </span>
                     ) : null}
@@ -625,40 +625,40 @@ export default function StructureStep() {
                           weight: e.target.value === "" ? Number.NaN : Number(e.target.value),
                         })
                       }
-                      className="w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700 text-center"
+                      className="w-full rounded-xl border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-2 text-center text-sm text-[#3A3530]"
                       min={0}
                       max={100}
                       step={1}
                     />
                     {!Number.isFinite(a.weight) ? (
-                      <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-gray-400">
+                      <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-[#C4B5A6]">
                         -
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-[11px] text-center text-gray-500">
+                  <p className="mt-1 text-center text-[11px] text-[#6B6560]">
                     {isBonus ? "Bonus weight" : "% of grade"}
                   </p>
                 </div>
               </div>
 
               {/* progress bar */}
-              <div className="w-full bg-[#DCD8D2] h-2 rounded-full">
+              <div className="h-2 w-full rounded-full bg-[#E8E3DC]">
                 <div
-                  className="h-full rounded-full bg-[#5D737E]"
+                  className="h-full rounded-full bg-[#5F7A8A]"
                   style={{ width: `${Math.max(0, Math.min(a.weight, 100))}%` }}
                 />
               </div>
 
               {/* rules dropdown */}
-              <div className="rounded-xl bg-[#E8E3DC] border border-[#DDD6CC] px-3 py-3">
+              <div className="rounded-xl border border-[#D4CFC7] bg-[#E8E3DC] px-3 py-3">
                 <button
                   type="button"
                   onClick={() => toggleRulesOpen(a.id)}
                   className="w-full flex items-center justify-between text-left"
                 >
-                  <p className="text-[11px] font-semibold text-gray-500">Rules</p>
-                  <span className="text-gray-500">
+                  <p className="text-[11px] font-semibold text-[#6B6560]">Rules</p>
+                  <span className="text-[#6B6560]">
                     {rulesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </span>
                 </button>
@@ -666,7 +666,7 @@ export default function StructureStep() {
                 {rulesOpen ? (
                   <>
                     <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <label className="text-[11px] text-gray-600">
+                      <label className="text-[11px] text-[#6B6560]">
                         Rule Type
                         <select
                           value={a.rule_type ?? ""}
@@ -742,7 +742,7 @@ export default function StructureStep() {
                               effective_count: null,
                             });
                           }}
-                          className="mt-1 w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
+                          className="mt-1 w-full rounded-xl border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-2 text-sm text-[#3A3530]"
                         >
                           <option value="">None</option>
                           <option value="best_of">Best Of</option>
@@ -754,7 +754,7 @@ export default function StructureStep() {
                         </select>
                       </label>
 
-                      <label className="flex items-center gap-2 rounded-xl border border-[#D8D1C6] bg-[#F9F8F6] px-3 py-2 text-sm text-gray-700">
+                      <label className="flex items-center gap-2 rounded-xl border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-2 text-sm text-[#3A3530]">
                         <input
                           type="checkbox"
                           checked={isBonus}
@@ -782,7 +782,7 @@ export default function StructureStep() {
                     </div>
 
                     {isMandatoryPass ? (
-                      <label className="mt-2 block text-[11px] text-gray-600">
+                      <label className="mt-2 block text-[11px] text-[#6B6560]">
                         Mandatory pass threshold (%)
                         <input
                           type="number"
@@ -800,7 +800,7 @@ export default function StructureStep() {
                               rule_config: { pass_threshold: safeThreshold },
                             });
                           }}
-                          className="mt-1 w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
+                          className="mt-1 w-full rounded-xl border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-2 text-sm text-[#3A3530]"
                         />
                       </label>
                     ) : null}
@@ -819,10 +819,10 @@ export default function StructureStep() {
                         });
                       }}
                       placeholder="e.g., Best 10 of 11 quizzes count"
-                      className="mt-2 w-full rounded-xl border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-sm text-gray-700"
+                      className="mt-2 w-full rounded-xl border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-2 text-sm text-[#3A3530]"
                     />
                     {hasUnsupportedRule ? (
-                      <p className="mt-2 text-[11px] text-amber-700">
+                      <p className="mt-2 text-[11px] text-[#C9945F]">
                         Unsupported rule text is preserved for review but not treated as fully supported.
                       </p>
                     ) : null}
@@ -835,7 +835,7 @@ export default function StructureStep() {
                   <button
                     type="button"
                     onClick={() => handleAddChild(a.id)}
-                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
+                    className="inline-flex items-center gap-1 rounded-lg border border-[#D4CFC7] bg-white px-3 py-2 text-xs font-medium text-[#3A3530] transition hover:bg-[#F5F1EB]"
                   >
                     <Plus size={14} /> Add item
                   </button>
@@ -844,23 +844,23 @@ export default function StructureStep() {
 
               {/* children */}
               {hasChildren && expanded ? (
-                <div className="mt-2 space-y-2 pl-3 border-l border-gray-200">
+                <div className="mt-2 space-y-2 border-l border-[#D4CFC7] pl-3">
                   {children.map((c, idx) => (
                     <div
                       key={`${nodeKey}-${idx}`}
-                      className="rounded-xl bg-[#F3F1ED] border border-[#DFDBD5] px-3 py-3"
+                      className="rounded-xl border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-3"
                     >
                       <div className="flex items-center justify-between gap-3 mb-2">
                         <input
                           value={c.name}
                           onChange={(e) => updateAssessment(c.id, { name: e.target.value })}
                           placeholder="Assessment name"
-                          className="w-full rounded-lg border border-[#CAC6C0] bg-[#F9F9F7] px-3 py-2 text-xs text-gray-700"
+                          className="w-full rounded-lg border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-2 text-xs text-[#3A3530]"
                         />
                         <button
                           type="button"
                           onClick={() => deleteAssessment(c.id)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 transition"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#D4CFC7] text-[#6B6560] transition hover:bg-[#F9EAEA] hover:text-[#B86B6B]"
                           aria-label={`Delete ${c.name || "item"}`}
                         >
                           <Trash2 size={14} />
@@ -879,15 +879,15 @@ export default function StructureStep() {
                             min={0}
                             max={100}
                             step={1}
-                            className="w-20 h-9 px-2 bg-[#F9F9F7] rounded-lg text-right text-xs leading-5 border border-[#CAC6C0] shadow-sm focus:outline-none"
+                            className="h-9 w-20 rounded-lg border border-[#D4CFC7] bg-[#FCFAF7] px-2 text-right text-xs leading-5 shadow-sm focus:outline-none"
                           />
                           {!Number.isFinite(c.weight) ? (
-                            <span className="pointer-events-none absolute inset-0 flex items-center justify-end px-2 text-xs text-gray-400">
+                            <span className="pointer-events-none absolute inset-0 flex items-center justify-end px-2 text-xs text-[#C4B5A6]">
                               -
                             </span>
                           ) : null}
                         </div>
-                        <p className="text-xs text-gray-500">% of grade</p>
+                        <p className="text-xs text-[#6B6560]">% of grade</p>
                       </div>
                     </div>
                   ))}
@@ -895,7 +895,7 @@ export default function StructureStep() {
                     <button
                       type="button"
                       onClick={() => handleAddChild(a.id)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
+                      className="inline-flex items-center gap-1 rounded-lg border border-[#D4CFC7] bg-white px-3 py-2 text-xs font-medium text-[#3A3530] transition hover:bg-[#F5F1EB]"
                     >
                       <Plus size={14} /> Add item
                     </button>
@@ -907,7 +907,7 @@ export default function StructureStep() {
             <button
               type="button"
               onClick={() => deleteAssessment(a.id)}
-              className="mt-1 text-gray-400 hover:text-red-500 transition"
+              className="mt-1 text-[#C4B5A6] transition hover:text-[#B86B6B]"
               aria-label="Delete assessment"
             >
               <Trash2 size={18} />
@@ -921,14 +921,14 @@ export default function StructureStep() {
 
   if (!extractionResult) {
     return (
-      <div className="max-w-5xl mx-auto px-4 pb-20">
-        <h2 className="text-[34px] font-semibold text-[#252525]">Course Structure</h2>
-        <p className="mt-2 text-[#6C6C6C] text-sm leading-relaxed">
+      <div className="mx-auto max-w-5xl px-4 pb-20">
+        <h2 className="text-[34px] font-semibold text-[#3A3530]">Course Structure</h2>
+        <p className="mt-2 text-sm leading-relaxed text-[#6B6560]">
           No extracted outline is available. Upload a course outline first.
         </p>
         <button
           onClick={() => router.push("/setup/upload")}
-          className="mt-8 bg-[#607B8A] text-white py-3 px-6 rounded-xl font-semibold shadow-sm hover:bg-[#4E6978] transition"
+          className="mt-8 rounded-xl bg-[#5F7A8A] px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-[#6B8BA8]"
         >
           Go to Upload
         </button>
@@ -937,33 +937,33 @@ export default function StructureStep() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 pb-24">
-      <h2 className="text-[34px] font-semibold text-[#252525]">Course Structure</h2>
-      <p className="mt-2 text-[#666666] text-sm leading-relaxed">
+    <div className="mx-auto max-w-5xl px-4 pb-24">
+      <h2 className="text-[34px] font-semibold text-[#3A3530]">Course Structure</h2>
+      <p className="mt-2 text-sm leading-relaxed text-[#6B6560]">
         Review and adjust your course assessments, weights, and grading rules.
       </p>
 
       <div className="mt-6 space-y-4">
-        <section className="bg-[#F4F4F3] border border-[#E4E3E1] rounded-2xl p-4 shadow-sm">
-          <label className="block text-sm text-[#3D3D3D] mb-2">Course Name</label>
+        <section className="rounded-2xl border border-[#D4CFC7] bg-white p-4 shadow-sm">
+          <label className="mb-2 block text-sm text-[#3A3530]">Course Name</label>
           <input
             type="text"
             value={courseName}
             onChange={(e) => setCourseName(e.target.value)}
-            className="w-full p-3 rounded-xl border border-[#C7C5C1] bg-[#F6F6F4] text-sm text-[#6A6A6A]"
+            className="w-full rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] p-3 text-sm text-[#3A3530]"
             placeholder="Untitled course"
           />
         </section>
 
-        <section className="bg-[#F4F4F3] border border-[#E4E3E1] rounded-2xl p-4 shadow-sm">
-          <p className="text-sm text-[#3D3D3D] mb-2">Academic Term</p>
+        <section className="rounded-2xl border border-[#D4CFC7] bg-white p-4 shadow-sm">
+          <p className="mb-2 text-sm text-[#3A3530]">Academic Term</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-[#7A7A78] mb-1">Term</label>
+              <label className="mb-1 block text-xs text-[#6B6560]">Term</label>
               <select
                 value={termLabel}
                 onChange={(e) => setTermLabel(e.target.value)}
-                className="w-full p-3 rounded-xl border border-[#C7C5C1] bg-[#F6F6F4] text-sm text-[#6A6A6A]"
+                className="w-full rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] p-3 text-sm text-[#3A3530]"
               >
                 <option value="">Select term</option>
                 <option value="Fall">Fall</option>
@@ -972,11 +972,11 @@ export default function StructureStep() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-[#7A7A78] mb-1">Year</label>
+              <label className="mb-1 block text-xs text-[#6B6560]">Year</label>
               <select
                 value={termYear}
                 onChange={(e) => setTermYear(e.target.value)}
-                className="w-full p-3 rounded-xl border border-[#C7C5C1] bg-[#F6F6F4] text-sm text-[#6A6A6A]"
+                className="w-full rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] p-3 text-sm text-[#3A3530]"
               >
                 {yearOptions.map((year) => (
                   <option key={year} value={year}>
@@ -989,19 +989,19 @@ export default function StructureStep() {
         </section>
 
         {/* MAIN EDITOR CARD */}
-        <section className="bg-[#F4F4F3] border border-[#E4E3E1] rounded-2xl p-4 shadow-sm">
+        <section className="rounded-2xl border border-[#D4CFC7] bg-white p-4 shadow-sm">
 
         {/* Assessments header */}
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <h3 className="text-base font-semibold text-[#333333]">Assessments</h3>
-            <p className="mt-1 text-sm text-[#737373]">Define your course grading components</p>
+            <h3 className="text-base font-semibold text-[#3A3530]">Assessments</h3>
+            <p className="mt-1 text-sm text-[#6B6560]">Define your course grading components</p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-[#848484]">Non-bonus Weight</p>
+            <p className="text-xs text-[#6B6560]">Non-bonus Weight</p>
             <p
               className={`text-4xl font-semibold leading-none ${
-                totalWeight === 100 ? "text-[#5E9B68]" : totalWeight < 100 ? "text-[#8E7340]" : "text-[#9C5D5D]"
+                totalWeight === 100 ? "text-[#6B9B7A]" : totalWeight < 100 ? "text-[#C9945F]" : "text-[#B86B6B]"
               }`}
             >
               {totalWeight}%
@@ -1014,7 +1014,7 @@ export default function StructureStep() {
         <button
           type="button"
           onClick={addAssessment}
-          className="mt-5 w-full rounded-xl border border-[#BFBDB9] py-3 text-sm font-medium text-[#6A6A6A] hover:border-[#607B8A] hover:text-[#607B8A] transition flex items-center justify-center gap-2"
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-[#D4CFC7] py-3 text-sm font-medium text-[#6B6560] transition hover:border-[#5F7A8A] hover:text-[#5F7A8A]"
         >
           <Plus size={16} />
           Add Assessment
@@ -1022,10 +1022,10 @@ export default function StructureStep() {
 
         {/* weight status */}
         <div className="mt-6">
-          <div className="w-full bg-[#DCD8D2] h-3 rounded-full mb-4">
+          <div className="mb-4 h-3 w-full rounded-full bg-[#E8E3DC]">
             <div
               className={`h-full rounded-full ${
-                totalWeight === 100 ? "bg-[#5E9B68]" : totalWeight < 100 ? "bg-[#B89B62]" : "bg-[#B97373]"
+                totalWeight === 100 ? "bg-[#6B9B7A]" : totalWeight < 100 ? "bg-[#C9945F]" : "bg-[#B86B6B]"
               }`}
               style={{ width: `${Math.max(0, Math.min(totalWeight, 100))}%` }}
             />
@@ -1039,44 +1039,44 @@ export default function StructureStep() {
       </div>
 
       {/* Institutional Grading Rules (accordion) */}
-      <div className="mt-6 bg-[#F4F4F3] border border-[#E4E3E1] rounded-2xl p-6 shadow-sm">
+      <div className="mt-6 rounded-2xl border border-[#D4CFC7] bg-white p-6 shadow-sm">
         <button
           type="button"
           className="w-full flex items-start justify-between gap-4 text-left"
           onClick={() => setInstitutionalOpen((v) => !v)}
         >
           <div>
-            <h3 className="text-base font-semibold text-[#333333]">
+            <h3 className="text-base font-semibold text-[#3A3530]">
               Institutional Grading Rules ({institutionName || "York University"} Default)
             </h3>
             <p className="mt-1 text-sm text-[#5F7A8A]">
               Optional - Change to match your institution
             </p>
-            <p className="mt-1 text-sm text-[#737373]">
+            <p className="mt-1 text-sm text-[#6B6560]">
               Used to evaluate your final percentage into letter grades and grade points.
             </p>
           </div>
-          <div className="mt-1 text-gray-500">{institutionalOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</div>
+          <div className="mt-1 text-[#6B6560]">{institutionalOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</div>
         </button>
 
         {institutionalOpen ? (
           <div className="mt-5 space-y-5">
             {/* Institution + Scale rows */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#F9F8F6] border border-gray-100 px-4 py-3">
-                <p className="text-sm text-gray-500">Institution:</p>
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#D4CFC7] bg-[#FCFAF7] px-4 py-3">
+                <p className="text-sm text-[#6B6560]">Institution:</p>
                 <input
                   value={institutionName}
                   onChange={(e) => setInstitutionName(e.target.value)}
-                  className="text-sm font-semibold text-gray-800 text-right px-3 py-2 rounded-xl border border-gray-200 bg-[#F2F2F2] focus:outline-none focus:ring-2 focus:ring-[#5D737E]/30"
+                  className="rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] px-3 py-2 text-right text-sm font-semibold text-[#3A3530] focus:outline-none focus:ring-2 focus:ring-[#5F7A8A]/30"
                 />
               </div>
-              <div className="flex items-center justify-between gap-3 rounded-2xl bg-[#F9F8F6] border border-gray-100 px-4 py-3">
-                <p className="text-sm text-gray-500">Scale:</p>
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#D4CFC7] bg-[#FCFAF7] px-4 py-3">
+                <p className="text-sm text-[#6B6560]">Scale:</p>
                 <select
                   value={scaleName}
                   onChange={(e) => setScaleName(e.target.value)}
-                  className="text-sm font-semibold text-gray-800 text-right px-3 py-2 rounded-xl border border-gray-200 bg-[#F2F2F2] focus:outline-none focus:ring-2 focus:ring-[#5D737E]/30"
+                  className="rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] px-3 py-2 text-right text-sm font-semibold text-[#3A3530] focus:outline-none focus:ring-2 focus:ring-[#5F7A8A]/30"
                 >
                   <option value="4.0">4.0</option>
                   <option value="9.0">9.0</option>
@@ -1087,10 +1087,10 @@ export default function StructureStep() {
 
             {/* Grade boundaries - exact inline format */}
             <div>
-              <h4 className="text-sm font-semibold text-gray-800 mb-3">Grade Boundaries</h4>
+              <h4 className="mb-3 text-sm font-semibold text-[#3A3530]">Grade Boundaries</h4>
               <div className="space-y-2">
                 {gradeBoundaries.map((g, idx) => (
-                  <div key={idx} className="rounded-2xl bg-[#F9F8F6] border border-gray-100 px-4 py-3">
+                  <div key={idx} className="rounded-2xl border border-[#D4CFC7] bg-[#FCFAF7] px-4 py-3">
                     <div className="flex items-center gap-3 text-sm">
                       <input
                         value={g.letter}
@@ -1101,10 +1101,10 @@ export default function StructureStep() {
                             return next;
                           });
                         }}
-                        className="w-14 text-center font-semibold text-gray-800 px-2 py-1 rounded-lg border border-gray-200 bg-[#F2F2F2] focus:outline-none focus:ring-2 focus:ring-[#5D737E]/30"
+                        className="w-14 rounded-lg border border-[#D4CFC7] bg-[#F5F1EB] px-2 py-1 text-center font-semibold text-[#3A3530] focus:outline-none focus:ring-2 focus:ring-[#5F7A8A]/30"
                       />
 
-                      <span className="text-gray-500">—</span>
+                      <span className="text-[#6B6560]">—</span>
 
                       <input
                         value={g.minLabel}
@@ -1115,10 +1115,10 @@ export default function StructureStep() {
                             return next;
                           });
                         }}
-                        className="w-28 text-center text-gray-700 px-2 py-1 rounded-lg border border-gray-200 bg-[#F2F2F2] focus:outline-none focus:ring-2 focus:ring-[#5D737E]/30"
+                        className="w-28 rounded-lg border border-[#D4CFC7] bg-[#F5F1EB] px-2 py-1 text-center text-[#3A3530] focus:outline-none focus:ring-2 focus:ring-[#5F7A8A]/30"
                       />
 
-                      <span className="text-gray-500">→</span>
+                      <span className="text-[#6B6560]">→</span>
 
                       <input
                         value={g.points}
@@ -1129,10 +1129,10 @@ export default function StructureStep() {
                             return next;
                           });
                         }}
-                        className="w-16 text-center text-[#4A6C7A] px-2 py-1 rounded-lg border border-gray-200 bg-[#F2F2F2] focus:outline-none focus:ring-2 focus:ring-[#5D737E]/30"
+                        className="w-16 rounded-lg border border-[#D4CFC7] bg-[#F5F1EB] px-2 py-1 text-center text-[#5F7A8A] focus:outline-none focus:ring-2 focus:ring-[#5F7A8A]/30"
                       />
 
-                      <span className="text-gray-500">—</span>
+                      <span className="text-[#6B6560]">—</span>
 
                       <input
                         value={g.descriptor}
@@ -1143,13 +1143,13 @@ export default function StructureStep() {
                             return next;
                           });
                         }}
-                        className="ml-auto w-32 text-right text-[#B49A86] px-2 py-1 rounded-lg border border-gray-200 bg-[#F2F2F2] focus:outline-none focus:ring-2 focus:ring-[#5D737E]/30"
+                        className="ml-auto w-32 rounded-lg border border-[#D4CFC7] bg-[#F5F1EB] px-2 py-1 text-right text-[#C4B5A6] focus:outline-none focus:ring-2 focus:ring-[#5F7A8A]/30"
                       />
                       <button
                         type="button"
                         onClick={() => removeGradeBoundary(idx)}
                         disabled={gradeBoundaries.length <= 1}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#D4CFC7] text-[#6B6560] transition hover:bg-[#F9EAEA] hover:text-[#B86B6B] disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label={`Delete grade boundary ${idx + 1}`}
                       >
                         <Trash2 size={14} />
@@ -1160,7 +1160,7 @@ export default function StructureStep() {
                 <button
                   type="button"
                   onClick={addGradeBoundary}
-                  className="w-full rounded-lg border border-dashed border-gray-300 py-2 text-sm text-gray-600 hover:border-[#5D737E] hover:text-[#5D737E] transition"
+                  className="w-full rounded-lg border border-dashed border-[#D4CFC7] py-2 text-sm text-[#6B6560] transition hover:border-[#5F7A8A] hover:text-[#5F7A8A]"
                 >
                   + Add item
                 </button>
@@ -1168,32 +1168,32 @@ export default function StructureStep() {
             </div>
 
             {/* Advanced: Boundary handling + rounding */}
-            <div className="rounded-2xl bg-[#F9F8F6] border border-gray-100 px-4 py-4">
+            <div className="rounded-2xl border border-[#D4CFC7] bg-[#FCFAF7] px-4 py-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-800">Advanced</p>
+                <p className="text-sm font-semibold text-[#3A3530]">Advanced</p>
               </div>
 
               <div className="mt-4 space-y-6">
                 <div>
-                  <p className="text-sm font-semibold text-gray-800 mb-2">Boundary Handling</p>
+                  <p className="mb-2 text-sm font-semibold text-[#3A3530]">Boundary Handling</p>
                   <div className="space-y-2">
-                    <label className="flex items-center gap-3 text-sm text-gray-700">
+                    <label className="flex items-center gap-3 text-sm text-[#3A3530]">
                       <input
                         type="radio"
                         name="boundary"
                         checked={boundaryHandling === "round-up"}
                         onChange={() => setBoundaryHandling("round-up")}
-                        className="h-4 w-4 accent-[#5D737E]"
+                        className="h-4 w-4 accent-[#5F7A8A]"
                       />
                       79.5 counts as 80
                     </label>
-                    <label className="flex items-center gap-3 text-sm text-gray-700">
+                    <label className="flex items-center gap-3 text-sm text-[#3A3530]">
                       <input
                         type="radio"
                         name="boundary"
                         checked={boundaryHandling === "strict"}
                         onChange={() => setBoundaryHandling("strict")}
-                        className="h-4 w-4 accent-[#5D737E]"
+                        className="h-4 w-4 accent-[#5F7A8A]"
                       />
                       Strict boundaries (80.0 only)
                     </label>
@@ -1201,25 +1201,25 @@ export default function StructureStep() {
                 </div>
 
                 <div>
-                  <p className="text-sm font-semibold text-gray-800 mb-2">Rounding</p>
+                  <p className="mb-2 text-sm font-semibold text-[#3A3530]">Rounding</p>
                   <div className="space-y-2">
-                    <label className="flex items-center gap-3 text-sm text-gray-700">
+                    <label className="flex items-center gap-3 text-sm text-[#3A3530]">
                       <input
                         type="radio"
                         name="rounding"
                         checked={rounding === "one-decimal"}
                         onChange={() => setRounding("one-decimal")}
-                        className="h-4 w-4 accent-[#5D737E]"
+                        className="h-4 w-4 accent-[#5F7A8A]"
                       />
                       Round final percentage to 1 decimal
                     </label>
-                    <label className="flex items-center gap-3 text-sm text-gray-700">
+                    <label className="flex items-center gap-3 text-sm text-[#3A3530]">
                       <input
                         type="radio"
                         name="rounding"
                         checked={rounding === "none"}
                         onChange={() => setRounding("none")}
-                        className="h-4 w-4 accent-[#5D737E]"
+                        className="h-4 w-4 accent-[#5F7A8A]"
                       />
                       No rounding
                     </label>
@@ -1232,13 +1232,13 @@ export default function StructureStep() {
       </div>
 
       {/* Errors */}
-      {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="mt-4 text-sm text-[#B86B6B]">{error}</p> : null}
 
       {/* Actions */}
       <button
         onClick={handleContinue}
         disabled={saving}
-        className="mt-6 w-full bg-[#607B8A] text-white py-4 rounded-xl font-medium shadow-sm hover:bg-[#4E6978] transition disabled:opacity-60"
+        className="mt-6 w-full rounded-xl bg-[#5F7A8A] py-4 font-medium text-white shadow-sm transition hover:bg-[#6B8BA8] disabled:opacity-60"
       >
         {saving ? "Saving..." : "Continue to Grades"}
       </button>
