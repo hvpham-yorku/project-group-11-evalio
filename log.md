@@ -1333,6 +1333,71 @@ As a student, I want Evalio analytics to work correctly for parent-child assessm
 * Integration tests were added to validate hierarchical behavior end-to-end.
 * Story is complete and ready for demo with correct nested assessment support.
 
+### ITR3-3 — Advanced Grading Rules (Mandatory Pass + Controlled Bonus)
+
+Story Owner: Bardiya Ameri  
+Planned Effort: 4–5 days  
+Actual Effort: 4 days  
+
+#### Story Description
+As a student, I want Evalio to support advanced grading rules such as mandatory pass conditions and controlled bonus-mark behavior, so that my course model matches real institutional grading policies more accurately.
+
+#### Supported Advanced Rules (What is actually supported)
+
+1) Mandatory Pass (supported)
+- An assessment can be marked with rule_type: "mandatory_pass" and rule_config.pass_threshold (0–100).
+- The system evaluates mandatory pass requirements and returns:
+  - per-assessment status (passed / pending / failed)
+  - threshold and computed percent
+- If a mandatory pass rule is failed, the system must avoid misleading outputs:
+  - planning/evaluation should clearly indicate the rule failure
+  - target feasibility should not claim the target is achievable while mandatory pass is failed
+
+2) Controlled Bonus (supported at model + calculation level)
+- An assessment can be marked as bonus via is_bonus: true.
+- Bonus is tracked separately from the core grade:
+  - bonus_total is computed independently from core_total
+- Course-level bonus behavior is controlled by bonus_policy:
+  - bonus_policy: "none" → bonus ignored (final = core only)
+  - bonus_policy: "additive" → final = core + bonus
+  - bonus_policy: "capped" → final = min(core + bonus, bonus_cap_percentage)
+- When bonus_policy is capped, bonus_cap_percentage must be provided (0–100).
+
+#### Supported vs Unsupported Rule Semantics (Important for truthful claims)
+
+Supported rule types in the course model
+- mandatory_pass
+- best_of
+- drop_lowest
+- pure_multiplicative (structural support for deterministic roll-ups)
+
+Not supported / explicitly out of scope
+- Full support for every institutional grading policy
+- Arbitrary custom rule scripting
+- Institution-specific rule libraries
+- AI inference for ambiguous grading semantics
+- Silently treating unknown/ambiguous rules as fully supported
+
+If a rule type outside the supported set is provided, model validation rejects it to prevent silent incorrect behavior.
+
+#### Visible UI Behavior (What we can safely demo)
+- Mandatory pass rules are visible in the course structure and the system provides rule-aware status during evaluation/planning.
+- Bonus assessments can be represented and bonus contribution is computed under the configured bonus_policy.
+- Demo and documentation avoid claiming support for unsupported advanced rules.
+
+#### Testing Notes (Demo-safety expectations)
+- At least one integration test covers mandatory pass behavior.
+- At least one integration test covers supported bonus-mark behavior.
+- At least one customer/system flow demonstrates a visible advanced-rule course and verifies rule-aware behavior end-to-end.
+- Tests and demo notes avoid overstating unsupported rule interactions.
+
+#### Demo Notes (Short)
+Recommended supported demo path:
+1) Create a course with a Mandatory Pass final exam (e.g., threshold = 50%).
+2) Enter grades where the student fails the mandatory pass threshold.
+3) Show the system flags mandatory pass failure and avoids misleading feasibility outputs.
+4) (Optional) Show a bonus assessment course where bonus_policy is additive or capped to demonstrate controlled bonus impact.
+
 ### ITR3-4 — Risk and Alert Center for Cross-Course Planning
 
 **Story Owner:** Shadi Karimpour  
