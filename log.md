@@ -1279,3 +1279,63 @@ As a returning student, I want Evalio to reopen into my saved academic workspace
 * Backend and DB persistence-path hardening were completed first to make resume behavior trustworthy.
 * Frontend resume flow and system-test coverage remain tracked under dedicated subtasks.
 * Story progress is intentionally split by layer to keep ownership and validation clear.
+
+
+### ITR3-2 — Hierarchical Grade Analytics
+
+**Story Owner:** Himanshi Verma
+**Planned Effort:** 4–5 days  
+**Actual Effort:** In Progress
+
+#### Story Description
+As a student, I want Evalio analytics to work correctly for parent-child assessment structures, so that my completion status, minimum required scores, and projections reflect real course grading trees.
+
+#### Scope (ITR3)
+* Support child assessments in minimum required score analysis.
+* Support child assessments in what-if analysis.
+* Ensure parent completion status is calculated correctly when child grades are incomplete.
+* Improve hierarchical grade interpretation across dashboard and planning flows.
+* Ensure nested assessment structures are handled consistently in backend logic and frontend display.
+* Strengthen correctness of hierarchical analytics introduced in earlier iterations.
+
+#### Out of Scope (Future Iterations)
+* Advanced nested structures beyond supported parent-child relationships.
+* Complex rule combinations involving multiple hierarchy layers not required for demo.
+* UI enhancements unrelated to correctness of hierarchical analytics.
+
+#### Development Subtasks & Assignments
+1. Backend: Hierarchical minimum required and what-if logic
+   * Assignee: Shivam (SCRUM-147) — DONE
+2. DB: Verify hierarchical assessment data support
+   * Assignee: Shivam (SCRUM-148) — DONE
+3. Frontend: Parent-child assessment display and analytics flow
+   * Assignee: Shadi (SCRUM-146) — DONE
+4. Testing: Hierarchical analytics integration and system tests
+   * Assignee: Bardiya (SCRUM-149) — DONE
+5. Docs: Update log/demo notes for hierarchical analytics support
+   * Assignee: Himanshi Verma  (SCRUM-150) — DONE
+
+#### Acceptance Criteria
+* Minimum required score analysis works correctly for supported parent-child structures.
+* What-if analysis works correctly for supported parent-child structures.
+* Parent is not marked complete when required child grades are missing.
+* Dashboard and planning views show correct completion and grade behavior for nested assessments.
+* Backend and frontend calculations remain consistent for hierarchical structures.
+* No incorrect parent completion or misleading nested status remains in supported flows.
+* At least one integration test covers hierarchical minimum required behavior.
+* At least one integration test covers hierarchical what-if behavior.
+* At least one system/customer test verifies parent completion correctness in UI flow.
+
+#### Notes / Reflection
+* Backend logic was refactored to remove top-level-only assumptions and support hierarchical calculations.
+* Parent completion logic was corrected to depend on child assessment completion state.
+* Frontend was aligned with backend to ensure consistent display of nested assessment status.
+* Integration tests were added to validate hierarchical behavior end-to-end.
+* Story is complete and ready for demo with correct nested assessment support.
+
+
+
+
+
+
+
