@@ -1333,6 +1333,65 @@ As a student, I want Evalio analytics to work correctly for parent-child assessm
 * Integration tests were added to validate hierarchical behavior end-to-end.
 * Story is complete and ready for demo with correct nested assessment support.
 
+# ITR3-4 — Risk and Alert Center for Cross-Course Planning
+
+*Story Owner:* Shadi Karimpour 
+*Planned Effort:* 4-5 days 
+*Actual Effort:* 4 days 
+
+## Story Description
+
+As a student, I want a ranked risk and alert center across all my courses, so that I can quickly identify urgent academic problems and focus on the work that matters most.
+
+## Scope (ITR3)
+
+* Create a central risk and alert view across all saved courses  
+* Rank or group academic risks by urgency/severity  
+* Include overdue work alerts  
+* Include deadlines within a near-term window (e.g., 72 hours)  
+* Include impossible target alerts where a target is no longer realistically achievable  
+* Include high-weight ungraded assessment alerts  
+* Ensure alerts are understandable and useful for planning action  
+* Ensure risk calculations use current course, target, and deadline data consistently  
+
+## Out of Scope (Future Iterations)
+
+* Advanced predictive analytics or AI-based risk forecasting  
+* Cross-device synchronization beyond the current persistence mode  
+* Personalized alert customization or filtering preferences  
+* Non-essential UI enhancements unrelated to core alert clarity  
+
+## Development Subtasks & Assignments
+
+1. Frontend: Risk and alert center UI  
+   * Assignee: Shadi Karimpour
+2. Backend: Cross-course risk and alert logic  
+   * Assignee: Kartik Sharma
+3. DB: Verify support for cross-course risk data inputs  
+   * Assignee: Himanshi Verma
+4. Testing: Risk and alert integration and system tests  
+   * Assignee: Bardiya Ameri
+5. Docs: Update log/demo notes for risk center behaviour  
+   * Assignee: Shadi Karimpour
+
+## Acceptance Criteria
+
+* Evalio shows a central risk and alert view across multiple courses  
+* Overdue work is surfaced clearly  
+* Near-term deadlines are surfaced clearly using the defined time window  
+* Impossible or highly unrealistic target situations are surfaced clearly  
+* High-weight ungraded items are surfaced clearly  
+* Alerts are ranked, grouped, or labelled to communicate urgency  
+* Users can identify the course and item for each alert  
+* Risk center uses consistent underlying target, deadline, and course data  
+* At least one integration test covers risk generation logic  
+* At least one customer/system test covers viewing meaningful cross-course alerts  
+
+## Notes / Reflection
+
+* This story builds on reliable persistence and target-state consistency established in earlier ITR stories  
+* Emphasis is placed on making Evalio feel like a unified academic control panel rather than separate tools  
+* Cross-course aggregation required careful alignment of backend logic and frontend presentation 
 
 
 
