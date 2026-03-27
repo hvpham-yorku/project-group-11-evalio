@@ -1,7 +1,13 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { Course } from "@/lib/api";
 
 const ACTIVE_COURSE_STORAGE_KEY = "evalio_active_course_id";
@@ -12,40 +18,83 @@ type SetupCourseContextValue = {
   ensureCourseIdFromList: (courses: Course[]) => string | null;
   extractionResult: any | null;
   setExtractionResult: (data: any | null) => void;
-  institutionalGradingRules: {
-    institution: string;
-    scale: string;
-    grade_boundaries: Array<{
-      letter: string;
-      minLabel: string;
-      points: string;
-      descriptor: string;
-    }>;
-  } | null;
-  setInstitutionalGradingRules: (rules: SetupCourseContextValue["institutionalGradingRules"]) => void;
+  institutionalGradingRules: any | null;
+  setInstitutionalGradingRules: (rules: any) => void;
 };
 
 const SetupCourseContext = createContext<SetupCourseContextValue | null>(null);
 
-export function SetupCourseProvider({ children }: { children: React.ReactNode }) {
+export function SetupCourseProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [courseId, setCourseIdState] = useState<string | null>(null);
-  const [extractionResult, setExtractionResult] = useState<any | null>(null);
-  const [institutionalGradingRules, setInstitutionalGradingRules] =
-    useState<SetupCourseContextValue["institutionalGradingRules"]>(null);
+  const [extractionResult, setExtractionResultState] = useState<any | null>(
+    null
+  );
+  const [institutionalGradingRules, setInstitutionalGradingRulesState] =
+    useState<any | null>(null);
 
+  // 1. Initial Load of active ID
   useEffect(() => {
     const stored = window.localStorage.getItem(ACTIVE_COURSE_STORAGE_KEY);
-    setCourseIdState(stored && stored.trim() ? stored : null);
+    if (stored && stored.trim()) setCourseIdState(stored);
   }, []);
+
+  // 2. Reactively load Course-Specific Data whenever courseId changes
+  useEffect(() => {
+    if (!courseId) {
+      setExtractionResultState(null);
+      setInstitutionalGradingRulesState(null);
+      return;
+    }
+
+    const savedResult = window.localStorage.getItem(
+      `evalio_extraction_${courseId}`
+    );
+    const savedRules = window.localStorage.getItem(`evalio_rules_${courseId}`);
+
+    setExtractionResultState(savedResult ? JSON.parse(savedResult) : null);
+    setInstitutionalGradingRulesState(
+      savedRules ? JSON.parse(savedRules) : null
+    );
+  }, [courseId]);
 
   const setCourseId = useCallback((id: string | null) => {
     setCourseIdState(id);
     if (!id) {
       window.localStorage.removeItem(ACTIVE_COURSE_STORAGE_KEY);
-      return;
+    } else {
+      window.localStorage.setItem(ACTIVE_COURSE_STORAGE_KEY, id);
     }
-    window.localStorage.setItem(ACTIVE_COURSE_STORAGE_KEY, id);
   }, []);
+
+  const setExtractionResult = useCallback(
+    (data: any | null) => {
+      setExtractionResultState(data);
+      if (courseId && data) {
+        window.localStorage.setItem(
+          `evalio_extraction_${courseId}`,
+          JSON.stringify(data)
+        );
+      }
+    },
+    [courseId]
+  );
+
+  const setInstitutionalGradingRules = useCallback(
+    (rules: any) => {
+      setInstitutionalGradingRulesState(rules);
+      if (courseId && rules) {
+        window.localStorage.setItem(
+          `evalio_rules_${courseId}`,
+          JSON.stringify(rules)
+        );
+      }
+    },
+    [courseId]
+  );
 
   const ensureCourseIdFromList = useCallback(
     (courses: Course[]): string | null => {
@@ -53,12 +102,10 @@ export function SetupCourseProvider({ children }: { children: React.ReactNode })
         setCourseId(null);
         return null;
       }
+      const match = courses.find((c) => c.course_id === courseId);
+      if (match) return match.course_id;
 
-      if (courseId && courses.some((course) => course.course_id === courseId)) {
-        return courseId;
-      }
-
-      const fallback = courses[courses.length - 1]?.course_id ?? null;
+      const fallback = courses[0].course_id;
       setCourseId(fallback);
       return fallback;
     },
@@ -75,16 +122,25 @@ export function SetupCourseProvider({ children }: { children: React.ReactNode })
       institutionalGradingRules,
       setInstitutionalGradingRules,
     }),
-    [courseId, setCourseId, ensureCourseIdFromList, extractionResult, institutionalGradingRules]
+    [
+      courseId,
+      setCourseId,
+      ensureCourseIdFromList,
+      extractionResult,
+      institutionalGradingRules,
+    ]
   );
 
-  return <SetupCourseContext.Provider value={value}>{children}</SetupCourseContext.Provider>;
+  return (
+    <SetupCourseContext.Provider value={value}>
+      {children}
+    </SetupCourseContext.Provider>
+  );
 }
 
 export function useSetupCourse() {
   const context = useContext(SetupCourseContext);
-  if (!context) {
+  if (!context)
     throw new Error("useSetupCourse must be used within SetupCourseProvider");
-  }
   return context;
 }
