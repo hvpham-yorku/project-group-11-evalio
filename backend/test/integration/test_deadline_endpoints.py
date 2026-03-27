@@ -334,6 +334,54 @@ class TestDeadlineEndpoints:
         assert response.status_code == 400
         assert "not found for this course" in response.json()["detail"]
 
+    def test_ics_export_selected_deadlines_only_and_keeps_deadlines_unmutated(self, auth_client):
+        course_id = self._create_course(auth_client)
+
+        first = auth_client.post(
+            f"/courses/{course_id}/deadlines",
+            json={
+                "title": "Midterm Exam",
+                "assessment_name": "Midterm",
+                "due_date": "2026-03-15",
+            },
+        )
+        assert first.status_code == 200
+        first_deadline = first.json()["deadline"]
+
+        second = auth_client.post(
+            f"/courses/{course_id}/deadlines",
+            json={
+                "title": "Final Exam",
+                "assessment_name": "Final",
+                "due_date": "2026-04-15",
+            },
+        )
+        assert second.status_code == 200
+
+        before_list = auth_client.get(f"/courses/{course_id}/deadlines")
+        assert before_list.status_code == 200
+        before_deadlines = before_list.json()["deadlines"]
+
+        exported = auth_client.post(
+            f"/courses/{course_id}/deadlines/export/ics",
+            json={
+                "deadline_ids": [first_deadline["deadline_id"]],
+                "min_grade_info": {"Midterm": {"minimum_required": 72.5}},
+            },
+        )
+        assert exported.status_code == 200
+        assert "Midterm Exam" in exported.text
+        assert "Final Exam" not in exported.text
+        assert "72.5" in exported.text
+
+        after_list = auth_client.get(f"/courses/{course_id}/deadlines")
+        assert after_list.status_code == 200
+        after_deadlines = after_list.json()["deadlines"]
+
+        assert after_deadlines == before_deadlines
+        assert all(item["exported_to_gcal"] is False for item in after_deadlines)
+        assert all(item["gcal_event_id"] is None for item in after_deadlines)
+
     def test_google_authorize_unconfigured(self, auth_client, monkeypatch):
         def _raise(state: str = ""):
             raise deadline_routes.GoogleCalendarError(
