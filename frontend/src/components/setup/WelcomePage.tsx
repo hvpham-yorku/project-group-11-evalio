@@ -84,12 +84,6 @@ export function WelcomePage() {
             >
               Sign In
             </button>
-            <button
-              onClick={() => router.push("/login")}
-              className="rounded-lg bg-[#5F7A8A] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
-            >
-              Get Started
-            </button>
           </div>
         </div>
       </nav>
