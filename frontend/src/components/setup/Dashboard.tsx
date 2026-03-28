@@ -11,7 +11,6 @@ import {
   Plus,
   ChevronDown,
   Sigma,
-  XCircle,
 } from "lucide-react";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -21,6 +20,7 @@ import {
   getCourseGpa,
   getDashboardSummary,
   getMinimumRequired,
+  getUniformRequired,
   listDeadlines as listDeadlinesApi,
   listCourses,
   type CgpaResponse,
@@ -31,6 +31,7 @@ import {
   type DashboardWhatIfResponse,
   type Deadline as ApiDeadline,
   type TargetCheckResponse,
+  type UniformRequiredAssessment,
   runDashboardWhatIf,
 } from "@/lib/api";
 
@@ -54,6 +55,8 @@ type AssessmentBreakdownRow = {
   passThreshold?: number | null;
   passStatus?: "passed" | "failed" | "pending" | null;
   mandatoryWarning?: string | null;
+  /** For partial parents: number of children not yet graded */
+  ungradedChildCount?: number;
 };
 
 type AssessmentTarget = {
@@ -64,6 +67,12 @@ type AssessmentTarget = {
   isBonus: boolean;
   percent: number | null;
   graded: boolean;
+  /** true when a parent group has some graded children but not all */
+  partial: boolean;
+  /** number of ungraded children for partial parent groups */
+  ungradedChildCount: number;
+  /** true when this is a child of a parent group — don't call minimum API */
+  isChild: boolean;
   isMandatoryPass: boolean;
   passThreshold: number | null;
 };
@@ -130,19 +139,24 @@ function hasGrade(assessment: CourseAssessment): boolean {
   );
 }
 
+function isChildGraded(child: CourseAssessment): boolean {
+  return (
+    typeof child.raw_score === "number" &&
+    typeof child.total_score === "number" &&
+    child.total_score > 0
+  );
+}
+
 function getPercent(assessment: CourseAssessment): number | null {
   const children = Array.isArray(assessment.children) ? assessment.children : [];
   if (children.length) {
-    if (!hasGrade(assessment)) return null;
-    const contribution = children.reduce((sum, child) => {
-      if (
-        typeof child.raw_score !== "number" ||
-        typeof child.total_score !== "number" ||
-        child.total_score <= 0
-      ) {
-        return sum;
-      }
-      return sum + ((child.raw_score / child.total_score) * 100 * child.weight) / 100;
+    const gradedChildren = children.filter(isChildGraded);
+    if (gradedChildren.length === 0) return null; // nothing graded yet
+
+    // For both fully-graded and partially-graded parents, compute weighted
+    // contribution treating ungraded children as 0% (their actual floor).
+    const contribution = gradedChildren.reduce((sum, child) => {
+      return sum + ((child.raw_score! / child.total_score!) * 100 * child.weight) / 100;
     }, 0);
     const effectiveWeight = children.reduce((sum, child) => sum + child.weight, 0);
     if (effectiveWeight <= 0) return null;
@@ -179,6 +193,15 @@ function buildAssessmentTargetGroups(
     const passThreshold = getMandatoryPassThreshold(assessment);
     const parentPercent = getPercent(assessment);
 
+    // Detect partially-graded parent: some children graded, not all
+    const gradedChildCount = children.filter(isChildGraded).length;
+    const isPartial =
+      children.length > 0 &&
+      gradedChildCount > 0 &&
+      gradedChildCount < children.length;
+
+    const ungradedChildCount = children.length - gradedChildCount;
+
     const parentTarget: AssessmentTarget = {
       key: assessment.name,
       assessmentName: assessment.name,
@@ -187,6 +210,9 @@ function buildAssessmentTargetGroups(
       isBonus,
       percent: parentPercent,
       graded: parentPercent !== null,
+      partial: isPartial,
+      ungradedChildCount: isPartial ? ungradedChildCount : 0,
+      isChild: false,
       isMandatoryPass: passThreshold !== null,
       passThreshold,
     };
@@ -194,10 +220,7 @@ function buildAssessmentTargetGroups(
     if (children.length) {
       const childTargets: AssessmentTarget[] = [];
       for (const child of children) {
-        const childHasGrade =
-          typeof child.raw_score === "number" &&
-          typeof child.total_score === "number" &&
-          child.total_score > 0;
+        const childHasGrade = isChildGraded(child);
         const percent = childHasGrade
           ? Math.max(0, Math.min((child.raw_score! / child.total_score!) * 100, 100))
           : null;
@@ -210,6 +233,9 @@ function buildAssessmentTargetGroups(
           isBonus,
           percent,
           graded: childHasGrade,
+          partial: false,
+          ungradedChildCount: 0,
+          isChild: true,
           isMandatoryPass: false,
           passThreshold: null,
         });
@@ -224,7 +250,10 @@ function buildAssessmentTargetGroups(
 
     targets.push({
       key: assessment.name,
-      parent: parentTarget,
+      parent: {
+        ...parentTarget,
+        partial: false,
+      },
       children: [],
     });
   }
@@ -246,11 +275,10 @@ function getDaysLeft(isoDate: string): number {
   return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-async function buildBreakdownRow(
-  courseId: string,
-  target: number,
-  assessment: AssessmentTarget
-): Promise<AssessmentBreakdownRow> {
+function buildBreakdownRow(
+  assessment: AssessmentTarget,
+  uniformData: UniformRequiredAssessment | undefined,
+): AssessmentBreakdownRow {
   const actualPercent = assessment.percent;
   const mandatoryPassStatus =
     assessment.isMandatoryPass && typeof assessment.passThreshold === "number"
@@ -263,13 +291,14 @@ async function buildBreakdownRow(
 
   if (actualPercent !== null) {
     const contributionPoints = (actualPercent * assessment.weight) / 100;
+    const label = assessment.partial ? "Earned So Far" : "Actual Performance";
     return {
       key: assessment.key,
       name: assessment.displayName,
       rowType: "graded",
       weight: assessment.weight,
       weightLabel: `${assessment.weight}% of final grade`,
-      neededLabel: "Actual Performance",
+      neededLabel: label,
       needed: `${actualPercent.toFixed(1)}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
         assessment.weight
       )})`,
@@ -278,31 +307,56 @@ async function buildBreakdownRow(
       passThreshold: assessment.passThreshold,
       passStatus: mandatoryPassStatus,
       mandatoryWarning: null,
+      ungradedChildCount: assessment.ungradedChildCount,
     };
   }
 
-  const minimum = await getMinimumRequired(courseId, {
-    target,
-    assessment_name: assessment.assessmentName,
-  });
-  const percentValue = minimum.minimum_required;
-  const contributionPoints = (percentValue * assessment.weight) / 100;
+  // Use the uniform-required data from the grading engine (binary search
+  // through the real engine — respects best_of, drop_lowest, mandatory_pass).
+  if (uniformData) {
+    const uniformPercent = uniformData.uniform_percent;
+    const contributionPoints = (uniformPercent * assessment.weight) / 100;
+    const isAchievable = uniformPercent <= 100;
+    const passStatus = uniformData.pass_status ?? (assessment.isMandatoryPass ? "pending" : null);
+    const mandatoryWarning =
+      assessment.isMandatoryPass && uniformData.pass_threshold !== null && uniformPercent > 100
+        ? `Target requires more than 100% — not achievable.`
+        : null;
 
+    return {
+      key: assessment.key,
+      name: assessment.displayName,
+      rowType: "ungraded",
+      weight: assessment.weight,
+      weightLabel: `${assessment.weight}% of final grade`,
+      neededLabel: isAchievable ? "Minimum Needed" : "Not Achievable",
+      needed: isAchievable
+        ? `${uniformPercent.toFixed(1)}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(assessment.weight)})`
+        : "—",
+      contrib: isAchievable ? `+${contributionPoints.toFixed(2)}%` : "—",
+      isMandatoryPass: assessment.isMandatoryPass,
+      passThreshold: assessment.passThreshold,
+      passStatus: passStatus,
+      mandatoryWarning: mandatoryWarning,
+      ungradedChildCount: assessment.ungradedChildCount,
+    };
+  }
+
+  // Fallback: no uniform data available (shouldn't happen normally)
   return {
     key: assessment.key,
     name: assessment.displayName,
     rowType: "ungraded",
     weight: assessment.weight,
     weightLabel: `${assessment.weight}% of final grade`,
-    neededLabel: "Minimum Needed",
-    needed: `${percentValue.toFixed(1)}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
-      assessment.weight
-    )})`,
-    contrib: `+${contributionPoints.toFixed(2)}%`,
+    neededLabel: "Not Yet Calculated",
+    needed: "—",
+    contrib: "—",
     isMandatoryPass: assessment.isMandatoryPass,
     passThreshold: assessment.passThreshold,
     passStatus: assessment.isMandatoryPass ? "pending" : null,
-    mandatoryWarning: minimum.mandatory_pass_warning ?? null,
+    mandatoryWarning: null,
+    ungradedChildCount: assessment.ungradedChildCount,
   };
 }
 
@@ -407,8 +461,19 @@ export function Dashboard() {
           latest.assessments
         );
 
+        // Fetch target + uniform-required in parallel
+        const [target, uniformResult] = await Promise.all([
+          checkTarget(resolvedCourseId, { target: resolvedTarget }),
+          getUniformRequired(resolvedCourseId, { target: resolvedTarget }),
+        ]);
+
+        // Build a lookup: assessment name → uniform data
+        const uniformLookup = new Map<string, UniformRequiredAssessment>();
+        for (const a of uniformResult.assessments) {
+          uniformLookup.set(a.name, a);
+        }
+
         const [
-          target,
           rows,
           termCourseResults,
           allCourseResults,
@@ -418,21 +483,45 @@ export function Dashboard() {
           allTargetResults,
         ] =
           await Promise.all([
-            checkTarget(resolvedCourseId, {
-              target: resolvedTarget,
-            }),
-            Promise.all(
-              assessmentTargetGroups.map(async (group) => {
-                const parent = await buildBreakdownRow(
-                  resolvedCourseId,
-                  resolvedTarget,
-                  group.parent
-                );
-                const children = await Promise.all(
-                  group.children.map((child) =>
-                    buildBreakdownRow(resolvedCourseId, resolvedTarget, child)
-                  )
-                );
+            Promise.resolve(
+              assessmentTargetGroups.map((group) => {
+                const parentUniform = uniformLookup.get(group.parent.assessmentName);
+                const parent = buildBreakdownRow(group.parent, parentUniform);
+
+                const children = group.children.map((child) => {
+                  // For children, find matching child in the uniform data
+                  const parentData = uniformLookup.get(
+                    child.assessmentName.includes(CHILD_ASSESSMENT_SEPARATOR)
+                      ? child.assessmentName.split(CHILD_ASSESSMENT_SEPARATOR)[0]
+                      : group.parent.assessmentName
+                  );
+                  // Extract raw child name from "Parent::Child" path
+                  const rawChildName = child.assessmentName.includes(CHILD_ASSESSMENT_SEPARATOR)
+                    ? child.assessmentName.split(CHILD_ASSESSMENT_SEPARATOR)[1]
+                    : child.displayName;
+                  const childUniformEntry = parentData?.children?.find(
+                    (c) => c.name === rawChildName
+                  );
+                  // Build a synthetic UniformRequiredAssessment for the child
+                  const childUniform: UniformRequiredAssessment | undefined = childUniformEntry
+                    ? {
+                        name: childUniformEntry.name,
+                        weight: childUniformEntry.weight,
+                        is_bonus: false,
+                        graded: childUniformEntry.graded,
+                        current_contribution: 0,
+                        projected_contribution: childUniformEntry.contribution,
+                        uniform_percent: childUniformEntry.uniform_percent,
+                        is_mandatory_pass: false,
+                        pass_threshold: null,
+                        pass_status: null,
+                        has_children: false,
+                        children: null,
+                      }
+                    : undefined;
+                  return buildBreakdownRow(child, childUniform);
+                });
+
                 return {
                   key: group.key,
                   parent,
@@ -617,9 +706,8 @@ export function Dashboard() {
       : dashboardSummary.max_grade
     : currentGrade;
   const requiredAverage = targetResult?.required_average_display ?? "0.0%";
-  const workCompleted = `${(
-    dashboardSummary?.graded_weight ?? gradedWeight
-  ).toFixed(0)}%`;
+  const gradedWeightValue = dashboardSummary?.graded_weight ?? gradedWeight;
+  const workCompleted = `${Number.isInteger(gradedWeightValue) ? gradedWeightValue : gradedWeightValue.toFixed(1)}%`;
   const remainingWeight = Math.max(
     0,
     Math.min(100, dashboardSummary?.remaining_weight ?? 100 - gradedWeight)
@@ -714,7 +802,7 @@ export function Dashboard() {
     {
       label: "Work Completed",
       value: workCompleted,
-      sub: `${remainingWeight.toFixed(0)}% still to go`,
+      sub: `${Number.isInteger(remainingWeight) ? remainingWeight : remainingWeight.toFixed(1)}% still to go`,
     },
     {
       label: "Required Average",
@@ -1054,6 +1142,11 @@ export function Dashboard() {
               {parent.mandatoryWarning ? (
                 <p className="mt-2 text-xs text-[#C9945F]">
                   {parent.mandatoryWarning}
+                </p>
+              ) : null}
+              {(parent.ungradedChildCount ?? 0) > 0 ? (
+                <p className="mt-2 text-xs text-[#6B6560]">
+                  {parent.ungradedChildCount} child {parent.ungradedChildCount === 1 ? "assessment" : "assessments"} still ungraded — expand to see what each needs.
                 </p>
               ) : null}
 

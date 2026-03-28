@@ -117,6 +117,40 @@ export type MinimumRequiredResponse = {
   mandatory_pass_warning?: string;
 };
 
+export type UniformRequiredChild = {
+  name: string;
+  weight: number;
+  graded: boolean;
+  uniform_percent: number;
+  contribution: number;
+};
+
+export type UniformRequiredAssessment = {
+  name: string;
+  weight: number;
+  is_bonus: boolean;
+  graded: boolean;
+  current_contribution: number;
+  projected_contribution: number;
+  uniform_percent: number;
+  is_mandatory_pass: boolean;
+  pass_threshold: number | null;
+  pass_status: "passed" | "failed" | "pending" | null;
+  has_children: boolean;
+  children: UniformRequiredChild[] | null;
+};
+
+export type UniformRequiredResponse = {
+  target: number;
+  current_standing: number;
+  uniform_required: number;
+  projected_total: number;
+  max_possible: number | null;
+  is_achievable: boolean;
+  classification: string;
+  assessments: UniformRequiredAssessment[];
+};
+
 export type MandatoryPassRequirement = {
   assessment_name: string;
   threshold: number;
@@ -575,6 +609,16 @@ export function getLearningStrategies(courseId: string) {
 
 export function getDashboardSummary(courseId: string) {
   return request(`/courses/${courseId}/dashboard`) as Promise<DashboardSummaryResponse>;
+}
+
+export function getUniformRequired(
+  courseId: string,
+  payload: { target: number }
+) {
+  return request(`/courses/${courseId}/dashboard/uniform-required`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }) as Promise<UniformRequiredResponse>;
 }
 
 export function runDashboardWhatIf(

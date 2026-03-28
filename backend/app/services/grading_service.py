@@ -466,6 +466,163 @@ def calculate_required_average_summary(
     }
 
 
+def calculate_uniform_required(
+    course: CourseCreate,
+    target: float,
+) -> dict[str, Any]:
+    """
+    Binary-search for the single percentage P such that scoring P% on every
+    ungraded assessment reaches the target — computed through the real grading
+    engine so best_of, drop_lowest, mandatory_pass, and pure_multiplicative
+    are all respected.
+
+    Returns the uniform required %, per-assessment breakdown, and feasibility.
+    """
+    current_totals = calculate_course_totals(course)
+    current_standing = current_totals["final_total"]
+
+    # Check if target is already achieved
+    if current_standing >= target:
+        return _build_uniform_result(
+            course, target, current_standing,
+            uniform_percent=0.0,
+            is_achievable=True,
+            classification="Already Achieved",
+        )
+
+    # Check if target is achievable at all (100% on everything remaining)
+    max_course = course.model_copy(deep=True)
+    fill_remaining_ungraded_scores(max_course, missing_percent=100.0)
+    max_totals = calculate_course_totals(max_course)
+
+    if max_totals["is_failed"] or max_totals["final_total"] + 1e-9 < target:
+        return _build_uniform_result(
+            course, target, current_standing,
+            uniform_percent=101.0,
+            is_achievable=False,
+            classification="Not Possible",
+            max_possible=max_totals["final_total"],
+        )
+
+    # Binary search: find the minimum uniform % that hits the target
+    low, high = 0.0, 100.0
+    for _ in range(40):
+        mid = (low + high) / 2
+        candidate = course.model_copy(deep=True)
+        fill_remaining_ungraded_scores(candidate, missing_percent=mid)
+        result = calculate_course_totals(candidate)
+        if not result["is_failed"] and result["final_total"] >= target - 1e-9:
+            high = mid
+        else:
+            low = mid
+
+    uniform_percent = high
+
+    if uniform_percent > 100:
+        classification = "Not Possible"
+    elif uniform_percent > 95:
+        classification = "Very Challenging"
+    elif uniform_percent > 85:
+        classification = "Challenging"
+    elif uniform_percent > 70:
+        classification = "Achievable"
+    else:
+        classification = "Comfortable"
+
+    return _build_uniform_result(
+        course, target, current_standing,
+        uniform_percent=uniform_percent,
+        is_achievable=uniform_percent <= 100.0,
+        classification=classification,
+        max_possible=max_totals["final_total"],
+    )
+
+
+def _build_uniform_result(
+    course: CourseCreate,
+    target: float,
+    current_standing: float,
+    *,
+    uniform_percent: float,
+    is_achievable: bool,
+    classification: str,
+    max_possible: float | None = None,
+) -> dict[str, Any]:
+    """Build the response dict for calculate_uniform_required."""
+    mandatory_status = evaluate_mandatory_pass_requirements(course)
+    mandatory_lookup: dict[str, dict] = {
+        req["assessment_name"]: req
+        for req in mandatory_status.get("requirements", [])
+        if isinstance(req.get("assessment_name"), str)
+    }
+
+    # Compute per-assessment contributions at the uniform rate
+    projected_course = course.model_copy(deep=True)
+    safe_percent = max(0.0, min(100.0, uniform_percent))
+    fill_remaining_ungraded_scores(projected_course, missing_percent=safe_percent)
+    projected_totals = calculate_course_totals(projected_course)
+
+    assessments: list[dict[str, Any]] = []
+    for original, projected in zip(course.assessments, projected_course.assessments):
+        is_bonus = getattr(original, "is_bonus", False)
+        is_mandatory = original.rule_type == "mandatory_pass"
+        threshold = (
+            float((original.rule_config or {}).get("pass_threshold", 50))
+            if is_mandatory else None
+        )
+        mandatory_req = mandatory_lookup.get(original.name)
+
+        children_list: list[dict[str, Any]] = []
+        if original.children:
+            for orig_child, proj_child in zip(original.children, projected.children):
+                child_graded = (
+                    orig_child.raw_score is not None
+                    and orig_child.total_score is not None
+                )
+                child_contribution = (
+                    (proj_child.raw_score / proj_child.total_score * proj_child.weight / 100)
+                    if proj_child.raw_score is not None and proj_child.total_score is not None and proj_child.total_score > 0
+                    else 0.0
+                ) if proj_child.weight else 0.0
+                children_list.append({
+                    "name": orig_child.name,
+                    "weight": orig_child.weight,
+                    "graded": child_graded,
+                    "uniform_percent": 0.0 if child_graded else round(safe_percent, 1),
+                    "contribution": round(child_contribution * 100, 2),
+                })
+
+        fully_graded = _is_assessment_fully_graded(original)
+        current_contrib = compute_assessment_contribution(original, missing_percent=0.0)
+        projected_contrib = compute_assessment_contribution(projected, missing_percent=0.0)
+
+        assessments.append({
+            "name": original.name,
+            "weight": original.weight,
+            "is_bonus": is_bonus,
+            "graded": fully_graded,
+            "current_contribution": round(current_contrib, 4),
+            "projected_contribution": round(projected_contrib, 4),
+            "uniform_percent": 0.0 if fully_graded else round(safe_percent, 1),
+            "is_mandatory_pass": is_mandatory,
+            "pass_threshold": threshold,
+            "pass_status": mandatory_req.get("status") if mandatory_req else None,
+            "has_children": bool(original.children),
+            "children": children_list if children_list else None,
+        })
+
+    return {
+        "target": target,
+        "current_standing": round(current_standing, 2),
+        "uniform_required": round(uniform_percent, 1),
+        "projected_total": round(projected_totals["final_total"], 2),
+        "max_possible": round(max_possible, 2) if max_possible is not None else None,
+        "is_achievable": is_achievable,
+        "classification": classification,
+        "assessments": assessments,
+    }
+
+
 def calculate_minimum_required_score(
     course: CourseCreate,
     target: float,

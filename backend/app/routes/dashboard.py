@@ -18,6 +18,7 @@ from app.dependencies import get_course_service, get_current_user, get_grade_tar
 from app.repositories.base import GradeTargetRepository
 from app.services.auth_service import AuthenticatedUser
 from app.services.course_service import CourseNotFoundError, CourseService
+from app.services.grading_service import calculate_uniform_required
 from app.services.strategy_service import (
     compute_grade_boundaries,
     compute_multi_whatif,
@@ -40,6 +41,10 @@ class MultiWhatIfRequest(BaseModel):
         min_length=1,
         description="Hypothetical scores on multiple remaining assessments",
     )
+
+
+class UniformRequiredRequest(BaseModel):
+    target: float = Field(..., ge=0, le=100)
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -138,3 +143,19 @@ def get_strategies(
             current_grade=current_grade,
         ),
     }
+
+
+@router.post("/uniform-required")
+def get_uniform_required(
+    course_id: UUID,
+    payload: UniformRequiredRequest,
+    service: CourseService = Depends(get_course_service),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Compute the single uniform percentage needed on every ungraded assessment
+    to reach the target. Uses binary search through the real grading engine
+    so best_of, drop_lowest, mandatory_pass rules are all respected.
+    """
+    stored = _get_course(service, current_user.user_id, course_id)
+    return calculate_uniform_required(stored.course, payload.target)

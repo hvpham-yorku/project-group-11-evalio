@@ -234,10 +234,20 @@ def compute_grade_boundaries(course: CourseCreate) -> dict[str, Any]:
         max_normalised = max_grade
         current_normalised = current_grade
 
-    graded_weight = sum(
-        a.weight for a in course.assessments
-        if _is_assessment_fully_graded(a) and not getattr(a, "is_bonus", False)
-    )
+    graded_weight = 0.0
+    for a in course.assessments:
+        if getattr(a, "is_bonus", False):
+            continue
+        children = a.children or []
+        if children:
+            # Count each graded child's weight individually so partially-graded
+            # groups contribute their completed portion to "work completed".
+            graded_weight += sum(
+                c.weight for c in children
+                if c.raw_score is not None and c.total_score is not None
+            )
+        elif _is_assessment_fully_graded(a):
+            graded_weight += a.weight
     remaining_weight = core_weight - graded_weight
 
     return {
