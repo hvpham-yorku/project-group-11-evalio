@@ -7,12 +7,10 @@ import {
   Calendar,
   Check,
   Clock,
-  Edit2,
   Link as LinkIcon,
   Loader2,
   Plus,
   ShieldCheck,
-  Trash2,
   X,
   FileSearch,
   Sparkles,
@@ -22,11 +20,8 @@ import {
   getGoogleAuthUrl,
   getGoogleCalendarStatus,
   exportToGoogleCalendar,
-  getMinimumRequired,
   listDeadlines as listDeadlinesApi,
   createDeadline as createDeadlineApi,
-  updateDeadline as updateDeadlineApi,
-  deleteDeadline as deleteDeadlineApi,
   type Course,
   type Deadline as ApiDeadline,
 } from "@/lib/api";
@@ -50,10 +45,28 @@ type Deadline = {
   exported_at?: string;
 };
 
+type DeadlineFormState = {
+  title: string;
+  assessment_name: string;
+  due_date: string;
+  due_time: string;
+  type: DeadlineType;
+  notes: string;
+};
+
 const PENDING_DEADLINES_KEY = "evalio_pending_deadlines_v1";
 const TARGET_STORAGE_KEY = "evalio_target_grade";
 const DEFAULT_TARGET_GRADE = 85;
 const GCAL_CONNECTED_KEY = "evalio_gcal_connected";
+
+const EMPTY_DEADLINE_FORM: DeadlineFormState = {
+  title: "",
+  assessment_name: "",
+  due_date: "",
+  due_time: "",
+  type: "Assignment",
+  notes: "",
+};
 
 function safeParse<T>(raw: string | null): T | null {
   if (!raw) return null;
@@ -138,14 +151,16 @@ export default function DeadlinesPage() {
   const [hasConfirmed, setHasConfirmed] = useState(false);
   const [extractedDeadlines, setExtractedDeadlines] = useState<Deadline[]>([]);
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [draftDeadline, setDraftDeadline] =
+    useState<DeadlineFormState>(EMPTY_DEADLINE_FORM);
   const [selectedDeadlines, setSelectedDeadlines] = useState<Set<string>>(
     new Set()
   );
   const [isCalendarConnected, setIsCalendarConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSavingDeadline, setIsSavingDeadline] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [error, setError] = useState<string>("");
 
@@ -273,6 +288,48 @@ export default function DeadlinesPage() {
     }
   };
 
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    setDraftDeadline(EMPTY_DEADLINE_FORM);
+  };
+
+  const handleCreateDeadline = async () => {
+    if (!courseId) {
+      setError("Choose a course before adding a deadline.");
+      return;
+    }
+
+    if (!draftDeadline.title.trim()) {
+      setError("Deadline title is required.");
+      return;
+    }
+
+    if (!draftDeadline.due_date) {
+      setError("Deadline date is required.");
+      return;
+    }
+
+    setIsSavingDeadline(true);
+    try {
+      await createDeadlineApi(courseId, {
+        title: draftDeadline.title.trim(),
+        deadline_type: draftDeadline.type,
+        assessment_name:
+          draftDeadline.assessment_name.trim() || draftDeadline.title.trim(),
+        due_date: draftDeadline.due_date,
+        due_time: draftDeadline.due_time || null,
+        notes: draftDeadline.notes.trim() || null,
+      });
+      await refreshDeadlines(courseId);
+      setError("");
+      closeAddModal();
+    } catch (e) {
+      setError(getApiErrorMessage(e, "Error creating deadline."));
+    } finally {
+      setIsSavingDeadline(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 pb-20">
       <div className="mb-8">
@@ -329,7 +386,10 @@ export default function DeadlinesPage() {
             </p>
           </div>
           <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => {
+              setDraftDeadline(EMPTY_DEADLINE_FORM);
+              setShowAddModal(true);
+            }}
             className="flex items-center gap-2 rounded-xl bg-[#5F7A8A] px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
           >
             <Plus size={18} /> New Deadline
@@ -419,6 +479,163 @@ export default function DeadlinesPage() {
             >
               Looks Correct
             </button>
+          </div>
+        </div>
+      )}
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3A3530]/35 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-[2rem] border border-[#D4CFC7] bg-white p-8 shadow-2xl">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-bold text-[#3A3530]">
+                  Add Deadline
+                </h3>
+                <p className="mt-1 text-sm text-[#6B6560]">
+                  Create a manual deadline for {courseName || "your course"}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeAddModal}
+                className="rounded-full border border-[#E8E3DC] p-2 text-[#6B6560] transition hover:bg-[#F5F1EB]"
+                aria-label="Close add deadline dialog"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              <label className="grid gap-2 text-sm font-medium text-[#3A3530]">
+                Title
+                <input
+                  type="text"
+                  value={draftDeadline.title}
+                  onChange={(event) =>
+                    setDraftDeadline((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
+                  }
+                  placeholder="Final exam, Lab 3, Assignment 2..."
+                  className="rounded-xl border border-[#D4CFC7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#5F7A8A]"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-[#3A3530]">
+                Linked Assessment Name
+                <input
+                  type="text"
+                  value={draftDeadline.assessment_name}
+                  onChange={(event) =>
+                    setDraftDeadline((current) => ({
+                      ...current,
+                      assessment_name: event.target.value,
+                    }))
+                  }
+                  placeholder="Optional, defaults to title"
+                  className="rounded-xl border border-[#D4CFC7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#5F7A8A]"
+                />
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <label className="grid gap-2 text-sm font-medium text-[#3A3530] md:col-span-1">
+                  Type
+                  <select
+                    value={draftDeadline.type}
+                    onChange={(event) =>
+                      setDraftDeadline((current) => ({
+                        ...current,
+                        type: event.target.value as DeadlineType,
+                      }))
+                    }
+                    className="rounded-xl border border-[#D4CFC7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#5F7A8A]"
+                  >
+                    <option value="Assignment">Assignment</option>
+                    <option value="Quiz">Quiz</option>
+                    <option value="Test">Test</option>
+                    <option value="Exam">Exam</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-[#3A3530] md:col-span-1">
+                  Due Date
+                  <input
+                    type="date"
+                    value={draftDeadline.due_date}
+                    onChange={(event) =>
+                      setDraftDeadline((current) => ({
+                        ...current,
+                        due_date: event.target.value,
+                      }))
+                    }
+                    className="rounded-xl border border-[#D4CFC7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#5F7A8A]"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-[#3A3530] md:col-span-1">
+                  Due Time
+                  <input
+                    type="time"
+                    value={draftDeadline.due_time}
+                    onChange={(event) =>
+                      setDraftDeadline((current) => ({
+                        ...current,
+                        due_time: event.target.value,
+                      }))
+                    }
+                    className="rounded-xl border border-[#D4CFC7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#5F7A8A]"
+                  />
+                </label>
+              </div>
+
+              <label className="grid gap-2 text-sm font-medium text-[#3A3530]">
+                Notes
+                <textarea
+                  value={draftDeadline.notes}
+                  onChange={(event) =>
+                    setDraftDeadline((current) => ({
+                      ...current,
+                      notes: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                  placeholder="Optional notes"
+                  className="rounded-xl border border-[#D4CFC7] bg-white px-4 py-3 text-sm outline-none transition focus:border-[#5F7A8A]"
+                />
+              </label>
+
+              {error ? (
+                <div className="flex items-center gap-2 rounded-xl border border-[#F1D2D2] bg-[#FFF5F5] px-4 py-3 text-sm text-[#B86B6B]">
+                  <AlertCircle size={16} />
+                  <span>{error}</span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={closeAddModal}
+                className="rounded-xl border border-[#D4CFC7] px-5 py-3 text-sm font-bold text-[#6B6560] transition hover:bg-[#F5F1EB]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateDeadline}
+                disabled={isSavingDeadline}
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#5F7A8A] px-5 py-3 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-60"
+              >
+                {isSavingDeadline ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Plus size={16} />
+                )}
+                Save Deadline
+              </button>
+            </div>
           </div>
         </div>
       )}

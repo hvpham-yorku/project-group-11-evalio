@@ -229,19 +229,6 @@ export function GpaScaleConverter() {
             </span>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-[#D4CFC7] bg-white/75 p-4">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6560]">
-              How It Works
-            </p>
-            <p className="mt-2 text-xs leading-5 text-[#6B6560]">
-              The backend converts by taking the share of your current scale and
-              applying that same share to the target scale.
-            </p>
-            <p className="mt-3 break-words text-xs font-medium text-[#3A3530]">
-              {result?.formula ?? "Adjust the slider or scale values to calculate."}
-            </p>
-          </div>
-
           {isLoading ? (
             <p className="mt-3 text-xs text-[#6B6560]">Updating conversion...</p>
           ) : null}
