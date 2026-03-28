@@ -639,6 +639,76 @@ export default function DeadlinesPage() {
           </div>
         </div>
       )}
+
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3A3530]/35 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-[2rem] border border-[#D4CFC7] bg-white p-8 shadow-2xl">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-bold text-[#3A3530]">
+                  Export to Google Calendar
+                </h3>
+                <p className="mt-1 text-sm text-[#6B6560]">
+                  Send the selected deadlines to your connected Google Calendar.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isExporting) return;
+                  setShowExportModal(false);
+                }}
+                className="rounded-full border border-[#E8E3DC] p-2 text-[#6B6560] transition hover:bg-[#F5F1EB]"
+                aria-label="Close export dialog"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-5">
+              <p className="text-sm font-semibold text-[#3A3530]">
+                {selectedDeadlines.size} deadline
+                {selectedDeadlines.size === 1 ? "" : "s"} selected
+              </p>
+              <p className="mt-2 text-xs leading-5 text-[#6B6560]">
+                Only the checked deadlines will be exported. Existing Google
+                Calendar duplicate protection still applies.
+              </p>
+            </div>
+
+            {error ? (
+              <div className="mt-4 flex items-center gap-2 rounded-xl border border-[#F1D2D2] bg-[#FFF5F5] px-4 py-3 text-sm text-[#B86B6B]">
+                <AlertCircle size={16} />
+                <span>{error}</span>
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowExportModal(false)}
+                disabled={isExporting}
+                className="rounded-xl border border-[#D4CFC7] px-5 py-3 text-sm font-bold text-[#6B6560] transition hover:bg-[#F5F1EB] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={isExporting || selectedDeadlines.size === 0}
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#5F7A8A] px-5 py-3 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-60"
+              >
+                {isExporting ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Sparkles size={16} />
+                )}
+                Export Selected
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
