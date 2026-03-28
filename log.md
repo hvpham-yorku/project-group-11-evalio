@@ -1,5 +1,45 @@
 # EECS 2311 – Group 11 – Evalio
 
+# ITR3 Truth Sweep Addendum
+
+This addendum records a documentation-and-implementation truth sweep performed
+against the repository's current `main` branch state.
+
+## Verified Current-State Notes
+
+- Saved scenarios are implemented and persisted through the scenario route,
+  service, and repository layers.
+- Planning and risk-alert endpoints are implemented under `/planning/*`.
+- Deadline workflows include extraction, CRUD, ICS export, and optional Google
+  Calendar OAuth/export.
+- GPA support now includes:
+  - percentage-based single-course GPA
+  - weighted manual cGPA from supplied course credits
+  - normalized GPA scale conversion for an existing GPA value
+- The final architecture documentation now has:
+  - a current implementation architecture doc
+  - an ITR3 architecture view that labels integration-test seams
+
+## Documentation Corrections Made In This Sweep
+
+- Removed stale claims that scenarios were only conceptual or future work.
+- Corrected frontend docs that described real routes as placeholders.
+- Corrected GPA wording so the dashboard overall GPA snapshot is no longer
+  described as a transcript-weighted cGPA.
+- Updated backend/frontend README files so run/test instructions match the repo
+  more closely.
+
+## Known Limitations Logged Honestly
+
+- The dashboard overall GPA snapshot is still an equal-weight average because
+  course credits are not currently part of the setup flow.
+- `/gpa/convert` is a normalized scale converter, not an official registrar
+  equivalency engine.
+- Extraction remains best-effort and depends on OCR plus LLM availability.
+- Historical ITR3 task-cost accounting was not present in the repo at the time
+  of this sweep, so this addendum documents implementation truth rather than
+  reconstructing missing effort data.
+
 # Iteration 1 Log (ITR1)
 
 This document records the planning, development process, task assignments, time tracking, and design decisions for Iteration 1 of the Evalio project.

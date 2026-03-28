@@ -34,6 +34,7 @@ import {
   type UniformRequiredAssessment,
   runDashboardWhatIf,
 } from "@/lib/api";
+import { GpaScaleConverter } from "@/components/setup/GpaScaleConverter";
 
 const DEFAULT_TARGET_GRADE = 85;
 const TARGET_STORAGE_KEY = "evalio_target_grade";
@@ -828,7 +829,10 @@ export function Dashboard() {
       .slice(0, 3);
   }, [deadlines]);
 
-  const projectionBreakdown = whatIfResult?.breakdown ?? [];
+  const projectionBreakdown = useMemo(
+    () => whatIfResult?.breakdown ?? [],
+    [whatIfResult]
+  );
 
   const activeCourse = useMemo(
     () => courses.find((course) => course.course_id === activeCourseId) ?? null,
@@ -1501,7 +1505,7 @@ export function Dashboard() {
         <div>
           <h3 className="font-bold text-[#3A3530]">GPA Overview</h3>
           <p className="text-xs text-[#6B6560]">
-            Track performance across terms and overall
+            Track course-based GPA snapshots and compare point scales
           </p>
         </div>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -1509,7 +1513,7 @@ export function Dashboard() {
           <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <GraduationCap size={18} className="text-[#5F7A8A]" />
-              <h3 className="font-bold text-[#3A3530]">Term GPA</h3>
+              <h3 className="font-bold text-[#3A3530]">Term GPA Snapshot</h3>
             </div>
             <div className="text-center py-6">
               <div className="text-5xl font-bold text-[#3A3530]">
@@ -1567,7 +1571,7 @@ export function Dashboard() {
           <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-6 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp size={18} className="text-[#5F7A8A]" />
-              <h3 className="font-bold text-[#3A3530]">Cumulative GPA (cGPA)</h3>
+              <h3 className="font-bold text-[#3A3530]">Overall GPA Snapshot</h3>
             </div>
             <div className="flex justify-center mb-4">
               <div className="flex rounded-lg bg-[#E8EFF5] p-1">
@@ -1625,8 +1629,15 @@ export function Dashboard() {
                 />
               </div>
             </div>
+            <div className="mt-4 rounded-2xl border border-[#E8E3DC] bg-[#F8F5F0] p-3 text-[11px] leading-5 text-[#6B6560]">
+              This overall value is an equal-weight course average across tracked
+              courses. It is not a transcript-weighted cGPA because course
+              credits are not currently captured in the setup flow.
+            </div>
           </div>
         </div>
+
+        <GpaScaleConverter />
       </div>
 
       {/* Action Button */}

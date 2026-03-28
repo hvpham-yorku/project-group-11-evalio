@@ -1,6 +1,8 @@
 # Evalio Backend
 
-FastAPI backend for authentication, course management, extraction, grading analysis, GPA conversion, and deadline workflows.
+FastAPI backend for authentication, course management, extraction, grading
+analysis, GPA conversion, planning/risk views, scenario persistence, and
+deadline workflows.
 
 Note: submission-facing DB artifacts live in `../database/`; runtime DB code remains in this `backend/` package.
 
@@ -16,6 +18,7 @@ Note: submission-facing DB artifacts live in `../database/`; runtime DB code rem
   - `app/routes/scenarios.py`
   - `app/routes/gpa.py`
   - `app/routes/deadlines.py`
+  - `app/routes/planning.py`
 - Service layer in `app/services/`
 - Extraction system split into `app/services/extraction/` with `orchestrator.py` entrypoint
 
@@ -155,7 +158,10 @@ All `/courses/*`, `/gpa/*`, `/dashboard/*`, `/deadlines/*`, and extraction endpo
 - `POST /courses/`
 - `PUT /courses/{course_id}/weights`
 - `PUT /courses/{course_id}/grades`
+- `PUT /courses/{course_id}`
 - `POST /courses/{course_id}/target`
+- `GET /courses/{course_id}/target`
+- `DELETE /courses/{course_id}/target`
 - `POST /courses/{course_id}/minimum-required`
 - `POST /courses/{course_id}/whatif`
 
@@ -184,6 +190,7 @@ All `/courses/*`, `/gpa/*`, `/dashboard/*`, `/deadlines/*`, and extraction endpo
 - `GET /courses/{course_id}/gpa`
 - `POST /courses/{course_id}/gpa/whatif`
 - `POST /gpa/cgpa`
+- `POST /gpa/convert`
 
 ### Deadlines
 
@@ -194,34 +201,50 @@ All `/courses/*`, `/gpa/*`, `/dashboard/*`, `/deadlines/*`, and extraction endpo
 - `DELETE /courses/{course_id}/deadlines/{deadline_id}`
 - `POST /courses/{course_id}/deadlines/export/ics`
 - `GET /deadlines/google/authorize`
+- `GET /deadlines/google/status`
 - `GET /deadlines/google/callback`
 - `POST /courses/{course_id}/deadlines/export/gcal`
+
+### Planning
+
+- `GET /planning/weekly`
+- `GET /planning/alerts`
 
 ## Storage Notes
 
 - Default mode uses in-memory repositories.
-- If `USE_POSTGRES=true`, courses/users/deadlines/scenarios use PostgreSQL repositories.
+- If `USE_POSTGRES=true`, users/courses/deadlines/scenarios/calendar
+  connections/grade targets use PostgreSQL repositories.
 - If `USE_POSTGRES=true` and Postgres is unavailable, startup fails by default.
 - Set `POSTGRES_FALLBACK_TO_MEMORY=true` only when fallback is intentionally desired.
 - On startup, backend logs the active mode as `[evalio] persistence_mode=postgres|in-memory`.
+
+## Known Limitations
+
+- Dashboard-level overall GPA in the frontend is an equal-weight snapshot across
+  tracked courses. The backend can compute a true weighted cGPA only when the
+  caller supplies explicit course credits to `/gpa/cgpa`.
+- `/gpa/convert` performs normalized scale conversion for an already-issued GPA
+  value; it is not an official registrar equivalency engine.
+- Extraction and deadline inference are best-effort and depend on document
+  quality plus OCR/LLM availability.
 
 ## Testing
 
 Run backend tests:
 
 ```bash
-source .venv/bin/activate
-python -m pytest -q
+env PYTHONPATH=. .venv/bin/pytest -q
 ```
 
 Run only unit tests:
 
 ```bash
-python -m pytest -q test/unit
+env PYTHONPATH=. .venv/bin/pytest -q test/unit
 ```
 
 Run only integration tests:
 
 ```bash
-python -m pytest -q test/integration
+env PYTHONPATH=. .venv/bin/pytest -q test/integration
 ```

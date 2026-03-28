@@ -157,16 +157,27 @@ Rule interpretation is performed in `grading_service.py`.
 
 ### Scenario
 
-There is no persisted scenario model in the analyzed files.
+Saved scenarios are now part of the implemented domain model.
 
-Scenario behavior exists as computation inputs/outputs:
+Current scenario behavior is split into two layers:
 
-- `calculate_whatif_scenario(course, assessment_name, hypothetical_score)`
-- Returns projected grade effects without persistence.
+- saved scenario persistence
+  - `routes/scenarios.py`
+  - `services/scenario_service.py`
+  - `repositories/base.py` (`StoredScenario`, `StoredScenarioEntry`)
+  - `repositories/inmemory_scenario_repo.py`
+  - `repositories/postgres_scenario_repo.py`
+- read-only scenario execution
+  - single-assessment execution can delegate to
+    `calculate_whatif_scenario(course, assessment_name, hypothetical_score)`
+  - multi-assessment execution delegates to
+    `strategy_service.compute_multi_whatif(...)`
 
-From current backend behavior:
+Important behavior note:
 
-- Scenarios are **ephemeral/read-only calculations**, not stored as domain records.
+- saved scenarios are persisted as named scenario definitions
+- running a saved scenario is still **simulation-only**
+- executing a scenario does **not** mutate stored course grades
 
 ### Deadline
 
@@ -191,6 +202,49 @@ Auxiliary request models:
 - `DeadlineCreate`
 - `DeadlineUpdate`
 - `DeadlineExportRequest`
+
+### GradeTarget
+
+Represents a saved user target for a specific course.
+
+Persistence appears in:
+
+- `repositories/base.py` (`StoredGradeTarget`)
+- `repositories/inmemory_grade_target_repo.py`
+- `repositories/postgres_grade_target_repo.py`
+- `db.py` (`GradeTargetDB`)
+
+Current persisted fields:
+
+- `target_id: UUID`
+- `course_id: UUID`
+- `target_percentage: float | None`
+- `created_at: datetime`
+
+This model is surfaced through `/courses/{course_id}/target` endpoints and is
+also consumed by `planning_service.py` when generating target-risk alerts.
+
+### CalendarConnection
+
+Represents an OAuth-backed external calendar connection owned by a user.
+
+Persistence appears in:
+
+- `repositories/base.py` (`StoredCalendarConnection`)
+- `repositories/inmemory_calendar_repo.py`
+- `repositories/postgres_calendar_repo.py`
+- `db.py` (`CalendarConnectionDB`, `DeadlineExportDB`)
+
+Current persisted concerns include:
+
+- provider identity (for example `google`)
+- connection state (`is_connected`)
+- selected calendar metadata
+- OAuth token storage
+- deadline export linkage to external event IDs
+
+These records support Google Calendar authorization, token reuse, and duplicate
+export prevention in the deadline workflow.
 
 ### Extraction Models
 
@@ -220,7 +274,10 @@ User (user_id)
     ├── Assessment (identified by name in current APIs)
     │   └── ChildAssessment (embedded under parent Assessment)
     ├── Deadline (deadline_id, linked by course_id)
-    └── Scenario (conceptual today; what-if inputs are computed, not persisted)
+    ├── Scenario (persisted saved scenario definitions)
+    └── GradeTarget (optional one-to-one target record)
+
+User also owns CalendarConnection records used for Google Calendar export.
 ```
 
 Operational relationship view:
@@ -228,10 +285,13 @@ Operational relationship view:
 ```text
 [User]
   1 ─── * [Course]
+  1 ─── * [CalendarConnection]
             1 ─── * [Assessment]
                       1 ─── * [ChildAssessment]
             1 ─── * [Deadline]
-            1 ─── * [Scenario] (future persistent model)
+            1 ─── * [Scenario]
+                      1 ─── * [ScenarioScore]
+            1 ─── 0..1 [GradeTarget]
 ```
 
 ## 4. Aggregate Root
@@ -245,7 +305,9 @@ Within current backend behavior, the course aggregate conceptually owns:
 - embedded score state (`raw_score`, `total_score`)
 - rule metadata (`rule_type`, `rule_config`)
 - bonus flags (`is_bonus`)
-- deadline association by `course_id`.
+- deadline association by `course_id`
+- saved scenario association by `course_id`
+- grade target association by `course_id`.
 
 Reasoning:
 
@@ -538,9 +600,9 @@ A relational schema intended to match current backend domain semantics must supp
 - Bonus assessments:
   - explicit `is_bonus` semantics in storage.
 - Scenario support:
-  - what-if inputs/results should be represented if scenario persistence is needed.
+  - persisted scenario definitions and per-assessment simulated scores.
 - Deadline model:
-  - course-linked deadline records and export metadata if deadline persistence is in scope.
+  - course-linked deadline records, export metadata, and calendar connection linkage.
 - Name-based update compatibility:
   - current services often identify assessments by `name`; schema and mappings should preserve deterministic assessment identity behavior.
 

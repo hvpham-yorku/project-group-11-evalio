@@ -178,6 +178,7 @@ export type CourseGpaResponse = {
   course_id: string;
   course_name: string;
   percentage: number;
+  is_failed?: boolean;
   totals: Record<string, unknown>;
   gpa: GpaConversion;
   all_scales: Record<string, GpaConversion>;
@@ -212,6 +213,16 @@ export type CgpaResponse = {
     reason: string;
   }>;
   formula: string;
+};
+
+export type GpaScaleConversionResponse = {
+  current_gpa: number;
+  from_scale: number;
+  to_scale: number;
+  converted_gpa: number;
+  normalized_percent: number;
+  formula: string;
+  method: string;
 };
 
 export type LearningStrategyTechnique = {
@@ -599,6 +610,17 @@ export function computeCgpa(payload: {
     method: "POST",
     body: JSON.stringify(payload),
   }) as Promise<CgpaResponse>;
+}
+
+export function convertGpaScale(payload: {
+  current_gpa: number;
+  from_scale: number;
+  to_scale: number;
+}) {
+  return request("/gpa/convert", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }) as Promise<GpaScaleConversionResponse>;
 }
 
 export function getLearningStrategies(courseId: string) {

@@ -2,7 +2,8 @@
 
 Main diagram locations for ITR2 review:
 
-- Architecture diagram: `docs/architecture/class diagram.png`
+- Current architecture document: `docs/architecture/current-architecture.md`
+- Historical architecture diagram: `docs/architecture/class diagram.png`
 - ITR1 architecture reference: `docs/architecture/itr1-architecture.png`
 - ER diagram: `docs/ER diagram/erdiagram_evalio.png`
 - Sequence diagrams:

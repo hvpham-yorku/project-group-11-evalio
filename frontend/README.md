@@ -51,8 +51,10 @@ App URL: `http://localhost:3000`
 - `/setup/deadlines`
 - `/setup/dashboard`
 - `/setup/explore`
-- `/setup/plan` (placeholder)
-- `/explore` (placeholder)
+- `/setup/risk-center`
+- `/setup/manage`
+- `/setup/plan` (alternate route to the scenario explorer component)
+- `/explore` (standalone scenario explorer wrapper)
 
 ## Setup Flow Behavior
 
@@ -61,7 +63,7 @@ App URL: `http://localhost:3000`
   - active `course_id` in localStorage
   - latest extraction result
   - institutional grading rules from the structure step
-- If no active course is selected, the frontend falls back to the most recently created course in API results.
+- If no active course is selected, the frontend falls back to the first course in API results.
 
 ## Extraction Integration
 
@@ -110,3 +112,5 @@ npm run lint
 
 - Upload input UI currently accepts `.pdf`, `.docx`, `.txt`, `.png`, `.jpg`, `.jpeg`.
 - Deadlines page currently uses localStorage for pending/confirmed UI state while the backend also exposes deadline APIs.
+- Dashboard "Overall GPA Snapshot" is an equal-weight course average, not a transcript-weighted cGPA, because course credits are not captured in setup.
+- The GPA scale converter in the dashboard is a normalized point-scale comparison tool, not an official institutional conversion policy.

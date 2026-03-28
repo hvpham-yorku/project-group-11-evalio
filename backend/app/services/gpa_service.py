@@ -99,6 +99,48 @@ class GpaConversionError(Exception):
 
 # ─── Core conversion ──────────────────────────────────────────────────────────
 
+def _coerce_finite_float(value: Any, *, field_name: str) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise GpaConversionError(f"{field_name} must be a number") from exc
+
+    if parsed != parsed or parsed in (float("inf"), float("-inf")):
+        raise GpaConversionError(f"{field_name} must be a finite number")
+    return parsed
+
+
+def _normalize_percentage(percent: Any) -> float:
+    parsed = _coerce_finite_float(percent, field_name="percentage")
+    if parsed < 0:
+        raise GpaConversionError("percentage must be greater than or equal to 0")
+    return parsed
+
+
+def _normalize_credits(credits: Any) -> float:
+    parsed = _coerce_finite_float(credits, field_name="credits")
+    if parsed <= 0:
+        raise GpaConversionError("credits must be greater than 0")
+    return parsed
+
+
+def _normalize_scale_value(scale_value: Any, *, field_name: str) -> float:
+    parsed = _coerce_finite_float(scale_value, field_name=field_name)
+    if parsed <= 0:
+        raise GpaConversionError(f"{field_name} must be greater than 0")
+    return parsed
+
+
+def _normalize_current_gpa(current_gpa: Any, *, source_scale: float) -> float:
+    parsed = _coerce_finite_float(current_gpa, field_name="current_gpa")
+    if parsed < 0:
+        raise GpaConversionError("current_gpa must be greater than or equal to 0")
+    if parsed > source_scale:
+        raise GpaConversionError(
+            f"current_gpa cannot exceed from_scale ({source_scale:g})"
+        )
+    return parsed
+
 def get_scale(scale_name: str) -> list[GpaBand]:
     """Return the band table for *scale_name* or raise ``GpaConversionError``."""
     bands = SCALES.get(scale_name)
@@ -117,15 +159,16 @@ def convert_percentage(percent: float, scale_name: str) -> dict[str, Any]:
     Boundary rule: ``percent >= band.min_percent`` (inclusive lower bound),
     evaluated from the highest band downward.
     """
+    normalized_percent = _normalize_percentage(percent)
     bands = get_scale(scale_name)
     for band in bands:
-        if percent >= band.min_percent:
+        if normalized_percent >= band.min_percent:
             return {
                 "letter": band.letter,
                 "grade_point": band.grade_point,
                 "description": band.description,
                 "scale": scale_name,
-                "percentage": round(percent, 2),
+                "percentage": round(normalized_percent, 2),
             }
     # Fallback — should never be reached because all scales end with min=0.
     last = bands[-1]
@@ -134,13 +177,55 @@ def convert_percentage(percent: float, scale_name: str) -> dict[str, Any]:
         "grade_point": last.grade_point,
         "description": last.description,
         "scale": scale_name,
-        "percentage": round(percent, 2),
+        "percentage": round(normalized_percent, 2),
     }
 
 
 def convert_percentage_all_scales(percent: float) -> dict[str, dict[str, Any]]:
     """Convert a single percentage to every supported GPA scale."""
     return {name: convert_percentage(percent, name) for name in SUPPORTED_SCALES}
+
+
+def convert_gpa_value(
+    current_gpa: float,
+    from_scale: float,
+    to_scale: float,
+) -> dict[str, Any]:
+    """
+    Convert an already-issued GPA between arbitrary numeric scales.
+
+    This is a normalized point-scale conversion, not a transcript-equivalency
+    or institutional percentage conversion.
+    """
+    normalized_from_scale = _normalize_scale_value(
+        from_scale,
+        field_name="from_scale",
+    )
+    normalized_to_scale = _normalize_scale_value(
+        to_scale,
+        field_name="to_scale",
+    )
+    normalized_current_gpa = _normalize_current_gpa(
+        current_gpa,
+        source_scale=normalized_from_scale,
+    )
+
+    ratio = normalized_current_gpa / normalized_from_scale
+    converted_value = ratio * normalized_to_scale
+
+    return {
+        "current_gpa": round(normalized_current_gpa, 4),
+        "from_scale": round(normalized_from_scale, 4),
+        "to_scale": round(normalized_to_scale, 4),
+        "converted_gpa": round(converted_value, 4),
+        "normalized_percent": round(ratio * 100, 2),
+        "formula": (
+            f"converted_gpa = (current_gpa / from_scale) * to_scale = "
+            f"({round(normalized_current_gpa, 4)} / {round(normalized_from_scale, 4)}) "
+            f"* {round(normalized_to_scale, 4)} = {round(converted_value, 4)}"
+        ),
+        "method": "normalized_linear_scale_conversion",
+    }
 
 
 # ─── Weighted cGPA ─────────────────────────────────────────────────────────────
@@ -181,7 +266,7 @@ def calculate_weighted_gpa(
 
     for entry in courses:
         name = entry.get("name", "Unknown")
-        credits = float(entry.get("credits", 0))
+        credits = _normalize_credits(entry.get("credits", 0))
         percentage = entry.get("percentage")
         grade_type = entry.get("grade_type", "numeric")
 
@@ -195,7 +280,7 @@ def calculate_weighted_gpa(
             })
             continue
 
-        pct = float(percentage)
+        pct = _normalize_percentage(percentage)
         conversion = convert_percentage(pct, resolved_scale)
         gp = conversion["grade_point"]
 

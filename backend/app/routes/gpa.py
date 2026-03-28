@@ -9,7 +9,7 @@ POST /gpa/cgpa                         → cumulative GPA across courses
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +22,7 @@ from app.services.gpa_service import (
     SUPPORTED_SCALES,
     GpaConversionError,
     calculate_weighted_gpa,
+    convert_gpa_value,
     convert_percentage,
     convert_percentage_all_scales,
     get_scales_metadata,
@@ -37,7 +38,9 @@ class CourseGpaEntry(BaseModel):
     name: str
     percentage: Optional[float] = None
     credits: float = Field(..., gt=0)
-    grade_type: str = Field(default="numeric")
+    grade_type: Literal["numeric", "pass_fail", "withdrawn"] = Field(
+        default="numeric"
+    )
 
 
 class CgpaRequest(BaseModel):
@@ -55,6 +58,12 @@ class WhatIfGpaRequest(BaseModel):
         ),
     )
     scale: str = Field(default="4.0")
+
+
+class GpaScaleConvertRequest(BaseModel):
+    current_gpa: float = Field(..., ge=0)
+    from_scale: float = Field(..., gt=0)
+    to_scale: float = Field(..., gt=0)
 
 
 # ─── Endpoints ─────────────────────────────────────────────────────────────────
@@ -179,3 +188,24 @@ def compute_cgpa(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return result
+
+
+@router.post("/gpa/convert")
+def convert_gpa_scale(
+    payload: GpaScaleConvertRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
+    """
+    Convert an already-issued GPA between arbitrary numeric scale maxima.
+
+    Example: 8.2 on a 9-point scale -> 3.6444 on a 4-point scale.
+    """
+    _ = current_user
+    try:
+        return convert_gpa_value(
+            current_gpa=payload.current_gpa,
+            from_scale=payload.from_scale,
+            to_scale=payload.to_scale,
+        )
+    except GpaConversionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

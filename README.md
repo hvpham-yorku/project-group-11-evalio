@@ -12,7 +12,9 @@ Evalio is a course-planning web app for tracking weighted assessments, calculati
 - Grade entry and standing calculation
 - Target grade feasibility and minimum-required score analysis
 - What-if analysis (single assessment and multi-assessment dashboard what-if)
-- GPA conversion endpoints (4.0 / 9.0 / 10.0) plus CGPA calculator
+- Saved scenarios (create, list, run, delete)
+- Weekly planning and risk alerts
+- GPA conversion endpoints (4.0 / 9.0 / 10.0), weighted manual cGPA calculator, and normalized GPA scale conversion
 - Outline extraction pipeline:
   - accepts `pdf`, `docx`, `txt`, `png`, `jpg`, `jpeg`
   - text extraction + OCR fallback for PDFs and direct OCR for images
@@ -25,21 +27,39 @@ Evalio is a course-planning web app for tracking weighted assessments, calculati
 
 ## Architecture
 
-- `frontend/`: Next.js App Router (TypeScript + Tailwind)
-- `backend/`: FastAPI app
-  - route modules under `backend/app/routes/`
-  - service layer under `backend/app/services/`
-  - extraction package under `backend/app/services/extraction/`
-- `database/`: submission-facing database artifacts (schema, setup notes, ER copy)
-- `submission/`: ITR deliverable PDFs grouped by iteration
-- `backend/test/`: pytest suite split into `unit/` and `integration/`
+The current architecture source of truth lives in
+`docs/architecture/current-architecture.md`.
+
+The ITR3 submission-oriented architecture diagram with integration-test seams
+lives in `docs/architecture/itr3-architecture-with-test-seams.md`.
+
+At a glance:
+
+- `frontend/`: Next.js App Router app with route-level pages under `src/app/`,
+  setup workflow screens under `src/components/setup/`, and a shared API client
+  in `src/lib/api.ts`.
+- `backend/`: FastAPI API with routers in `backend/app/routes/`, orchestration
+  services in `backend/app/services/`, repository-backed persistence in
+  `backend/app/repositories/`, and SQLAlchemy models in `backend/app/db.py`.
+- `backend/app/dependencies.py`: startup-time dependency wiring that chooses
+  between in-memory and PostgreSQL repositories, then exposes singleton service
+  instances to the route layer.
+- `backend/app/services/extraction/`: modular outline ingestion pipeline for
+  text extraction, OCR fallback, LLM-assisted grading extraction,
+  normalization/validation, and mapping into the course domain model.
+- `database/`: submission-facing database artifacts (schema, setup notes, ER
+  copy).
 
 Storage behavior today:
 
-- Default is in-memory repositories.
-- Optional PostgreSQL repositories can be enabled via `USE_POSTGRES=true` (courses, users, deadlines, scenarios).
-- When `USE_POSTGRES=true`, startup is fail-fast by default if Postgres is unavailable.
-- Set `POSTGRES_FALLBACK_TO_MEMORY=true` only if you explicitly want fallback behavior.
+- Default runtime mode uses in-memory repositories.
+- Optional PostgreSQL repositories can be enabled via `USE_POSTGRES=true` for
+  users, courses, deadlines, scenarios, calendar connections, and grade
+  targets.
+- When `USE_POSTGRES=true`, startup is fail-fast by default if Postgres is
+  unavailable.
+- Set `POSTGRES_FALLBACK_TO_MEMORY=true` only if you explicitly want fallback
+  behavior.
 
 ## Repository Layout
 
@@ -57,15 +77,15 @@ project-group-11-evalio/
 ├── setup.sh
 ├── docs/
 │   ├── api/GPA_ENDPOINTS.md
-│   └── architecture/
+│   └── architecture/            # current architecture doc + historical images
 ├── backend/
 │   ├── app/
 │   │   ├── main.py
-│   │   ├── routes/               # auth, courses, extraction, gpa, dashboard, deadlines
+│   │   ├── routes/               # auth, courses, dashboard, deadlines, extraction, gpa, planning, scenarios
 │   │   ├── services/
 │   │   │   ├── extraction/       # orchestrator + modular extraction helpers
 │   │   │   └── extraction_service.py  # compatibility wrapper
-│   │   ├── repositories/         # in-memory + postgres repos (users/courses/deadlines/scenarios)
+│   │   ├── repositories/         # in-memory + postgres repos (users/courses/deadlines/scenarios/calendar/targets)
 │   │   ├── models*.py
 │   │   └── db.py
 │   ├── test/
@@ -75,7 +95,7 @@ project-group-11-evalio/
 │   └── README.md
 └── frontend/
     ├── src/app/                  # app routes (landing, login, setup flow)
-    ├── src/components/setup/     # upload/structure/grades/goals/deadlines/dashboard
+    ├── src/components/setup/     # upload/structure/grades/goals/deadlines/dashboard/explore/risk/manage
     ├── src/lib/api.ts            # API client
     ├── package.json
     └── README.md
@@ -88,6 +108,21 @@ project-group-11-evalio/
   - `database/schema/evalio_schema.sql`
   - `docs/ER diagram/erdiagram_evalio.png`
   - `database/README.md`
+
+## Known Limitations
+
+- The dashboard's overall GPA snapshot is an equal-weight average across tracked
+  courses. The setup flow does not currently collect course credits, so it is
+  not a transcript-weighted cGPA.
+- The `/gpa/cgpa` endpoint is the truthful weighted cGPA calculator when the
+  caller supplies course percentages and credits explicitly.
+- The `/gpa/convert` endpoint performs normalized point-scale conversion for an
+  existing GPA value. It is useful for comparison, but it is not an official
+  institutional equivalency policy engine.
+- Extraction remains best-effort. Unsupported or ambiguous grading rules are
+  not treated as reliably inferable from uploaded documents.
+- Google Calendar export is optional and requires valid Google OAuth
+  configuration in `backend/.env`.
 
 ## Quick Start
 
@@ -254,6 +289,7 @@ Base URL: `http://127.0.0.1:8000`
   - `GET /courses/{course_id}/gpa`
   - `POST /courses/{course_id}/gpa/whatif`
   - `POST /gpa/cgpa`
+  - `POST /gpa/convert`
 - Deadlines:
   - `POST /courses/{course_id}/deadlines/extract`
   - `GET /courses/{course_id}/deadlines`
@@ -262,6 +298,7 @@ Base URL: `http://127.0.0.1:8000`
   - `DELETE /courses/{course_id}/deadlines/{deadline_id}`
   - `POST /courses/{course_id}/deadlines/export/ics`
   - `GET /deadlines/google/authorize`
+  - `GET /deadlines/google/status`
   - `GET /deadlines/google/callback`
   - `POST /courses/{course_id}/deadlines/export/gcal`
 
@@ -284,8 +321,7 @@ Backend tests:
 
 ```bash
 cd backend
-source .venv/bin/activate
-python -m pytest -q
+env PYTHONPATH=. .venv/bin/pytest -q
 ```
 
 Frontend lint:
@@ -294,14 +330,6 @@ Frontend lint:
 cd frontend
 npm run lint
 ```
-
-## Known Limitations
-
-- Default runtime storage is still mostly in-memory.
-- PostgreSQL integration supports course, user, deadline, and scenario repositories when enabled.
-- Extraction quality depends on outline formatting and OCR quality.
-- Frontend upload picker supports `.pdf/.doc/.docx/.txt/.png/.jpg/.jpeg`.
-- `/setup/plan` and `/explore` are placeholder routes.
 
 ## Iteration Artifacts
 

@@ -11,6 +11,8 @@ This folder is intentionally separate for EECS 2311 ITR2 submission review.
 
 - Runtime backend database code is in `backend/` (connection config, repositories, models, dependency wiring).
 - This folder is for submission-facing artifacts only.
+- When reviewing implementation truth, treat `backend/app/db.py` plus runtime
+  repository mappings as authoritative over any older submission snapshot.
 
 ## Optional Local Use
 

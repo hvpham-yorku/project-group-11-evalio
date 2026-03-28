@@ -398,8 +398,8 @@ export default function DeadlinesPage() {
           <div>
             <h4 className="text-xl font-bold">Review AI Extraction</h4>
             <p className="text-sm text-white/70">
-              We've pre-filled your schedule. Review the list above and confirm
-              to save.
+              We&apos;ve pre-filled your schedule. Review the list above and
+              confirm to save.
             </p>
           </div>
           <div className="flex gap-4 w-full md:w-auto">

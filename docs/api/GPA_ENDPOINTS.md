@@ -15,6 +15,7 @@
    - [GET /courses/{course_id}/gpa](#get-coursescourse_idgpa)
    - [POST /courses/{course_id}/gpa/whatif](#post-coursescourse_idgpawhatif)
    - [POST /gpa/cgpa](#post-gpacgpa)
+   - [POST /gpa/convert](#post-gpaconvert)
 4. [Error Handling](#error-handling)
 5. [Conversion Rules](#conversion-rules)
 
@@ -27,7 +28,16 @@ The GPA module converts course percentages into letter grades and grade-point va
 - **Single-course GPA**: derive GPA from a course's current graded assessments.
 - **What-if GPA**: project GPA under hypothetical score overrides (read-only, non-persisting).
 - **Cumulative GPA (cGPA)**: compute a weighted cGPA across multiple manually supplied courses.
+- **Scale-to-scale GPA conversion**: convert an already-issued GPA between arbitrary numeric scales using normalized linear scaling.
 - **Scales metadata**: expose all band tables so the frontend can render dropdowns and legends.
+
+Important distinction:
+
+- `/courses/{course_id}/gpa` and `/gpa/cgpa` are percentage-to-grade-point GPA features.
+- `/gpa/convert` is a point-scale normalization feature for an existing GPA
+  value such as `8.2 / 9.0 -> 3.6444 / 4.0`.
+- The frontend dashboard's "Overall GPA Snapshot" is currently an equal-weight
+  course average because the setup flow does not yet collect course credits.
 
 ---
 
@@ -47,6 +57,9 @@ Conversion uses **inclusive lower bounds** (`>=`), evaluated from the highest ba
 |-----------|-------------------|-----|
 | 79.5% | B+ (3.3) | 79.5 < 80 threshold |
 | 80.0% | A- (3.7) | 80.0 >= 80 threshold |
+
+Negative percentages are rejected. Bonus-adjusted percentages above 100 still
+map to the highest GPA band on the requested supported scale.
 
 ---
 
@@ -130,6 +143,7 @@ Cookie: evalio_access_token=<jwt>
   "course_id": "550e8400-e29b-41d4-a716-446655440000",
   "course_name": "EECS 2311",
   "percentage": 82.5,
+  "is_failed": false,
   "totals": {
     "final_total": 82.5,
     "earned": 82.5,
@@ -313,6 +327,52 @@ Content-Type: application/json
 
 ---
 
+### POST `/gpa/convert`
+
+Convert an already-issued GPA value between arbitrary point-scale maxima.
+
+This endpoint is intentionally different from the percentage-based GPA endpoints:
+it does not infer letters or percentages from institutional bands. Instead, it
+normalizes the current GPA against its source scale and applies that ratio to
+the target scale.
+
+#### Request
+
+```
+POST /gpa/convert
+Cookie: evalio_access_token=<jwt>
+Content-Type: application/json
+
+{
+  "current_gpa": 8.2,
+  "from_scale": 9.0,
+  "to_scale": 4.0
+}
+```
+
+#### Response `200 OK`
+
+```json
+{
+  "current_gpa": 8.2,
+  "from_scale": 9.0,
+  "to_scale": 4.0,
+  "converted_gpa": 3.6444,
+  "normalized_percent": 91.11,
+  "formula": "converted_gpa = (current_gpa / from_scale) * to_scale = (8.2 / 9.0) * 4.0 = 3.6444",
+  "method": "normalized_linear_scale_conversion"
+}
+```
+
+#### Errors
+
+| Status | Condition |
+|--------|-----------|
+| 400 | `current_gpa` exceeds `from_scale`, or a scale is not greater than 0 |
+| 422 | Validation error (missing fields, negative values) |
+
+---
+
 ## Error Handling
 
 All error responses follow FastAPI's standard format:
@@ -325,7 +385,7 @@ All error responses follow FastAPI's standard format:
 
 | HTTP Status | Meaning |
 |-------------|---------|
-| 400 | Bad request (unsupported scale, invalid assessment name) |
+| 400 | Bad request (unsupported scale, invalid assessment name, invalid negative percentage, invalid scale-conversion input) |
 | 401 | Missing or expired JWT cookie |
 | 404 | Course not found or not owned by user |
 | 422 | Pydantic validation error (malformed request body) |

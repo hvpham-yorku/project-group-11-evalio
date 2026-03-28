@@ -136,7 +136,9 @@ export function SetupCourseProvider({
       setCourseId,
       ensureCourseIdFromList,
       extractionResult,
+      setExtractionResult,
       institutionalGradingRules,
+      setInstitutionalGradingRules,
     ]
   );
 
