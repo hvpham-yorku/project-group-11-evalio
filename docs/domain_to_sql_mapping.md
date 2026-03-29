@@ -1,280 +1,257 @@
-# Domain Model -> SQL Mapping (Audit)
+# Domain Model to SQL Mapping
 
-This document maps the current backend domain model to the SQL schema in `database/schema/evalio_schema.sql`.
+This document maps the current backend domain model to the current SQL schema in
+`database/schema/evalio_schema.sql`.
+
+It is intended as a final-state truth document for the repo, not an earlier-gap
+audit. Where the SQL schema and runtime models intentionally differ, that
+difference is called out explicitly.
 
 ## Inputs Analyzed
 
 - `backend/app/models.py`
 - `backend/app/models_deadline.py`
 - `backend/app/models_extraction.py`
+- `backend/app/db.py`
+- `backend/app/repositories/postgres_*.py`
 - `docs/domain_model_spec.md`
 - `database/schema/evalio_schema.sql`
 
-## Domain Hierarchy Diagram
-
-```text
-Course
- ├── Assessments
- │      ├── ChildAssessments
- │      ├── Rules
- │      └── Scores
- ├── Scenarios
- │      └── ScenarioScores
- └── Deadlines
-```
-
-## SQL Tables
+## Current SQL Tables
 
 - `users`
+- `calendar_connections`
 - `courses`
-- `assessments`
-- `scores`
-- `rules`
+- `deadlines`
+- `deadline_exports`
 - `assessment_categories`
+- `assessments`
+- `rules`
 - `grade_targets`
 - `scenarios`
 - `scenario_scores`
 
+Important truth note:
+
+- The final SQL schema does **not** use a standalone `scores` table.
+- Current runtime score state is stored directly on `assessments` through
+  `raw_score` and `total_score`.
+
+## High-Level Domain Relationship View
+
+```text
+User
+ ├── Course
+ │    ├── Assessment
+ │    │    └── Child Assessment
+ │    ├── Deadline
+ │    ├── Scenario
+ │    │    └── Scenario Score
+ │    └── Grade Target
+ └── Calendar Connection
+      └── Deadline Export
+```
+
 ## Entity Mapping
+
+### User
+
+#### Domain
+
+- Authenticated application user
+
+#### Runtime models / usage
+
+- Auth payloads and service-layer identity lookup
+- persisted through repository layer and `UserDB`
+
+#### SQL table
+
+- `users`
+
+#### SQL columns
+
+- `id`
+- `email`
+- `password_hash`
+- `created_at`
+
+#### Notes
+
+- This mapping is direct and complete.
 
 ### Course
 
-#### 1) Domain Entity
-`Course` (aggregate root, represented by `CourseCreate` + repository/API identity fields)
+#### Domain
 
-#### 2) Fields in Backend Model
-- From `CourseCreate`: `name`, `term`, `assessments`
-- From domain/runtime contract (`domain_model_spec.md`): `course_id`, `user_id`
+- Root academic-planning aggregate for one course workspace
 
-#### 3) SQL Table Used
+#### Runtime models / usage
+
+- `CourseCreate`
+- repository persisted course records
+- course-scoped APIs and orchestration services
+
+#### SQL table
+
 - `courses`
 
-#### 4) SQL Columns Used
-- `id` -> `course_id`
-- `user_id` -> `user_id`
-- `name` -> `name`
-- `term` -> `term`
+#### SQL columns used
 
-#### 5) Relationship Mapping
-- `courses.user_id -> users.id`
-- `courses.id -> assessments.course_id`
-- `courses.id -> scenarios.course_id`
-- (`deadlines` relationship expected by backend, but no SQL table exists)
-
-#### 6) Missing Columns in SQL (if any)
-- No direct `assessments` nested column (must be reconstructed via joins)
-
-#### 7) Extra Columns in SQL Not Used by Backend
+- `id`
+- `user_id`
+- `name`
+- `term`
+- `bonus_policy`
+- `bonus_cap_percentage`
 - `credits`
 - `final_percentage`
 - `grade_type`
 - `created_at`
 
+#### Relationship mapping
+
+- `courses.user_id -> users.id`
+- `courses.id -> assessments.course_id`
+- `courses.id -> deadlines.course_id`
+- `courses.id -> scenarios.course_id`
+- `courses.id -> grade_targets.course_id`
+- `courses.id -> assessment_categories.course_id`
+
+#### Notes
+
+- The SQL schema stores more durable course metadata than the lightweight
+  `CourseCreate` request model alone.
+- Credits and final-percentage fields exist in SQL and backend persistence, but
+  the standard setup UI still does not collect transcript-style credits during
+  the normal setup flow.
+
 ### Assessment
 
-#### 1) Domain Entity
-`Assessment` (`models.py`)
+#### Domain
 
-#### 2) Fields in Backend Model
+- Top-level assessment or parent assessment inside a course
+
+#### Runtime models / usage
+
+- `Assessment`
+- child-aware grading logic in `grading_service.py`
+
+#### SQL table
+
+- `assessments`
+
+#### SQL columns used
+
+- `id`
+- `course_id`
+- `parent_assessment_id`
+- `category_id`
 - `name`
 - `weight`
 - `raw_score`
 - `total_score`
-- `children`
-- `rule_type`
-- `rule_config`
 - `is_bonus`
+- `position`
+- `created_at`
 
-#### 3) SQL Table Used
-- Primary: `assessments`
-- Related: `rules`, `scores`
+#### Relationship mapping
 
-#### 4) SQL Columns Used
-- `assessments.name` -> `name`
-- `assessments.weight` -> `weight`
-- `assessments.course_id` -> parent course linkage
-- `rules.rule_type` -> `rule_type` (semantic mismatch in casing/value style)
-- `rules.rule_config` -> `rule_config`
-- `scores.score` -> partial score representation only
-
-#### 5) Relationship Mapping
 - `assessments.course_id -> courses.id`
+- `assessments.parent_assessment_id -> assessments.id`
+- `assessments.category_id -> assessment_categories.id`
 - `rules.assessment_id -> assessments.id`
-- `scores.assessment_id -> assessments.id`
+- `scenario_scores.assessment_id -> assessments.id`
+- `deadlines.assessment_id -> assessments.id`
 
-#### 6) Missing Columns in SQL (if any)
-- `raw_score` (exact field missing)
-- `total_score` (exact field missing)
-- `is_bonus`
-- `parent_assessment_id` (required to represent nested structure)
+#### Notes
 
-`parent_assessment_id` is required to reconstruct backend hierarchy semantics:
+- The final schema now supports nested assessment structure directly through
+  `parent_assessment_id`.
+- Score state is stored directly on assessments, which aligns with the runtime
+  grading model.
+- `position` provides deterministic ordering when reconstructing course trees.
 
-```text
-Assessment
-   -> children: List[ChildAssessment]
-```
+### Child Assessment
 
-Without this column, assessments remain flat and child nodes cannot be deterministically attached to parent assessments.
+#### Domain
 
-#### 7) Extra Columns in SQL Not Used by Backend
-- `assessments.id` (useful for persistence, not present in Pydantic model)
-- `assessments.category_id` (not used by backend grading domain)
-- `rules.created_at`
-- `scores.created_at`
+- Nested assessment under a parent `Assessment`
 
-### ChildAssessment
+#### Runtime models / usage
 
-#### 1) Domain Entity
-`ChildAssessment` (`models.py`)
+- `ChildAssessment`
 
-#### 2) Fields in Backend Model
-- `name`
-- `weight`
-- `raw_score`
-- `total_score`
+#### SQL representation
 
-#### 3) SQL Table Used
-- Intended reuse of `assessments` (same shape as assessment row), but schema lacks explicit hierarchy key
+- Reuses the `assessments` table
 
-#### 4) SQL Columns Used
-- Potentially `assessments.name`, `assessments.weight`
-- Potentially `scores.score` for derived percentage
+#### SQL columns used
 
-#### 5) Relationship Mapping
-- Backend needs: `Course -> Assessment(parent) -> ChildAssessment`
-- SQL currently supports only: `Course -> assessments (flat)`
+- Same persisted shape as `Assessment`, with child linkage represented by
+  `parent_assessment_id`
 
-#### 6) Missing Columns in SQL (if any)
-- `parent_assessment_id` (or equivalent) to represent child linkage
-- `raw_score`
-- `total_score`
+#### Notes
 
-#### 7) Extra Columns in SQL Not Used by Backend
-- `assessments.category_id` (not a child-link field)
-
-### Score
-
-#### 1) Domain Entity
-`Score` is embedded in `Assessment`/`ChildAssessment` as `raw_score` + `total_score` (no standalone Pydantic entity)
-
-#### 2) Fields in Backend Model
-- `raw_score`
-- `total_score`
-
-#### 3) SQL Table Used
-- `scores`
-
-#### 4) SQL Columns Used
-- `scores.score`
-
-#### 5) Relationship Mapping
-- `scores.assessment_id -> assessments.id` (1:1 via `UNIQUE`)
-
-#### 6) Missing Columns in SQL (if any)
-- `raw_score`
-- `total_score`
-
-Backend grading requires the ratio model (`raw_score / total_score`). A single `score` column cannot represent denominator-aware grading behavior, validation (`raw_score <= total_score`), or exact reconstruction of in-progress grading state.
-
-#### 7) Extra Columns in SQL Not Used by Backend
-- `scores.id`
-- `scores.created_at`
+- Child assessments are no longer a schema gap.
+- Parent-child hierarchy is representable and reconstructable from SQL.
 
 ### Rule
 
-#### 1) Domain Entity
-Embedded rule fields on `Assessment`
+#### Domain
 
-#### 2) Fields in Backend Model
+- Embedded rule metadata attached to one assessment
+
+#### Runtime models / usage
+
 - `rule_type`
 - `rule_config`
 
-#### 3) SQL Table Used
+#### SQL table
+
 - `rules`
 
-#### 4) SQL Columns Used
-- `rules.rule_type`
-- `rules.rule_config`
-- `rules.assessment_id`
+#### SQL columns used
 
-#### 5) Relationship Mapping
-- `rules.assessment_id -> assessments.id`
-
-#### 6) Missing Columns in SQL (if any)
-- No mandatory missing column for storage of current fields
-- Structural mismatch: backend expects at most one optional rule per assessment, SQL allows multiple rows per assessment
-
-#### 7) Extra Columns in SQL Not Used by Backend
-- `rules.id`
-- `rules.created_at`
-
-### Scenario
-
-#### 1) Domain Entity
-Scenario is conceptual/ephemeral in backend services (no persisted Pydantic scenario model)
-
-#### 2) Fields in Backend Model
-- Inputs handled in service methods (e.g., assessment target + hypothetical score)
-- No first-class stored model in `models.py`
-
-#### 3) SQL Table Used
-- `scenarios`
-
-#### 4) SQL Columns Used
-- `scenarios.id`
-- `scenarios.course_id`
-- `scenarios.name`
-- `scenarios.created_at`
-
-#### 5) Relationship Mapping
-- `scenarios.course_id -> courses.id`
-- `scenarios.id -> scenario_scores.scenario_id`
-
-#### 6) Missing Columns in SQL (if any)
-- None required for minimal scenario header persistence
-
-Scenarios are currently computed in backend services but will require persistence for User Story 2.
-
-#### 7) Extra Columns in SQL Not Used by Backend
-- Entire table is currently unused by active backend scenario logic (what-if is computed, not persisted)
-
-### ScenarioScore
-
-#### 1) Domain Entity
-No explicit backend model; scenario values are currently transient in what-if calculations
-
-#### 2) Fields in Backend Model
-- Conceptual fields only (assessment reference + hypothetical score)
-
-#### 3) SQL Table Used
-- `scenario_scores`
-
-#### 4) SQL Columns Used
-- `scenario_id`
+- `id`
 - `assessment_id`
-- `simulated_score`
+- `rule_type`
+- `rule_config`
+- `created_at`
 
-#### 5) Relationship Mapping
-- `scenario_scores.scenario_id -> scenarios.id`
-- `scenario_scores.assessment_id -> assessments.id`
+#### Notes
 
-#### 6) Missing Columns in SQL (if any)
-- If backend continues name-based assessment addressing, a mapping layer to assessment IDs is required
-- If backend stores raw/total what-if inputs, extra columns would be required
-
-#### 7) Extra Columns in SQL Not Used by Backend
-- `scenario_scores.id`
+- Runtime semantics expect at most one rule per assessment.
+- SQL matches that expectation through `UNIQUE (assessment_id)`.
+- Supported persisted rule types are aligned with the final backend values:
+  - `pure_multiplicative`
+  - `best_of`
+  - `drop_lowest`
+  - `mandatory_pass`
 
 ### Deadline
 
-#### 1) Domain Entity
-`Deadline` (`models_deadline.py`)
+#### Domain
 
-#### 2) Fields in Backend Model
-- `deadline_id`
+- Course-associated due date record used by planning and export workflows
+
+#### Runtime models / usage
+
+- `Deadline`
+- `DeadlineCreate`
+- `DeadlineUpdate`
+
+#### SQL table
+
+- `deadlines`
+
+#### SQL columns used
+
+- `id`
 - `course_id`
+- `assessment_id`
 - `title`
+- `deadline_type`
 - `due_date`
 - `due_time`
 - `source`
@@ -284,158 +261,269 @@ No explicit backend model; scenario values are currently transient in what-if ca
 - `gcal_event_id`
 - `created_at`
 
-#### 3) SQL Table Used
-- None in `database/schema/evalio_schema.sql`
+#### Relationship mapping
 
-#### 4) SQL Columns Used
-- Not applicable
+- `deadlines.course_id -> courses.id`
+- `deadlines.assessment_id -> assessments.id`
 
-#### 5) Relationship Mapping
-- Backend expects `Deadline.course_id -> Course.course_id`
-- SQL schema has no deadline table to enforce/store this relationship
+#### Notes
 
-#### 6) Missing Columns in SQL (if any)
-- All deadline persistence columns are missing
+- This is fully represented in the final SQL schema.
+- The runtime DB layer also contains compatibility helpers for older local DBs
+  that may still use legacy deadline columns.
 
-#### 7) Extra Columns in SQL Not Used by Backend
-- Not applicable (no deadline table exists)
+### Deadline Export
 
-### Extraction Entities
+#### Domain
 
-#### 1) Domain Entity
-Extraction models from `models_extraction.py`
+- Tracks external calendar export of a saved deadline
 
-#### 2) Fields in Backend Model
-- `OutlineExtractionRequest`: `filename`, `content_type`
-- `ExtractionAssessment`: `name`, `weight`, `is_bonus`, `children`, `rule`, `total_count`, `effective_count`, `unit_weight`, `rule_type`, `notes`
-- `ExtractionDeadline`: `title`, `due_date`, `due_time`, `source`, `notes`
-- `ExtractionDiagnostics`: `method`, `ocr_used`, `ocr_available`, `ocr_error`, `parse_warnings`, `confidence_score`, `confidence_level`, `deterministic_failed_validation`, `failure_reason`, `trigger_gpt`, `trigger_reasons`, `stub`
-- `ExtractionResponse`: `course_code`, `assessments`, `deadlines`, `diagnostics`, `structure_valid`, `message`
+#### Runtime models / usage
 
-#### 3) SQL Table Used
-- None in `database/schema/evalio_schema.sql`
+- export tracking via repository and SQLAlchemy models
 
-#### 4) SQL Columns Used
-- Not applicable
+#### SQL table
 
-#### 5) Relationship Mapping
-- Extraction output is transformed into course/assessment/deadline domain payloads; not persisted directly in current schema
+- `deadline_exports`
 
-#### 6) Missing Columns in SQL (if any)
-- No extraction run/audit tables exist (if persistence is desired)
+#### SQL columns used
 
-#### 7) Extra Columns in SQL Not Used by Backend
-- Not applicable
+- `id`
+- `deadline_id`
+- `connection_id`
+- `provider`
+- `external_event_id`
+- `exported_at`
 
-## Cross-Entity Mismatch Summary
+#### Relationship mapping
 
-### Structural mismatches
-- Nested child assessments are not representable as-is (no `parent_assessment_id` or equivalent self-reference in `assessments`).
-- Backend score model is two-field (`raw_score`, `total_score`), SQL score model is single-field (`score`).
-- Rule cardinality mismatch: backend expects one optional rule per assessment, SQL `rules` table allows multiple rows per assessment.
-- Deadlines have full backend models but no SQL table.
-- Extraction entities have backend models but no SQL tables.
+- `deadline_exports.deadline_id -> deadlines.id`
+- `deadline_exports.connection_id -> calendar_connections.id`
 
-### Naming/value mismatches
-- Backend rule values are lowercase style (`best_of`, `drop_lowest`), SQL constraint uses uppercase enum values (`BEST_OF`, `DROP_LOWEST`, `MANDATORY_PASS`, `BONUS`).
-- Backend often uses name-based assessment addressing; SQL scenario tables are ID-based.
+#### Notes
 
-### SQL-only tables currently outside backend domain models
-- `assessment_categories`
+- This table supports duplicate-export prevention and external-event linkage.
+
+### Calendar Connection
+
+#### Domain
+
+- External OAuth-backed calendar connection owned by a user
+
+#### Runtime models / usage
+
+- `CalendarConnectionDB`
+- calendar repository implementations
+
+#### SQL table
+
+- `calendar_connections`
+
+#### SQL columns used
+
+- `id`
+- `user_id`
+- `provider`
+- `calendar_id`
+- `access_token`
+- `refresh_token`
+- `token_expiry`
+- `is_connected`
+- `created_at`
+- `updated_at`
+
+#### Relationship mapping
+
+- `calendar_connections.user_id -> users.id`
+
+#### Notes
+
+- Final schema and runtime both support persisted Google Calendar connection
+  state.
+
+### Grade Target
+
+#### Domain
+
+- Saved target percentage for one course
+
+#### Runtime models / usage
+
+- persisted target record consumed by course and planning services
+
+#### SQL table
+
 - `grade_targets`
-- Some `courses` GPA-related columns (`credits`, `final_percentage`, `grade_type`)
 
-## Required SQL Changes for Full Backend Compatibility
+#### SQL columns used
 
-The following schema updates are required to fully align SQL storage with backend domain semantics.
+- `id`
+- `course_id`
+- `target_percentage`
+- `created_at`
 
-### Assessment hierarchy and structure
-- Add `assessments.parent_assessment_id` with self-reference:
+#### Relationship mapping
 
-```sql
-ALTER TABLE assessments
-ADD COLUMN parent_assessment_id UUID REFERENCES assessments(id) ON DELETE CASCADE;
-```
+- `grade_targets.course_id -> courses.id`
 
-Note: if `assessments.id` were integer in a different schema variant, use matching integer FK type.
+#### Notes
 
-### Scoring model support
-- Add score pair columns required by backend grading logic:
+- One-to-one course target persistence is enforced by `UNIQUE (course_id)`.
 
-```sql
-ALTER TABLE assessments
-ADD COLUMN raw_score NUMERIC,
-ADD COLUMN total_score NUMERIC;
-```
+### Scenario
 
-### Bonus support
-- Add bonus flag:
+#### Domain
 
-```sql
-ALTER TABLE assessments
-ADD COLUMN is_bonus BOOLEAN NOT NULL DEFAULT FALSE;
-```
+- Persisted named scenario definition for a course
 
-### Assessment Ordering
+#### Runtime models / usage
 
-Relational databases do not guarantee insertion order for query results. To reconstruct `Course -> Assessment -> ChildAssessment` deterministically, add an explicit ordering column and always query with `ORDER BY`.
+- `StoredScenario`
+- `routes/scenarios.py`
+- `services/scenario_service.py`
+- postgres and in-memory scenario repositories
 
-```sql
-ALTER TABLE assessments
-ADD COLUMN position INTEGER;
-```
+#### SQL table
 
-### Rule cardinality alignment
-- Enforce one rule per assessment to match backend semantics:
+- `scenarios`
 
-```sql
-ALTER TABLE rules
-ADD CONSTRAINT unique_rule_per_assessment UNIQUE (assessment_id);
-```
+#### SQL columns used
 
-### Deadlines persistence
-- Add deadlines table used by backend deadline models:
+- `id`
+- `course_id`
+- `name`
+- `created_at`
 
-```sql
-CREATE TABLE deadlines (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    due_date DATE NOT NULL,
-    due_time TIME,
-    source VARCHAR(20) NOT NULL DEFAULT 'manual',
-    notes TEXT,
-    assessment_name TEXT,
-    exported_to_gcal BOOLEAN NOT NULL DEFAULT FALSE,
-    gcal_event_id TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
+#### Relationship mapping
 
-## Repository Integration Notes
+- `scenarios.course_id -> courses.id`
+- `scenario_scores.scenario_id -> scenarios.id`
 
-Relational rows should be reconstructed into the backend aggregate shape:
+#### Notes
 
-```text
-Course
-  -> List[Assessment]
-       -> children: List[ChildAssessment]
-```
+- Saved scenarios are part of the implemented final system.
+- Running a scenario remains simulation-only; it does not mutate stored grades.
 
-High-level reconstruction steps:
+### Scenario Score
 
-1. Load course.
-2. Load assessments.
-3. Load scores.
-4. Load rules.
-5. Split parent vs child assessments.
-6. Attach children.
-7. Hydrate `Assessment` objects.
-8. Return `Course` aggregate.
+#### Domain
 
-Additional integration details:
+- Per-assessment override value stored under a saved scenario
 
-- The repository should normalize rule enum values between SQL (`BEST_OF`) and backend (`best_of`).
-- The repository should apply deterministic ordering using `position` and stable tiebreakers.
-- The repository should preserve nullable score states so partially graded assessments round-trip without data loss.
-- If the legacy SQL schema remains unchanged, reconstruction is lossy and backend behavior parity is not guaranteed.
+#### Runtime models / usage
+
+- `StoredScenarioEntry`
+- persisted scenario entries in repository layer
+
+#### SQL table
+
+- `scenario_scores`
+
+#### SQL columns used
+
+- `id`
+- `scenario_id`
+- `assessment_id`
+- `simulated_score`
+
+#### Relationship mapping
+
+- `scenario_scores.scenario_id -> scenarios.id`
+- `scenario_scores.assessment_id -> assessments.id`
+
+#### Notes
+
+- SQL stores scenario entries by assessment ID.
+- Some API flows still accept assessment names, so repository/service mapping is
+  responsible for resolving names to stored assessment identifiers.
+
+### Assessment Category
+
+#### Domain
+
+- Optional grouping/category metadata attached to assessments
+
+#### Runtime models / usage
+
+- `AssessmentCategoryDB`
+- course persistence layer
+
+#### SQL table
+
+- `assessment_categories`
+
+#### SQL columns used
+
+- `id`
+- `course_id`
+- `name`
+- `weight`
+
+#### Relationship mapping
+
+- `assessment_categories.course_id -> courses.id`
+- `assessments.category_id -> assessment_categories.id`
+
+#### Notes
+
+- This exists in the final schema and SQLAlchemy layer even though the primary
+  frontend planning flow is still centered on assessment trees rather than rich
+  category management.
+
+### Extraction Models
+
+#### Domain
+
+- Outline extraction request/response and diagnostics models
+
+#### Runtime models / usage
+
+- `OutlineExtractionRequest`
+- `ExtractionAssessment`
+- `ExtractionDeadline`
+- `ExtractionDiagnostics`
+- `ExtractionResponse`
+
+#### SQL representation
+
+- No direct SQL tables
+
+#### Notes
+
+- Extraction output is operational workflow data, not directly persisted as raw
+  extraction runs in the current final schema.
+- Extracted structures are transformed into course/assessment/deadline records
+  through application services instead.
+
+## Final Alignment Summary
+
+The most important final-state alignments are:
+
+- nested assessments are supported in SQL through `parent_assessment_id`
+- score state is stored directly on `assessments` via `raw_score` and
+  `total_score`
+- deadlines are fully represented in SQL
+- saved scenarios and scenario scores are fully represented in SQL
+- rule persistence is aligned with the runtime one-rule-per-assessment model
+- calendar connections and deadline exports are represented in SQL
+
+## Remaining Intentional Differences
+
+- Extraction diagnostics are runtime workflow objects, not SQL-persisted audit
+  records.
+- Some user-facing APIs still address assessments by name, while SQL persistence
+  uses stable UUID identifiers internally.
+- The setup UI does not yet make full use of all persisted course metadata
+  fields such as transcript-style credits in the normal course flow.
+
+## Practical Review Guidance
+
+When there is any conflict between older submission artifacts and the runtime
+implementation, treat the following as authoritative in this order:
+
+1. `backend/app/db.py`
+2. `backend/app/repositories/postgres_*.py`
+3. `database/schema/evalio_schema.sql`
+4. `docs/domain_model_spec.md`
+
+This document is meant to match that final implemented state.
