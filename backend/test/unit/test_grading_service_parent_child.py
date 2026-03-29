@@ -32,7 +32,9 @@ def test_best_of_selects_highest_percentages():
         ],
     )
 
-    assert compute_assessment_contribution(assessment) == 17.0
+    # Best 2 of 3: Quiz2 (90%) + Quiz3 (80%) → raw 17.0 over active weight 20
+    # Scaled to parent weight 30: 17.0 / 20 * 30 = 25.5
+    assert compute_assessment_contribution(assessment) == 25.5
 
 
 def test_best_of_with_missing_grades_treats_missing_as_zero():
@@ -48,7 +50,9 @@ def test_best_of_with_missing_grades_treats_missing_as_zero():
         ],
     )
 
-    assert compute_assessment_contribution(assessment) == 16.0
+    # Best 2: Quiz1 (90%) + Quiz3 (70%) → raw 16.0 over active weight 20
+    # Scaled to parent weight 30: 16.0 / 20 * 30 = 24.0
+    assert compute_assessment_contribution(assessment) == 24.0
 
 
 def test_flat_assessment_contribution_unchanged():
@@ -104,7 +108,9 @@ def test_drop_lowest_basic_case():
         ],
     )
 
-    assert compute_assessment_contribution(assessment) == 18.0
+    # Drop lowest 1 of 3: keep Quiz1 (100%) + Quiz2 (80%) → raw 18.0 over active weight 20
+    # Scaled to parent weight 30: 18.0 / 20 * 30 = 27.0
+    assert compute_assessment_contribution(assessment) == 27.0
 
 
 def test_drop_lowest_drop_count_two():
@@ -121,7 +127,9 @@ def test_drop_lowest_drop_count_two():
         ],
     )
 
-    assert compute_assessment_contribution(assessment) == 17.0
+    # Drop lowest 2 of 4: keep Lab1 (90%) + Lab2 (80%) → raw 17.0 over active weight 20
+    # Scaled to parent weight 40: 17.0 / 20 * 40 = 34.0
+    assert compute_assessment_contribution(assessment) == 34.0
 
 
 def test_drop_lowest_when_drop_count_exceeds_children_returns_zero():

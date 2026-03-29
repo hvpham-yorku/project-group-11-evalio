@@ -113,6 +113,25 @@ def list_courses(
     return service.list_courses(user_id=current_user.user_id)
 
 
+@router.put("/{course_id}/structure")
+def update_course_structure(
+    course_id: UUID,
+    course: CourseCreate,
+    service: CourseService = Depends(get_course_service),
+    current_user: AuthenticatedUser = Depends(get_current_user),
+):
+    try:
+        return service.update_course_structure(
+            user_id=current_user.user_id,
+            course_id=course_id,
+            course_update=course,
+        )
+    except CourseNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (CourseValidationError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.put("/{course_id}/weights")
 def update_course_weights(
     course_id: UUID,

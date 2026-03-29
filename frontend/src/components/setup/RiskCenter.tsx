@@ -22,6 +22,7 @@ import {
   type Deadline,
   type TargetCheckResponse,
 } from "@/lib/api";
+import { useSetupCourse } from "@/app/setup/course-context";
 
 const TARGET_STORAGE_KEY = "evalio_target_grade";
 const DEFAULT_TARGET_GRADE = 85;
@@ -120,6 +121,7 @@ function flattenUngradedAssessments(course: Course) {
 
 export default function RiskCenter() {
   const router = useRouter();
+  const { setCourseId } = useSetupCourse();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -346,6 +348,11 @@ export default function RiskCenter() {
     "high-weight-ungraded": { label: "High-Weight Ungraded", icon: FileQuestion },
   } as const;
 
+  const handleAlertAction = (alert: RiskAlert) => {
+    setCourseId(alert.courseId);
+    router.push(alert.actionPath);
+  };
+
   if (loading) {
     return <div className="p-6 text-sm text-[#6B6560]">Loading risk center...</div>;
   }
@@ -462,7 +469,7 @@ export default function RiskCenter() {
                       <span className={`text-sm font-medium ${config.color}`}>{alert.context}</span>
 
                       <button
-                        onClick={() => router.push(alert.actionPath)}
+                        onClick={() => handleAlertAction(alert)}
                         className="rounded-lg bg-[#5F7A8A] px-3 py-1.5 text-sm text-white transition hover:bg-[#6B8BA8]"
                       >
                         {alert.actionLabel}

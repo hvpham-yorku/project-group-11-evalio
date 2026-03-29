@@ -9,7 +9,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { confirmExtraction } from "@/lib/api";
+import { confirmExtraction, listCourses, updateCourseStructure } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { useSetupCourse } from "@/app/setup/course-context";
 
@@ -247,6 +247,15 @@ function findAssessmentValidationError(items: EditableAssessment[]): string | nu
       return `Assessment "${trimmedName}" cannot be both bonus and mandatory pass.`;
     }
 
+    // Validate that rule templates have been completed (no "x" or "y" placeholders)
+    if (
+      (assessment.rule_type === "best_of" || assessment.rule_type === "drop_lowest") &&
+      assessment.rule &&
+      /\b[xy]\b/i.test(assessment.rule)
+    ) {
+      return `Assessment "${trimmedName}": please complete the rule description by replacing x and y with actual numbers.`;
+    }
+
     const children = Array.isArray(assessment.children) ? assessment.children : [];
     if (children.length > 0) {
       for (const child of children) {
@@ -289,7 +298,7 @@ type GradeBoundary = {
 
 export default function StructureStep() {
   const router = useRouter();
-  const { extractionResult, setCourseId, institutionalGradingRules, setInstitutionalGradingRules } =
+  const { extractionResult, courseId, setCourseId, institutionalGradingRules, setInstitutionalGradingRules } =
     useSetupCourse();
 
   const [courseName, setCourseName] = useState("");
@@ -297,6 +306,10 @@ export default function StructureStep() {
   const [termYear, setTermYear] = useState(String(new Date().getFullYear()));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Edit mode: true when editing an existing course (no extractionResult)
+  const [editMode, setEditMode] = useState(false);
+  const [editCourseId, setEditCourseId] = useState<string | null>(null);
+  const [loadingExisting, setLoadingExisting] = useState(false);
 
   const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>({});
   const [rulesOpenById, setRulesOpenById] = useState<Record<string, boolean>>({});
@@ -321,8 +334,8 @@ export default function StructureStep() {
     { letter: "F", minLabel: "below 50", points: "0.0", descriptor: "Fail" },
   ]);
 
-  const [boundaryHandling, setBoundaryHandling] = useState<"round-up" | "strict">("round-up");
-  const [rounding, setRounding] = useState<"one-decimal" | "none">("one-decimal");
+  const [boundaryHandling, setBoundaryHandling] = useState<"round-up" | "strict">("strict");
+  const [rounding, setRounding] = useState<"one-decimal" | "none">("none");
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
     const startYear = 1950;
@@ -354,12 +367,14 @@ export default function StructureStep() {
       items.map((it, idx) => {
         const id = typeof it?.id === "string" ? it.id : `${prefix}-${idx}-${Date.now()}`;
         const childrenRaw = Array.isArray(it?.children) ? it.children : [];
+        const hasChildren = childrenRaw.length > 0;
+        const existingRuleType = typeof it?.rule_type === "string" ? it.rule_type : null;
         return {
           id,
           name: typeof it?.name === "string" ? it.name : "",
           weight: Number.isFinite(Number(it?.weight)) ? Number(it.weight) : 0,
           rule: typeof it?.rule === "string" ? it.rule : it?.rule ?? "",
-          rule_type: typeof it?.rule_type === "string" ? it.rule_type : null,
+          rule_type: hasChildren && !existingRuleType ? "pure_multiplicative" : existingRuleType,
           rule_config:
             it?.rule_config && typeof it.rule_config === "object"
               ? it.rule_config
@@ -367,12 +382,105 @@ export default function StructureStep() {
           total_count: Number.isFinite(Number(it?.total_count)) ? Number(it.total_count) : null,
           effective_count: Number.isFinite(Number(it?.effective_count)) ? Number(it.effective_count) : null,
           is_bonus: Boolean(it?.is_bonus),
-          children: childrenRaw.length ? normalize(childrenRaw, `${prefix}-${idx}`) : [],
+          children: hasChildren ? normalize(childrenRaw, `${prefix}-${idx}`) : [],
         };
       });
 
     setAssessments(normalize(incoming));
   }, [extractionResult]);
+
+  // Edit mode: load existing course when no extraction result is available
+  useEffect(() => {
+    if (extractionResult) return; // new course flow — skip
+    if (!courseId) return;
+
+    let cancelled = false;
+    setLoadingExisting(true);
+
+    (async () => {
+      try {
+        const courses = await listCourses();
+        const course = courses.find((c) => c.course_id === courseId);
+        if (!course || cancelled) return;
+
+        setEditMode(true);
+        setEditCourseId(course.course_id);
+        setCourseName(course.name || "");
+
+        // Parse term into label + year
+        const termParts = (course.term || "").trim().split(/\s+/);
+        if (termParts.length >= 2) {
+          setTermLabel(termParts.slice(0, -1).join(" "));
+          setTermYear(termParts[termParts.length - 1]);
+        } else if (termParts.length === 1 && termParts[0]) {
+          setTermLabel(termParts[0]);
+        }
+
+        // Convert course assessments to editable format
+        const editable: EditableAssessment[] = course.assessments.map((a, i) => {
+          const hasChildren = Array.isArray(a.children) && a.children.length > 0;
+          const existingRuleType = a.rule_type ?? null;
+          const config = (a.rule_config ?? {}) as Record<string, unknown>;
+
+          // Extract total_count and effective_count from rule_config
+          // since these aren't stored as top-level fields on the backend model.
+          const totalCount =
+            parsePositiveInteger(a.total_count) ??
+            parsePositiveInteger(config.total_count) ??
+            (hasChildren ? a.children!.length : null);
+          let effectiveCount =
+            parsePositiveInteger(a.effective_count) ??
+            parsePositiveInteger(config.best_count);
+          if (!effectiveCount && existingRuleType === "drop_lowest" && totalCount) {
+            const dropCount = parsePositiveInteger(config.drop_count) ?? 1;
+            effectiveCount = Math.max(1, totalCount - dropCount);
+          }
+
+          // Rebuild rule text from rule_config so users see what's stored
+          let ruleText: string | null = null;
+          const label = a.name || "items";
+          if (existingRuleType === "best_of" && effectiveCount) {
+            ruleText = `Best ${effectiveCount} of ${totalCount ?? "y"} ${label} count`;
+          } else if (existingRuleType === "drop_lowest") {
+            const dropCount = parsePositiveInteger(config.drop_count) ?? 1;
+            ruleText = `Drop lowest ${dropCount} of ${totalCount ?? "y"} ${label}`;
+          } else if (existingRuleType === "mandatory_pass") {
+            const threshold = Number(config.pass_threshold) || 50;
+            ruleText = `Must pass ${label} with >= ${threshold}%`;
+          } else if (existingRuleType === "pure_multiplicative") {
+            ruleText = `All ${hasChildren ? a.children!.length : ""} ${label} count`.replace("  ", " ");
+          }
+
+          return {
+            id: `existing-${i}-${Date.now()}`,
+            name: a.name,
+            weight: a.weight,
+            rule: ruleText,
+            rule_type: hasChildren && !existingRuleType ? "pure_multiplicative" : existingRuleType,
+            rule_config: a.rule_config ?? null,
+            total_count: totalCount,
+            effective_count: effectiveCount ?? null,
+            is_bonus: Boolean(a.is_bonus),
+            children: hasChildren
+              ? a.children!.map((child, ci) => ({
+                  id: `existing-${i}-${ci}-${Date.now()}`,
+                  name: child.name,
+                  weight: child.weight,
+                  is_bonus: false,
+                }))
+              : [],
+          };
+        });
+        setAssessments(editable);
+      } catch {
+        // Silently fail — user can still add assessments manually
+      } finally {
+        if (!cancelled) setLoadingExisting(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [extractionResult, courseId]);
 
   const totalWeight = useMemo(() => {
     const sumTopLevel = assessments.reduce(
@@ -449,7 +557,17 @@ export default function StructureStep() {
         is_bonus: false,
         children: [],
       };
-      return addChildToParent(prev, parentId, newChild);
+      let updated = addChildToParent(prev, parentId, newChild);
+
+      // Auto-assign "All Sub-items Count" when adding the first child
+      if (parent && currentChildren.length === 0 && !parent.rule_type) {
+        updated = updateAssessmentById(updated, parentId, {
+          rule_type: "pure_multiplicative",
+          rule_config: null,
+        });
+      }
+
+      return updated;
     });
     setExpandedByKey((prev) => ({ ...prev, [parentId]: true }));
   };
@@ -479,7 +597,7 @@ export default function StructureStep() {
   const handleContinue = async () => {
     setError("");
 
-    if (!extractionResult) {
+    if (!editMode && !extractionResult) {
       setError("Please upload an outline first.");
       return;
     }
@@ -509,31 +627,55 @@ export default function StructureStep() {
         grade_boundaries: gradeBoundaries,
       };
 
-      // Build a modified extraction payload that keeps the original extractionResult
-      // but overrides editable fields from this page.
-      const patchedExtraction = {
-        ...extractionResult,
-        course_name: courseName.trim(),
-        term: combinedTerm || null,
-        assessments: assessments,
-        institutional_grading_rules: {
-          institution: selectedRules.institution,
-          scale: selectedRules.scale,
-          grade_boundaries: gradeBoundaries,
-          boundary_handling: boundaryHandling,
-          rounding: rounding,
-        },
-      };
+      if (editMode && editCourseId) {
+        // Update existing course structure
+        const structurePayload = {
+          name: courseName.trim(),
+          term: combinedTerm || null,
+          assessments: assessments.map((a) => ({
+            name: a.name,
+            weight: a.weight,
+            rule_type: a.rule_type ?? null,
+            rule_config: a.rule_config ?? null,
+            is_bonus: Boolean(a.is_bonus),
+            children: a.children?.length
+              ? a.children.map((c) => ({
+                  name: c.name,
+                  weight: c.weight,
+                }))
+              : null,
+          })),
+        };
 
-      const response = await confirmExtraction({
-        course_name: courseName.trim() || "Untitled Course",
-        term: combinedTerm || null,
-        extraction_result: patchedExtraction,
-      });
+        await updateCourseStructure(editCourseId, structurePayload);
+        setInstitutionalGradingRules(selectedRules);
+        router.push("/setup/grades");
+      } else {
+        // New course: confirm extraction
+        const patchedExtraction = {
+          ...extractionResult,
+          course_name: courseName.trim(),
+          term: combinedTerm || null,
+          assessments: assessments,
+          institutional_grading_rules: {
+            institution: selectedRules.institution,
+            scale: selectedRules.scale,
+            grade_boundaries: gradeBoundaries,
+            boundary_handling: boundaryHandling,
+            rounding: rounding,
+          },
+        };
 
-      setInstitutionalGradingRules(selectedRules);
-      setCourseId(response.course_id);
-      router.push("/setup/grades");
+        const response = await confirmExtraction({
+          course_name: courseName.trim() || "Untitled Course",
+          term: combinedTerm || null,
+          extraction_result: patchedExtraction,
+        });
+
+        setInstitutionalGradingRules(selectedRules);
+        setCourseId(response.course_id);
+        router.push("/setup/grades");
+      }
     } catch (e) {
       setError(getApiErrorMessage(e, "Failed to confirm extracted structure."));
     } finally {
@@ -672,12 +814,14 @@ export default function StructureStep() {
                           value={a.rule_type ?? ""}
                           onChange={(e) => {
                             const nextType = e.target.value || null;
+                            const assessmentLabel = a.name || "items";
                             if (nextType === null) {
                               updateAssessment(a.id, {
                                 rule_type: null,
                                 rule_config: null,
                                 total_count: null,
                                 effective_count: null,
+                                rule: "",
                               });
                               return;
                             }
@@ -689,6 +833,7 @@ export default function StructureStep() {
                                 total_count: null,
                                 effective_count: null,
                                 is_bonus: false,
+                                rule: `Must pass ${assessmentLabel} with >= ${passThreshold || 50}%`,
                               });
                               return;
                             }
@@ -708,6 +853,7 @@ export default function StructureStep() {
                                   best_count: effectiveCount,
                                   ...(totalCount ? { total_count: totalCount } : {}),
                                 },
+                                rule: `Best ${effectiveCount ?? "x"} of ${totalCount ?? "y"} ${assessmentLabel} count`,
                               });
                               return;
                             }
@@ -731,6 +877,18 @@ export default function StructureStep() {
                                   drop_count: dropCount,
                                   ...(totalCount ? { total_count: totalCount } : {}),
                                 },
+                                rule: `Drop lowest ${dropCount} of ${totalCount ?? "y"} ${assessmentLabel}`,
+                              });
+                              return;
+                            }
+
+                            if (nextType === "pure_multiplicative") {
+                              updateAssessment(a.id, {
+                                rule_type: "pure_multiplicative",
+                                rule_config: null,
+                                total_count: null,
+                                effective_count: null,
+                                rule: `All ${a.children?.length || ""} ${assessmentLabel} count`.replace("  ", " "),
                               });
                               return;
                             }
@@ -740,6 +898,7 @@ export default function StructureStep() {
                               rule_config: null,
                               total_count: null,
                               effective_count: null,
+                              rule: "",
                             });
                           }}
                           className="mt-1 w-full rounded-xl border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-2 text-sm text-[#3A3530]"
@@ -754,30 +913,33 @@ export default function StructureStep() {
                         </select>
                       </label>
 
-                      <label className="flex items-center gap-2 rounded-xl border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-2 text-sm text-[#3A3530]">
-                        <input
-                          type="checkbox"
-                          checked={isBonus}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            updateAssessment(a.id, {
-                              is_bonus: checked,
-                              ...(checked
-                                ? {
-                                    rule_type:
-                                      a.rule_type === "mandatory_pass"
-                                        ? null
-                                        : a.rule_type,
-                                    rule_config:
-                                      a.rule_type === "mandatory_pass"
-                                        ? null
-                                        : a.rule_config,
-                                  }
-                                : {}),
-                            });
-                          }}
-                        />
-                        Bonus Assessment
+                      <label className="text-[11px] text-[#6B6560]">
+                        Bonus
+                        <div className="mt-1 flex items-center gap-2 rounded-xl border border-[#D4CFC7] bg-[#FCFAF7] px-3 py-2 text-sm text-[#3A3530]">
+                          <input
+                            type="checkbox"
+                            checked={isBonus}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              updateAssessment(a.id, {
+                                is_bonus: checked,
+                                ...(checked
+                                  ? {
+                                      rule_type:
+                                        a.rule_type === "mandatory_pass"
+                                          ? null
+                                          : a.rule_type,
+                                      rule_config:
+                                        a.rule_type === "mandatory_pass"
+                                          ? null
+                                          : a.rule_config,
+                                    }
+                                  : {}),
+                              });
+                            }}
+                          />
+                          Bonus Assessment
+                        </div>
                       </label>
                     </div>
 
@@ -810,6 +972,24 @@ export default function StructureStep() {
                       onChange={(e) => {
                         const nextRule = e.target.value;
                         const derived = deriveRuleMetadata(nextRule, a.name);
+
+                        // If a rule_type is already set via dropdown, only update
+                        // counts/config from the text when it matches the same type.
+                        // Don't let partial text reset rule_type to null.
+                        if (a.rule_type) {
+                          if (derived.rule_type === a.rule_type) {
+                            // Text matches current type — sync counts/config
+                            updateAssessment(a.id, {
+                              rule: nextRule,
+                              ...derived,
+                            });
+                          } else {
+                            // Text doesn't match or is partial — just update text
+                            updateAssessment(a.id, { rule: nextRule });
+                          }
+                          return;
+                        }
+
                         const activatingMandatory =
                           derived.rule_type === "mandatory_pass";
                         updateAssessment(a.id, {
@@ -919,7 +1099,17 @@ export default function StructureStep() {
     );
   };
 
-  if (!extractionResult) {
+  if (!extractionResult && !editMode) {
+    if (loadingExisting) {
+      return (
+        <div className="flex h-64 items-center justify-center">
+          <div className="flex flex-col items-center gap-2">
+            <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-[#5F7A8A]" />
+            <span className="text-sm text-[#6B6560]">Loading course structure...</span>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="mx-auto max-w-5xl px-4 pb-20">
         <h2 className="text-[34px] font-semibold text-[#3A3530]">Course Structure</h2>
@@ -938,9 +1128,13 @@ export default function StructureStep() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-24">
-      <h2 className="text-[34px] font-semibold text-[#3A3530]">Course Structure</h2>
+      <h2 className="text-[34px] font-semibold text-[#3A3530]">
+        {editMode ? "Edit Course Structure" : "Course Structure"}
+      </h2>
       <p className="mt-2 text-sm leading-relaxed text-[#6B6560]">
-        Review and adjust your course assessments, weights, and grading rules.
+        {editMode
+          ? "Update your course assessments, weights, and grading rules. Existing grades will be preserved where names match."
+          : "Review and adjust your course assessments, weights, and grading rules."}
       </p>
 
       <div className="mt-6 space-y-4">
@@ -1240,7 +1434,7 @@ export default function StructureStep() {
         disabled={saving}
         className="mt-6 w-full rounded-xl bg-[#5F7A8A] py-4 font-medium text-white shadow-sm transition hover:bg-[#6B8BA8] disabled:opacity-60"
       >
-        {saving ? "Saving..." : "Continue to Grades"}
+        {saving ? "Saving..." : editMode ? "Save & Continue to Grades" : "Continue to Grades"}
       </button>
     </div>
   );

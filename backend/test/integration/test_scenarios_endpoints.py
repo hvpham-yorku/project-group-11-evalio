@@ -214,12 +214,14 @@ def test_saved_parent_scenario_run_is_read_only_and_keeps_nested_course_state(au
     assert body["execution_mode"] == "simulation"
     assert body["mutates_real_grades"] is False
     assert body["result"]["scenarios_applied"] == 2
-    assert body["result"]["projected_grade"] == pytest.approx(86.2, abs=0.1)
+    assert body["result"]["projected_grade"] == pytest.approx(85.7, abs=0.1)
 
     labs = next(item for item in body["result"]["breakdown"] if item["name"] == "Labs")
     assert labs["source"] == "whatif"
     assert labs["hypothetical_score"] == 95
-    assert all(child["score_percent"] == pytest.approx(95.0, abs=0.1) for child in labs["children"])
+    lab_child_scores = {child["name"]: child["score_percent"] for child in labs["children"]}
+    assert lab_child_scores["Lab 1"] == pytest.approx(90.0, abs=0.1)
+    assert lab_child_scores["Lab 2"] == pytest.approx(95.0, abs=0.1)
 
     after = _get_course_from_list(auth_client, course_id)
     assert after == before

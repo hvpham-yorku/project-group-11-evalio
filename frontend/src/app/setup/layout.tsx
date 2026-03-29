@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, Compass, LayoutDashboard, Pencil, ShieldAlert } from "lucide-react";
 
 import {
   SetupCourseProvider,
@@ -22,11 +22,12 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
   const isExploreView = pathname.startsWith("/setup/explore");
   const isManageView = pathname.startsWith("/setup/manage");
   const isRiskCenterView = pathname.startsWith("/setup/risk-center");
+  const isDashboardView = pathname.startsWith("/setup/dashboard");
   const isUploadView = pathname.startsWith("/setup/upload");
   const isStructureView = pathname.startsWith("/setup/structure");
 
   const showStepProgress =
-    !isExploreView && !isManageView && !isRiskCenterView;
+    !isExploreView && !isManageView && !isRiskCenterView && !isDashboardView;
 
   useEffect(() => {
     let mounted = true;
@@ -134,12 +135,10 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
     if (pathname.startsWith("/setup/grades")) return 3;
     if (pathname.startsWith("/setup/goals")) return 4;
     if (pathname.startsWith("/setup/deadlines")) return 5;
-    if (pathname.startsWith("/setup/dashboard")) return 6;
     return 1;
   })();
 
-  const showCourseSelector = activeStep > 1;
-  const isDashboardView = pathname.startsWith("/setup/dashboard");
+  const showCourseSelector = activeStep > 1 || isDashboardView;
 
   const stepRoutes: Record<number, string> = {
     1: "/setup/upload",
@@ -147,7 +146,6 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
     3: "/setup/grades",
     4: "/setup/goals",
     5: "/setup/deadlines",
-    6: "/setup/dashboard",
   };
 
   return (
@@ -172,6 +170,7 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
                 isDashboardView ? "text-[#3A3530]" : "text-[#6B6560]"
               }`}
             >
+              <LayoutDashboard size={14} />
               Dashboard
             </button>
             <button
@@ -180,6 +179,7 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
                 isExploreView ? "text-[#3A3530]" : "text-[#6B6560]"
               }`}
             >
+              <Compass size={14} />
               Explore Scenarios
             </button>
             <button
@@ -188,7 +188,17 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
                 isRiskCenterView ? "text-[#3A3530]" : "text-[#6B6560]"
               }`}
             >
+              <ShieldAlert size={14} />
               Risk Center
+            </button>
+            <button
+              onClick={() => router.push("/setup/structure")}
+              className={`flex items-center gap-2 rounded-full bg-[#F5F1EB] px-5 py-3 text-sm font-medium transition hover:bg-[#E8E3DC] ${
+                isStructureView ? "text-[#3A3530]" : "text-[#6B6560]"
+              }`}
+            >
+              <Pencil size={14} />
+              Edit Course
             </button>
           </div>
         </div>
@@ -202,14 +212,13 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
         {showStepProgress ? (
           <div className="border-t border-[#E8E3DC]">
             <div className="mx-auto flex max-w-6xl items-center justify-between px-8 py-8 text-sm text-[#6B6560]">
-              {[1, 2, 3, 4, 5, 6].map((step, index) => {
+              {[1, 2, 3, 4, 5].map((step, index) => {
                 const labels = [
                   "Upload",
                   "Structure",
                   "Grades",
                   "Goals",
                   "Deadlines",
-                  "Dashboard",
                 ];
 
                 return (
@@ -231,7 +240,7 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
                       </span>
                       {labels[index]}
                     </div>
-                    {step < 6 ? (
+                    {step < 5 ? (
                       <div className="mx-5 h-[1px] flex-1 bg-[#E8E3DC]" />
                     ) : null}
                   </Fragment>

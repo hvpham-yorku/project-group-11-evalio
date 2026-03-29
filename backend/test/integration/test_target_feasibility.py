@@ -72,8 +72,11 @@ def test_target_feasibility_respects_best_of_remaining_potential(auth_client):
     assert response.status_code == 200
     data = response.json()
 
-    assert data["current_standing"] == 69.0
-    assert data["maximum_possible"] == 69.0
+    # Best 2 of 3 quizzes (each 10% weight, parent 30%): Quiz1+Quiz2 = 100%
+    # Scaled to parent: (10+10)/20*30 = 30.0. Midterm: 70%*70/100 = 49.0
+    # Total = 79.0. Target 80 → not feasible (Quiz3 can't improve best 2).
+    assert data["current_standing"] == 79.0
+    assert data["maximum_possible"] == 79.0
     assert data["feasible"] is False
 
 

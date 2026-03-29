@@ -82,7 +82,9 @@ def test_drop_lowest_drops_missing_grade_before_scored_items():
         ],
     )
 
-    assert compute_assessment_contribution(assessment) == 16.0
+    # Drop lowest 1 of 3: keep Lab1 (90%) + Lab3 (70%) → raw 16.0 over active weight 20
+    # Scaled to parent weight 30: 16.0 / 20 * 30 = 24.0
+    assert compute_assessment_contribution(assessment) == 24.0
 
 
 def test_mandatory_pass_pending_when_assessment_is_ungraded():

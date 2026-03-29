@@ -22,6 +22,8 @@ import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
 
 const CHILD_ASSESSMENT_SEPARATOR = "::";
+const DEFAULT_SCENARIO_WORST = "__default_worst_case__";
+const DEFAULT_SCENARIO_BEST = "__default_best_case__";
 
 type ScenarioAssessment = {
   id: number;
@@ -49,6 +51,10 @@ type ScenarioGroup = {
   is_bonus?: boolean;
   is_mandatory_pass?: boolean;
   pass_threshold?: number | null;
+  rule_type?: string | null;
+  rule_config?: Record<string, unknown> | null;
+  total_count?: number | null;
+  effective_count?: number | null;
   children: ScenarioAssessment[];
 };
 
@@ -122,6 +128,19 @@ function buildScenarioGroups(
         is_bonus: Boolean(assessment.is_bonus),
         is_mandatory_pass: passThreshold !== null,
         pass_threshold: passThreshold,
+        rule_type: assessment.rule_type ?? null,
+        rule_config:
+          assessment.rule_config && typeof assessment.rule_config === "object"
+            ? assessment.rule_config
+            : null,
+        total_count:
+          Number.isFinite(Number(assessment.total_count))
+            ? Number(assessment.total_count)
+            : null,
+        effective_count:
+          Number.isFinite(Number(assessment.effective_count))
+            ? Number(assessment.effective_count)
+            : null,
         children: childItems,
       });
       continue;
@@ -138,6 +157,19 @@ function buildScenarioGroups(
       is_bonus: Boolean(assessment.is_bonus),
       is_mandatory_pass: passThreshold !== null,
       pass_threshold: passThreshold,
+      rule_type: assessment.rule_type ?? null,
+      rule_config:
+        assessment.rule_config && typeof assessment.rule_config === "object"
+          ? assessment.rule_config
+          : null,
+      total_count:
+        Number.isFinite(Number(assessment.total_count))
+          ? Number(assessment.total_count)
+          : null,
+      effective_count:
+        Number.isFinite(Number(assessment.effective_count))
+          ? Number(assessment.effective_count)
+          : null,
       children: [],
     });
   }
@@ -161,14 +193,16 @@ function flattenScenarioLeafTargets(
     if (group.children.length) {
       for (const child of group.children) {
         const overrideSelf = typeof activeScenario[child.key] === "number";
-        const overrideParent = typeof activeScenario[group.key] === "number";
+        const childIsGraded = isLockedGradedChild(child);
+        const overrideParent =
+          typeof activeScenario[group.key] === "number" && !childIsGraded;
         const actual = getActualPercent(child.raw_score, child.total_score);
         const parentScore = activeScenario[group.key];
         const childScore = activeScenario[child.key];
         const score = clampPercent(
           typeof childScore === "number"
             ? childScore
-            : typeof parentScore === "number"
+            : typeof parentScore === "number" && !childIsGraded
               ? parentScore
               : typeof actual === "number"
                 ? actual
@@ -210,6 +244,67 @@ function flattenScenarioLeafTargets(
   return leafTargets;
 }
 
+function normalizeScenarioOverrides(
+  groups: ScenarioGroup[],
+  rawOverrides: Record<string, number>
+): Record<string, number> {
+  const normalized: Record<string, number> = {};
+
+  for (const group of groups) {
+    if (!group.children.length) {
+      const parentOverride = rawOverrides[group.key];
+      if (typeof parentOverride === "number") {
+        normalized[group.key] = clampPercent(parentOverride);
+      }
+      continue;
+    }
+
+    const parentOverride = rawOverrides[group.key];
+    for (const child of group.children) {
+      const childOverride = rawOverrides[child.key];
+      if (typeof childOverride === "number") {
+        normalized[child.key] = clampPercent(childOverride);
+        continue;
+      }
+      if (
+        typeof parentOverride === "number" &&
+        !isLockedGradedChild(child)
+      ) {
+        normalized[child.key] = clampPercent(parentOverride);
+      }
+    }
+  }
+
+  return normalized;
+}
+
+function buildDefaultScenarioOverrides(
+  groups: ScenarioGroup[],
+  value: number
+): Record<string, number> {
+  const safe = clampPercent(value);
+  const overrides: Record<string, number> = {};
+
+  for (const group of groups) {
+    if (group.children.length) {
+      for (const child of group.children) {
+        const graded = hasPersistedGrade(child) && Number(child.total_score) > 0;
+        if (!graded) {
+          overrides[child.key] = safe;
+        }
+      }
+      continue;
+    }
+
+    const graded = hasPersistedGrade(group) && Number(group.total_score) > 0;
+    if (!graded) {
+      overrides[group.key] = safe;
+    }
+  }
+
+  return overrides;
+}
+
 function resolveParentValue(
   group: ScenarioGroup,
   activeScenario: Record<string, number>
@@ -246,6 +341,212 @@ function resolveParentValue(
   return clampPercent((weightedContribution / totalWeight) * 100);
 }
 
+function parsePositiveInteger(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  const rounded = Math.floor(parsed);
+  return rounded > 0 ? rounded : null;
+}
+
+function computeGroupRuleState(
+  group: ScenarioGroup,
+  activeScenario: Record<string, number>
+): {
+  parentValue: number;
+  parentContribution: number;
+  droppedChildKeys: Set<string>;
+  ruleSummary: string | null;
+} {
+  if (!group.children.length) {
+    const parentValue = resolveParentValue(group, activeScenario);
+    return {
+      parentValue,
+      parentContribution: (parentValue * group.weight) / 100,
+      droppedChildKeys: new Set<string>(),
+      ruleSummary: null,
+    };
+  }
+
+  const children = group.children.map((child, index) => ({
+    child,
+    index,
+    score: resolveChildValue(group, child, activeScenario),
+    weight: Math.max(0, Number.isFinite(child.weight) ? child.weight : 0),
+  }));
+
+  const totalCountFromConfig = parsePositiveInteger(
+    (group.rule_config ?? {}).total_count
+  );
+  const totalCount =
+    totalCountFromConfig ??
+    parsePositiveInteger(group.total_count) ??
+    group.children.length;
+
+  let activeChildren = children;
+  let ruleSummary: string | null = `${group.children.length} ${group.displayName}`;
+
+  if (group.rule_type === "best_of") {
+    const bestCount =
+      parsePositiveInteger((group.rule_config ?? {}).best_count) ??
+      parsePositiveInteger(group.effective_count) ??
+      group.children.length;
+    const keepCount = Math.max(1, Math.min(bestCount, children.length));
+    const sorted = [...children].sort(
+      (a, b) => b.score - a.score || a.index - b.index
+    );
+    activeChildren = sorted.slice(0, keepCount);
+    ruleSummary = `Best ${keepCount} of ${totalCount} ${group.displayName}`;
+  } else if (group.rule_type === "drop_lowest") {
+    const dropCount =
+      parsePositiveInteger((group.rule_config ?? {}).drop_count) ??
+      (() => {
+        const total = parsePositiveInteger(group.total_count);
+        const effective = parsePositiveInteger(group.effective_count);
+        if (total && effective && total >= effective) return total - effective;
+        return 1;
+      })();
+    const normalizedDrop = Math.max(
+      0,
+      Math.min(dropCount, Math.max(0, children.length - 1))
+    );
+    const sorted = [...children].sort(
+      (a, b) => a.score - b.score || a.index - b.index
+    );
+    activeChildren = sorted.slice(normalizedDrop);
+    ruleSummary = `Drop lowest ${normalizedDrop} of ${totalCount} ${group.displayName}`;
+  } else if (group.rule_type === "pure_multiplicative") {
+    ruleSummary = `All ${totalCount} ${group.displayName} count`;
+  }
+
+  const activeChildKeys = new Set(activeChildren.map((entry) => entry.child.key));
+  const droppedChildKeys = new Set(
+    children
+      .filter((entry) => !activeChildKeys.has(entry.child.key))
+      .map((entry) => entry.child.key)
+  );
+
+  let parentContribution = activeChildren.reduce(
+    (sum, entry) => sum + (entry.score * entry.weight) / 100,
+    0
+  );
+
+  if (group.rule_type === "best_of" || group.rule_type === "drop_lowest") {
+    const activeWeight = activeChildren.reduce((sum, entry) => sum + entry.weight, 0);
+    if (activeWeight > 0 && Math.abs(activeWeight - group.weight) > 0.001) {
+      parentContribution = (parentContribution / activeWeight) * group.weight;
+    }
+  }
+
+  const parentValue =
+    group.weight > 0
+      ? clampPercent((parentContribution / group.weight) * 100)
+      : 0;
+
+  return {
+    parentValue,
+    parentContribution,
+    droppedChildKeys,
+    ruleSummary,
+  };
+}
+
+function isLockedGradedChild(child: ScenarioAssessment): boolean {
+  return (
+    hasPersistedGrade(child) &&
+    typeof child.total_score === "number" &&
+    child.total_score > 0
+  );
+}
+
+function withUngradedChildrenSetTo(
+  group: ScenarioGroup,
+  activeScenario: Record<string, number>,
+  fillValue: number
+): Record<string, number> {
+  const next = { ...activeScenario };
+  delete next[group.key];
+
+  const safe = clampPercent(fillValue);
+  for (const child of group.children) {
+    if (!isLockedGradedChild(child)) {
+      next[child.key] = safe;
+    }
+  }
+  return next;
+}
+
+function getParentSliderBounds(
+  group: ScenarioGroup,
+  activeScenario: Record<string, number>
+): { min: number; max: number; hasUngradedChildren: boolean } {
+  if (!group.children.length) {
+    return { min: 0, max: 100, hasUngradedChildren: false };
+  }
+
+  const hasUngradedChildren = group.children.some(
+    (child) => !isLockedGradedChild(child)
+  );
+  if (!hasUngradedChildren) {
+    const current = computeGroupRuleState(group, activeScenario).parentValue;
+    return { min: current, max: current, hasUngradedChildren: false };
+  }
+
+  const minValue = computeGroupRuleState(
+    group,
+    withUngradedChildrenSetTo(group, activeScenario, 0)
+  ).parentValue;
+  const maxValue = computeGroupRuleState(
+    group,
+    withUngradedChildrenSetTo(group, activeScenario, 100)
+  ).parentValue;
+
+  return {
+    min: Math.max(0, Math.min(minValue, maxValue)),
+    max: Math.min(100, Math.max(minValue, maxValue)),
+    hasUngradedChildren: true,
+  };
+}
+
+function getSliderFillPercent(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value) || !Number.isFinite(min) || !Number.isFinite(max)) {
+    return 0;
+  }
+  if (max <= min) return 100;
+  const normalized = ((value - min) / (max - min)) * 100;
+  return Math.max(0, Math.min(100, normalized));
+}
+
+function solveUngradedFillForTargetParentValue(
+  group: ScenarioGroup,
+  activeScenario: Record<string, number>,
+  targetParentValue: number
+): number {
+  let low = 0;
+  let high = 100;
+  let bestFill = 0;
+  let bestDiff = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < 28; i += 1) {
+    const mid = (low + high) / 2;
+    const midParent = computeGroupRuleState(
+      group,
+      withUngradedChildrenSetTo(group, activeScenario, mid)
+    ).parentValue;
+    const diff = Math.abs(midParent - targetParentValue);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestFill = mid;
+    }
+    if (midParent < targetParentValue) {
+      low = mid;
+    } else {
+      high = mid;
+    }
+  }
+
+  return clampPercent(bestFill);
+}
+
 function resolveChildValue(
   group: ScenarioGroup,
   child: ScenarioAssessment,
@@ -255,7 +556,9 @@ function resolveChildValue(
   if (typeof childOverride === "number") return clampPercent(childOverride);
 
   const parentOverride = activeScenario[group.key];
-  if (typeof parentOverride === "number") return clampPercent(parentOverride);
+  if (typeof parentOverride === "number" && !isLockedGradedChild(child)) {
+    return clampPercent(parentOverride);
+  }
 
   const actual = getActualPercent(child.raw_score, child.total_score);
   return typeof actual === "number" ? actual : 75;
@@ -334,8 +637,8 @@ export function ExploreScenarios() {
     loadCourse();
   }, [ensureCourseIdFromList]);
 
-  const getParentScenarioValue = useCallback(
-    (group: ScenarioGroup) => resolveParentValue(group, activeScenario),
+  const getGroupRuleState = useCallback(
+    (group: ScenarioGroup) => computeGroupRuleState(group, activeScenario),
     [activeScenario]
   );
 
@@ -380,41 +683,16 @@ export function ExploreScenarios() {
   const hasChanges = Object.keys(activeScenario).length > 0;
 
   const projectedFinal = (() => {
-    if (scenarioProjection) {
-      return scenarioProjection.projected_normalised ?? scenarioProjection.projected_grade;
-    }
     if (!assessments.length) return 0;
     const sum = assessments.reduce((acc, group) => {
-      if (group.children.length) {
-        return (
-          acc +
-          group.children.reduce(
-            (childAcc, child) =>
-              childAcc + (getChildScenarioValue(group, child) * child.weight) / 100,
-            0
-          )
-        );
-      }
-      return acc + (getParentScenarioValue(group) * group.weight) / 100;
+      const ruleState = getGroupRuleState(group);
+      return acc + ruleState.parentContribution;
     }, 0);
     return Number.isFinite(sum) ? sum : 0;
   })();
 
   const currentStanding =
     dashboardSummary?.current_normalised ?? dashboardSummary?.current_grade ?? 0;
-  const worstCaseFloor =
-    dashboardSummary?.min_normalised ?? dashboardSummary?.min_grade ?? 0;
-  const bestCaseReachable =
-    scenarioProjection?.maximum_possible_normalised ??
-    scenarioProjection?.maximum_possible ??
-    dashboardSummary?.max_normalised ??
-    dashboardSummary?.max_grade ??
-    0;
-  const projectionBreakdown = scenarioProjection?.breakdown ?? [];
-  const normalisationApplied =
-    scenarioProjection?.normalisation_applied ??
-    dashboardSummary?.normalisation_applied ??
-    false;
   const mandatoryPassWarnings = useMemo(() => {
     const explicitWarnings = scenarioProjection?.mandatory_pass_warnings ?? [];
     const status = scenarioProjection?.mandatory_pass_status;
@@ -436,12 +714,25 @@ export function ExploreScenarios() {
   const handleParentSliderChange = (group: ScenarioGroup, value: number) => {
     const safe = clampPercent(value);
     setActiveScenario((prev) => {
-      const next = { ...prev, [group.key]: safe };
-      if (group.children.length) {
-        for (const child of group.children) {
-          next[child.key] = safe;
-        }
+      if (!group.children.length) {
+        return { ...prev, [group.key]: safe };
       }
+
+      const bounds = getParentSliderBounds(group, prev);
+      if (!bounds.hasUngradedChildren) {
+        const next = { ...prev };
+        delete next[group.key];
+        return next;
+      }
+
+      const clampedTarget = Math.max(bounds.min, Math.min(safe, bounds.max));
+      const fillValue = solveUngradedFillForTargetParentValue(
+        group,
+        prev,
+        clampedTarget
+      );
+
+      const next = withUngradedChildrenSetTo(group, prev, fillValue);
       return next;
     });
   };
@@ -535,13 +826,14 @@ export function ExploreScenarios() {
               const parentOverride = activeScenario[assessment.name];
               const key = `${assessment.name}${CHILD_ASSESSMENT_SEPARATOR}${child.name}`;
               const childOverride = activeScenario[key];
-              const hasOverride =
-                typeof childOverride === "number" ||
-                typeof parentOverride === "number";
               const hasGrade =
                 typeof child.raw_score === "number" &&
                 typeof child.total_score === "number" &&
                 child.total_score > 0;
+              const canUseParentOverride =
+                typeof parentOverride === "number" && !hasGrade;
+              const hasOverride =
+                typeof childOverride === "number" || canUseParentOverride;
 
               if (!hasOverride && hasGrade) {
                 return null;
@@ -636,6 +928,13 @@ export function ExploreScenarios() {
       window.alert("Please select a scenario to delete.");
       return;
     }
+    if (
+      selectedScenarioId === DEFAULT_SCENARIO_WORST ||
+      selectedScenarioId === DEFAULT_SCENARIO_BEST
+    ) {
+      window.alert("Built-in default scenarios cannot be deleted.");
+      return;
+    }
     setShowDeleteDialog(true);
   };
 
@@ -664,6 +963,18 @@ export function ExploreScenarios() {
   const handleSelectScenario = async (scenarioId: string) => {
     setSelectedScenarioId(scenarioId);
     if (!scenarioId) {
+      setActiveScenario({});
+      setError("");
+      return;
+    }
+    if (scenarioId === DEFAULT_SCENARIO_WORST) {
+      setActiveScenario(buildDefaultScenarioOverrides(assessments, 0));
+      setError("");
+      return;
+    }
+    if (scenarioId === DEFAULT_SCENARIO_BEST) {
+      setActiveScenario(buildDefaultScenarioOverrides(assessments, 100));
+      setError("");
       return;
     }
     if (!courseId) {
@@ -678,7 +989,7 @@ export function ExploreScenarios() {
       for (const entry of response.scenario.entries) {
         overrides[entry.assessment_name] = clampPercent(entry.score);
       }
-      setActiveScenario(overrides);
+      setActiveScenario(normalizeScenarioOverrides(assessments, overrides));
       setError("");
     } catch (e) {
       setError(getApiErrorMessage(e, "Failed to load scenario."));
@@ -716,6 +1027,12 @@ export function ExploreScenarios() {
                 className="min-w-[180px] rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] px-4 py-2 text-sm text-[#6B6560] focus:border-[#5F7A8A] focus:outline-none disabled:opacity-70"
               >
                 <option value="">Select Scenario</option>
+                <option value={DEFAULT_SCENARIO_WORST}>
+                  Worst Case
+                </option>
+                <option value={DEFAULT_SCENARIO_BEST}>
+                  Best Case
+                </option>
                 {savedScenarios.map((scenario) => (
                   <option key={scenario.scenario_id} value={scenario.scenario_id}>
                     {scenario.name}
@@ -743,8 +1060,19 @@ export function ExploreScenarios() {
                 const hasChildren = group.children.length > 0;
                 const isExpanded = expandedByKey[group.key] ?? false;
                 const parentActual = getActualPercent(group.raw_score, group.total_score);
-                const parentValue = getParentScenarioValue(group);
-                const parentContribution = (parentValue * group.weight) / 100;
+                const groupRuleState = getGroupRuleState(group);
+                const parentValue = groupRuleState.parentValue;
+                const parentContribution = groupRuleState.parentContribution;
+                const droppedChildKeys = groupRuleState.droppedChildKeys;
+                const ruleSummary = groupRuleState.ruleSummary;
+                const parentBounds = hasChildren
+                  ? getParentSliderBounds(group, activeScenario)
+                  : { min: 0, max: 100, hasUngradedChildren: false };
+                const parentSliderFill = getSliderFillPercent(
+                  parentValue,
+                  hasChildren ? parentBounds.min : 0,
+                  hasChildren ? parentBounds.max : 100
+                );
                 const parentThreshold = group.pass_threshold;
                 const parentBelowThreshold =
                   Boolean(group.is_mandatory_pass) &&
@@ -791,6 +1119,7 @@ export function ExploreScenarios() {
                           <h4 className="font-semibold text-[#3A3530]">{group.displayName}</h4>
                           <p className="text-sm text-[#6B6560]">
                             {formatCompactNumber(group.weight)}% •{" "}
+                            {hasChildren && ruleSummary ? `${ruleSummary} • ` : ""}
                             {typeof parentActual === "number"
                               ? `Current: ${parentActual.toFixed(1)}%`
                               : hasChildren
@@ -822,23 +1151,29 @@ export function ExploreScenarios() {
 
                     <input
                       type="range"
-                      min={0}
-                      max={100}
-                      step={1}
+                      min={hasChildren ? parentBounds.min : 0}
+                      max={hasChildren ? parentBounds.max : 100}
+                      step={0.1}
                       value={parentValue}
                       onChange={(e) =>
                         handleParentSliderChange(group, Number(e.target.value))
                       }
+                      disabled={hasChildren && !parentBounds.hasUngradedChildren}
                       className="mt-4 w-full h-2 rounded-full appearance-none cursor-pointer"
                       style={{
                         background: `linear-gradient(to right, ${
                           parentBelowThreshold ? "#B86B6B" : "#5F7A8A"
                         } 0%, ${
                           parentBelowThreshold ? "#B86B6B" : "#5F7A8A"
-                        } ${parentValue}%, #E8E3DC ${parentValue}%, #E8E3DC 100%)`,
+                        } ${parentSliderFill}%, #E8E3DC ${parentSliderFill}%, #E8E3DC 100%)`,
                         WebkitAppearance: "none",
                       }}
                     />
+                    {hasChildren && !parentBounds.hasUngradedChildren ? (
+                      <p className="mt-2 text-xs text-[#6B6560]">
+                        All child assessments are graded. Parent slider is locked.
+                      </p>
+                    ) : null}
                     {group.is_mandatory_pass ? (
                       <p
                         className={`mt-2 text-xs ${
@@ -860,6 +1195,8 @@ export function ExploreScenarios() {
                           );
                           const childValue = getChildScenarioValue(group, child);
                           const childContribution = (childValue * child.weight) / 100;
+                          const isDropped = droppedChildKeys.has(child.key);
+                          const displayContribution = isDropped ? 0 : childContribution;
                           const childModified =
                             typeof activeScenario[child.key] === "number" ||
                             typeof activeScenario[group.key] === "number";
@@ -868,7 +1205,9 @@ export function ExploreScenarios() {
                             <div
                               key={child.key}
                               className={`rounded-xl border px-4 py-3 ${
-                                childModified
+                                isDropped
+                                  ? "border-[#E8B6B6] bg-[#F9EAEA]"
+                                  : childModified
                                   ? "border-[#C4D6E4] bg-[#E8EFF5]"
                                   : "border-[#D4CFC7] bg-[#FCFAF7]"
                               }`}
@@ -877,6 +1216,11 @@ export function ExploreScenarios() {
                                 <div>
                                   <p className="text-sm font-medium text-[#3A3530]">
                                     {child.name}
+                                    {isDropped ? (
+                                      <span className="ml-2 rounded-full bg-[#F9EAEA] px-2 py-0.5 text-[10px] font-semibold text-[#B86B6B]">
+                                        Dropped
+                                      </span>
+                                    ) : null}
                                   </p>
                                   <p className="text-xs text-[#6B6560]">
                                     {formatCompactNumber(child.weight)}% •{" "}
@@ -884,12 +1228,21 @@ export function ExploreScenarios() {
                                       ? `Current: ${childActual.toFixed(1)}%`
                                       : "Not graded"}{" "}
                                     •{" "}
-                                    {`${childValue.toFixed(1)}% (${childContribution.toFixed(2)} / ${formatCompactNumber(
+                                    {`${childValue.toFixed(1)}% (${displayContribution.toFixed(2)} / ${formatCompactNumber(
                                       child.weight
                                     )})`}
                                   </p>
+                                  {isDropped ? (
+                                    <p className="mt-1 text-[11px] font-medium text-[#B86B6B]">
+                                      Excluded by rule from parent calculation.
+                                    </p>
+                                  ) : null}
                                 </div>
-                                <span className="text-xl font-semibold text-[#5F7A8A]">
+                                <span
+                                  className={`text-xl font-semibold ${
+                                    isDropped ? "text-[#B86B6B]" : "text-[#5F7A8A]"
+                                  }`}
+                                >
                                   {childValue.toFixed(1)}%
                                 </span>
                               </div>
@@ -908,7 +1261,11 @@ export function ExploreScenarios() {
                                 }
                                 className="w-full h-2 rounded-full appearance-none cursor-pointer"
                                 style={{
-                                  background: `linear-gradient(to right, #5F7A8A 0%, #5F7A8A ${childValue}%, #E8E3DC ${childValue}%, #E8E3DC 100%)`,
+                                  background: `linear-gradient(to right, ${
+                                    isDropped ? "#B86B6B" : "#5F7A8A"
+                                  } 0%, ${
+                                    isDropped ? "#B86B6B" : "#5F7A8A"
+                                  } ${childValue}%, #E8E3DC ${childValue}%, #E8E3DC 100%)`,
                                   WebkitAppearance: "none",
                                 }}
                               />
@@ -989,9 +1346,7 @@ export function ExploreScenarios() {
                 {projectedFinal.toFixed(2)}%
               </p>
               <p className="mt-3 text-xs text-[#6B6560]">
-                {normalisationApplied
-                  ? "Displayed as the normalized course result."
-                  : "Displayed as the raw weighted course result."}
+                Displayed as the raw weighted course result.
               </p>
             </div>
 
@@ -1004,102 +1359,6 @@ export function ExploreScenarios() {
                   {currentStanding.toFixed(2)}%
                 </p>
               </div>
-              <div className="rounded-2xl border border-[#C4D6E4] bg-[#E8EFF5] px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-[#6B6560]">
-                  Scenario Projection
-                </p>
-                <p className="mt-1 text-2xl font-semibold text-[#5F7A8A]">
-                  {projectedFinal.toFixed(2)}%
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[#D4CFC7] bg-[#E8F2EA] px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-[#6B6560]">
-                  Best Case Reachable
-                </p>
-                <p className="mt-1 text-2xl font-semibold text-[#6B9B7A]">
-                  {bestCaseReachable.toFixed(2)}%
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[#D4CFC7] bg-[#F9EAEA] px-4 py-3">
-                <p className="text-xs uppercase tracking-wide text-[#6B6560]">
-                  Worst Case Floor
-                </p>
-                <p className="mt-1 text-2xl font-semibold text-[#B86B6B]">
-                  {worstCaseFloor.toFixed(2)}%
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-8 space-y-4">
-              {projectionBreakdown.length > 0
-                ? projectionBreakdown.map((entry) => {
-                    const sourceLabel =
-                      entry.source === "scenario" || entry.source === "whatif"
-                        ? "Scenario"
-                        : entry.source === "graded" || entry.source === "actual"
-                          ? "Graded"
-                          : "Remaining";
-                    return (
-                      <div
-                        key={entry.name}
-                        className="flex items-center justify-between gap-4 text-sm"
-                      >
-                        <div>
-                          <span className="text-[#6B6560]">{entry.name}</span>
-                          <p className="text-xs text-[#C4B5A6]">{sourceLabel}</p>
-                        </div>
-                        <span className="font-semibold text-[#3A3530]">
-                          +{entry.contribution.toFixed(2)}%
-                        </span>
-                      </div>
-                    );
-                  })
-                : assessments
-                    .flatMap((group) => {
-                      if (group.children.length) {
-                        return group.children.map((child) => ({
-                          key: child.key,
-                          label: child.displayName,
-                          contribution:
-                            (getChildScenarioValue(group, child) * child.weight) / 100,
-                          sourceLabel:
-                            typeof activeScenario[child.key] === "number" ||
-                            typeof activeScenario[group.key] === "number"
-                              ? "Scenario"
-                              : hasPersistedGrade(child)
-                                ? "Graded"
-                                : "Default",
-                        }));
-                      }
-                      return [
-                        {
-                          key: group.key,
-                          label: group.displayName,
-                          contribution:
-                            (getParentScenarioValue(group) * group.weight) / 100,
-                          sourceLabel:
-                            typeof activeScenario[group.key] === "number"
-                              ? "Scenario"
-                              : hasPersistedGrade(group)
-                                ? "Graded"
-                                : "Default",
-                        },
-                      ];
-                    })
-                    .map((entry) => (
-                      <div
-                        key={entry.key}
-                        className="flex items-center justify-between gap-4 text-sm"
-                      >
-                        <div>
-                          <span className="text-[#6B6560]">{entry.label}</span>
-                          <p className="text-xs text-[#C4B5A6]">{entry.sourceLabel}</p>
-                        </div>
-                        <span className="font-semibold text-[#3A3530]">
-                          +{entry.contribution.toFixed(2)}%
-                        </span>
-                      </div>
-                    ))}
             </div>
 
             {hasChanges ? (

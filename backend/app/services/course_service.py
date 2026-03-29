@@ -250,6 +250,77 @@ class CourseService:
             ]
         }
 
+    def update_course_structure(
+        self,
+        user_id: UUID,
+        course_id: UUID,
+        course_update: CourseCreate,
+    ) -> dict:
+        """Replace the full assessment structure of an existing course.
+
+        Preserves scores for assessments (and children) whose names still match.
+        """
+        if not course_update.assessments:
+            raise CourseValidationError("At least one assessment is required")
+
+        for assessment in course_update.assessments:
+            if getattr(assessment, "is_bonus", False) and assessment.rule_type == "mandatory_pass":
+                raise CourseValidationError(
+                    f"Assessment '{assessment.name}' cannot be both bonus and mandatory_pass"
+                )
+
+        core_weight = sum(
+            a.weight for a in course_update.assessments if not getattr(a, "is_bonus", False)
+        )
+        if core_weight > 100:
+            raise CourseValidationError("Total non-bonus assessment weight cannot exceed 100%")
+
+        stored = self._get_course_or_raise(user_id=user_id, course_id=course_id)
+
+        # Build lookup of existing scores by name for grade preservation
+        old_scores: dict[str, dict] = {}
+        for a in stored.course.assessments:
+            entry: dict = {
+                "raw_score": a.raw_score,
+                "total_score": a.total_score,
+                "children": {},
+            }
+            for child in (a.children or []):
+                entry["children"][child.name] = {
+                    "raw_score": child.raw_score,
+                    "total_score": child.total_score,
+                }
+            old_scores[a.name] = entry
+
+        # Carry forward scores where names match
+        for assessment in course_update.assessments:
+            old = old_scores.get(assessment.name)
+            if not old:
+                continue
+            if assessment.children:
+                for child in assessment.children:
+                    old_child = old["children"].get(child.name)
+                    if old_child and child.raw_score is None and child.total_score is None:
+                        child.raw_score = old_child["raw_score"]
+                        child.total_score = old_child["total_score"]
+            elif assessment.raw_score is None and assessment.total_score is None:
+                assessment.raw_score = old["raw_score"]
+                assessment.total_score = old["total_score"]
+
+        # Update stored course with new structure
+        updated = course_update.model_copy(deep=True)
+        updated.name = course_update.name
+        updated.term = course_update.term
+
+        self._repository.update(user_id=user_id, course_id=course_id, course=updated)
+
+        return {
+            "message": "Course structure updated successfully",
+            "course_id": course_id,
+            "total_weight": float(core_weight),
+            "course": updated,
+        }
+
     def update_course_metadata(
         self,
         user_id: UUID,

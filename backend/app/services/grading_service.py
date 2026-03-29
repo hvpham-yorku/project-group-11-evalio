@@ -125,8 +125,16 @@ def apply_hypothetical_score(course: CourseCreate, assessment_name: str, score: 
 
     if parent.children:
         for child_assessment in parent.children:
+            child_is_graded = (
+                child_assessment.raw_score is not None
+                and child_assessment.total_score is not None
+                and child_assessment.total_score > 0
+            )
+            if child_is_graded:
+                continue
             child_assessment.raw_score = safe_score
             child_assessment.total_score = 100.0
+        return
 
     parent.raw_score = safe_score
     parent.total_score = 100.0
@@ -225,8 +233,17 @@ def compute_assessment_contribution(assessment, *, missing_percent: float = 0.0)
             child_percentages.sort(key=lambda item: item[0], reverse=True)
             child_percentages = child_percentages[:best_count]
 
-        contribution = sum((percent * weight) / 100 for percent, weight in child_percentages)
-        return float(contribution)
+        raw_contribution = sum((percent * weight) / 100 for percent, weight in child_percentages)
+
+        # For best_of / drop_lowest, the active children's weights may sum to
+        # less than the parent weight.  Scale up so the contribution is relative
+        # to the full parent weight.
+        if assessment.rule_type in ("best_of", "drop_lowest"):
+            active_weight = sum(weight for _, weight in child_percentages)
+            if active_weight > 0 and abs(active_weight - assessment.weight) > 0.001:
+                raw_contribution = raw_contribution / active_weight * assessment.weight
+
+        return float(raw_contribution)
 
     percent = _resolve_percent(
         assessment.raw_score,

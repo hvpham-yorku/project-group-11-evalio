@@ -425,7 +425,13 @@ async function request(path: string, options?: RequestOptions) {
 
   const text = await response.text();
   if (!text) return null;
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text);
+  } catch {
+    const error = new Error("Invalid server response format.") as ApiError;
+    error.response = { data: text };
+    throw error;
+  }
 }
 
 export function register(payload: { email: string; password: string }) {
@@ -495,6 +501,36 @@ export function confirmExtraction(payload: {
 }) {
   return request("/extraction/confirm", {
     method: "POST",
+    body: JSON.stringify(payload),
+  }) as Promise<CreateCourseResponse>;
+}
+
+export function updateCourseStructure(
+  courseId: string,
+  payload: {
+    name: string;
+    term?: string | null;
+    bonus_policy?: "none" | "additive" | "capped";
+    bonus_cap_percentage?: number | null;
+    assessments: Array<{
+      name: string;
+      weight: number;
+      raw_score?: number | null;
+      total_score?: number | null;
+      children?: Array<{
+        name: string;
+        weight: number;
+        raw_score?: number | null;
+        total_score?: number | null;
+      }> | null;
+      rule_type?: string | null;
+      rule_config?: Record<string, unknown> | null;
+      is_bonus?: boolean;
+    }>;
+  }
+) {
+  return request(`/courses/${courseId}/structure`, {
+    method: "PUT",
     body: JSON.stringify(payload),
   }) as Promise<CreateCourseResponse>;
 }

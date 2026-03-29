@@ -58,6 +58,8 @@ type AssessmentBreakdownRow = {
   mandatoryWarning?: string | null;
   /** For partial parents: number of children not yet graded */
   ungradedChildCount?: number;
+  /** Human-readable rule summary for grouped assessments */
+  ruleSummary?: string | null;
 };
 
 type AssessmentTarget = {
@@ -76,6 +78,9 @@ type AssessmentTarget = {
   isChild: boolean;
   isMandatoryPass: boolean;
   passThreshold: number | null;
+  ruleType: string | null;
+  ruleConfig: Record<string, unknown> | null;
+  childCount: number;
 };
 
 type AssessmentTargetGroup = {
@@ -193,6 +198,39 @@ function buildAssessmentTargetGroups(
     const isBonus = Boolean(assessment.is_bonus);
     const passThreshold = getMandatoryPassThreshold(assessment);
     const parentPercent = getPercent(assessment);
+    const normalizedRuleConfig: Record<string, unknown> =
+      assessment.rule_config && typeof assessment.rule_config === "object"
+        ? { ...(assessment.rule_config as Record<string, unknown>) }
+        : {};
+    const totalCountFromAssessment = parsePositiveInteger(assessment.total_count);
+    const effectiveCountFromAssessment = parsePositiveInteger(
+      assessment.effective_count
+    );
+    if (
+      totalCountFromAssessment &&
+      !parsePositiveInteger(normalizedRuleConfig.total_count)
+    ) {
+      normalizedRuleConfig.total_count = totalCountFromAssessment;
+    }
+    if (assessment.rule_type === "best_of") {
+      if (
+        effectiveCountFromAssessment &&
+        !parsePositiveInteger(normalizedRuleConfig.best_count)
+      ) {
+        normalizedRuleConfig.best_count = effectiveCountFromAssessment;
+      }
+    } else if (assessment.rule_type === "drop_lowest") {
+      if (
+        totalCountFromAssessment &&
+        effectiveCountFromAssessment &&
+        !parsePositiveInteger(normalizedRuleConfig.drop_count)
+      ) {
+        normalizedRuleConfig.drop_count = Math.max(
+          1,
+          totalCountFromAssessment - effectiveCountFromAssessment
+        );
+      }
+    }
 
     // Detect partially-graded parent: some children graded, not all
     const gradedChildCount = children.filter(isChildGraded).length;
@@ -216,6 +254,12 @@ function buildAssessmentTargetGroups(
       isChild: false,
       isMandatoryPass: passThreshold !== null,
       passThreshold,
+      ruleType:
+        typeof assessment.rule_type === "string" ? assessment.rule_type : null,
+      ruleConfig: Object.keys(normalizedRuleConfig).length
+        ? normalizedRuleConfig
+        : null,
+      childCount: children.length,
     };
 
     if (children.length) {
@@ -239,6 +283,9 @@ function buildAssessmentTargetGroups(
           isChild: true,
           isMandatoryPass: false,
           passThreshold: null,
+          ruleType: null,
+          ruleConfig: null,
+          childCount: 0,
         });
       }
       targets.push({
@@ -268,6 +315,43 @@ function formatCompactNumber(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
+function parsePositiveInteger(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  const rounded = Math.floor(parsed);
+  return rounded > 0 ? rounded : null;
+}
+
+function buildRuleSummary(assessment: AssessmentTarget): string | null {
+  if (!assessment.childCount) return null;
+
+  const config = assessment.ruleConfig ?? {};
+  const totalCount =
+    parsePositiveInteger((config as Record<string, unknown>).total_count) ??
+    assessment.childCount;
+
+  if (assessment.ruleType === "best_of") {
+    const bestCount = parsePositiveInteger(
+      (config as Record<string, unknown>).best_count
+    );
+    if (bestCount) {
+      return `Best ${Math.min(bestCount, totalCount)} of ${totalCount} ${assessment.displayName}`;
+    }
+  }
+
+  if (assessment.ruleType === "drop_lowest") {
+    const dropCount =
+      parsePositiveInteger((config as Record<string, unknown>).drop_count) ?? 1;
+    return `Drop lowest ${Math.min(dropCount, totalCount)} of ${totalCount} ${assessment.displayName}`;
+  }
+
+  if (assessment.ruleType === "pure_multiplicative") {
+    return `All ${totalCount} ${assessment.displayName} count`;
+  }
+
+  return `${assessment.childCount} ${assessment.displayName}`;
+}
+
 function getDaysLeft(isoDate: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -291,7 +375,21 @@ function buildBreakdownRow(
       : null;
 
   if (actualPercent !== null) {
-    const contributionPoints = (actualPercent * assessment.weight) / 100;
+    let contributionPoints = (actualPercent * assessment.weight) / 100;
+    let displayPercent = actualPercent;
+    if (
+      !assessment.isChild &&
+      uniformData &&
+      Number.isFinite(uniformData.current_contribution)
+    ) {
+      contributionPoints = uniformData.current_contribution;
+      if (assessment.weight > 0) {
+        displayPercent = Math.max(
+          0,
+          Math.min((contributionPoints / assessment.weight) * 100, 100)
+        );
+      }
+    }
     const label = assessment.partial ? "Earned So Far" : "Actual Performance";
     return {
       key: assessment.key,
@@ -300,7 +398,7 @@ function buildBreakdownRow(
       weight: assessment.weight,
       weightLabel: `${assessment.weight}% of final grade`,
       neededLabel: label,
-      needed: `${actualPercent.toFixed(1)}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
+      needed: `${displayPercent.toFixed(1)}% (${contributionPoints.toFixed(2)} / ${formatCompactNumber(
         assessment.weight
       )})`,
       contrib: `+${contributionPoints.toFixed(2)}%`,
@@ -309,6 +407,7 @@ function buildBreakdownRow(
       passStatus: mandatoryPassStatus,
       mandatoryWarning: null,
       ungradedChildCount: assessment.ungradedChildCount,
+      ruleSummary: buildRuleSummary(assessment),
     };
   }
 
@@ -340,6 +439,7 @@ function buildBreakdownRow(
       passStatus: passStatus,
       mandatoryWarning: mandatoryWarning,
       ungradedChildCount: assessment.ungradedChildCount,
+      ruleSummary: buildRuleSummary(assessment),
     };
   }
 
@@ -358,6 +458,7 @@ function buildBreakdownRow(
     passStatus: assessment.isMandatoryPass ? "pending" : null,
     mandatoryWarning: null,
     ungradedChildCount: assessment.ungradedChildCount,
+    ruleSummary: buildRuleSummary(assessment),
   };
 }
 
@@ -1114,7 +1215,7 @@ export function Dashboard() {
                 </div>
                 {hasChildren ? (
                   <span className="rounded-full border border-[#C4D6E4] bg-[#E8EFF5] px-3 py-1 text-[10px] font-semibold text-[#6B8BA8]">
-                    {group.children.length} {parent.name}
+                    {parent.ruleSummary ?? `${group.children.length} ${parent.name}`}
                   </span>
                 ) : null}
               </div>
