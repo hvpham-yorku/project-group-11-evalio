@@ -1262,7 +1262,7 @@ The system is now substantially more complete than in ITR1, with stronger persis
 
 **Story Owner:** Shivam Gupta  
 **Planned Effort:** 4–5 days  
-**Actual Effort:** In Progress
+**Actual Effort:** Completed
 
 #### Story Description
 
@@ -1325,7 +1325,7 @@ As a returning student, I want Evalio to reopen into my saved academic workspace
 
 **Story Owner:** Himanshi Verma
 **Planned Effort:** 4–5 days  
-**Actual Effort:** In Progress
+**Actual Effort:** Completed
 
 #### Story Description
 As a student, I want Evalio analytics to work correctly for parent-child assessment structures, so that my completion status, minimum required scores, and projections reflect real course grading trees.
@@ -1501,3 +1501,70 @@ As a student, I want a ranked risk and alert center across all my courses, so th
 * This story builds on reliable persistence and target-state consistency established in earlier ITR stories.
 * Emphasis is placed on making Evalio feel like a unified academic control panel rather than separate tools.
 * Cross-course aggregation required careful alignment of backend logic and frontend presentation.
+
+### ITR3-5 — Weekly Workload and Conflict Planner
+
+**Story Owner:** Kartik Sharma  
+**Planned Effort:** 4–5 days  
+**Actual Effort:** 4 days  
+
+#### Story Description
+
+As a student, I want Evalio to show my weekly academic workload and detect
+deadline conflicts across courses, so that I can prepare earlier for busy weeks
+and avoid deadline pileups.
+
+#### Scope (ITR3)
+
+* Create a weekly overview of academic workload across all saved courses.
+* Show upcoming assessments/deadlines inside the supported weekly window.
+* Identify when multiple deadlines are clustered too closely together.
+* Surface deadline conflict situations clearly in the supported planner flow.
+* Help users understand which course and item contributes to weekly workload.
+* Ensure weekly planner data stays aligned with saved deadline/course state.
+* Keep workload/conflict logic simple, clear, and deterministic.
+
+#### Out of Scope (Future Iterations)
+
+* Automatic study scheduling.
+* Full calendar-platform behaviour beyond the supported weekly overview.
+* AI workload forecasting or time-estimation.
+* Personalized workload customization rules.
+* Cross-device synchronization beyond the current persistence mode.
+
+#### Development Subtasks & Assignments
+
+1. Backend: Weekly workload aggregation and conflict detection logic  
+   * Assignee: Kartik Sharma
+
+2. DB: Verify support for weekly planner data inputs  
+   * Assignee: Himanshi Verma
+
+3. Frontend: Weekly workload and conflict planner UI  
+   * Assignee: Rima Ramchandani
+
+4. Testing: Weekly planner and conflict detection tests  
+   * Assignee: Bardiya Ameri
+
+5. Docs: Update log/demo notes for weekly planner behaviour  
+   * Assignee: Kartik Sharma
+
+#### Acceptance Criteria
+
+* Evalio shows a weekly overview of upcoming academic items across courses.
+* Users can clearly see what items belong to the current weekly planning view.
+* The weekly view identifies when multiple deadlines occur close together.
+* Deadline conflicts are surfaced clearly and understandably.
+* Each weekly item/conflict is associated with the correct course and deadline/assessment.
+* The weekly overview uses consistent deadline/course data from the system.
+* Workload/conflict behavior is deterministic and not misleading.
+* At least one integration test covers weekly aggregation logic.
+* At least one integration test covers deadline conflict detection.
+* At least one customer/system test covers a multi-course weekly overview flow.
+
+#### Notes / Reflection
+
+* The weekly planner was implemented as a simple and deterministic summary layer over saved deadlines across multiple courses.
+* Conflict detection was kept intentionally clear by using clustered deadlines inside the supported weekly window.
+* The planner surfaces course and item mapping so users can understand what makes a given week heavy.
+* The implementation avoids overstating unsupported calendar or scheduling behaviour and stays aligned with the deadline/course state already supported in the system.
