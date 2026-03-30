@@ -21,6 +21,61 @@ function clampCurrentGpa(value: number, scale: number): number {
   return Math.max(0, Math.min(value, scale));
 }
 
+function normalizePositiveScaleInput(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function ScaleSelectorCard({
+  title,
+  selectedScale,
+  onPresetSelect,
+  onCustomScaleChange,
+}: {
+  title: string;
+  selectedScale: number;
+  onPresetSelect: (scale: number) => void;
+  onCustomScaleChange: (scale: number) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#E8E3DC] bg-[#F8F5F0] p-4">
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6560]">
+        {title}
+      </p>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {COMMON_SCALES.map((scale) => (
+          <button
+            key={`${title}-${scale}`}
+            type="button"
+            onClick={() => onPresetSelect(scale)}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+              selectedScale === scale
+                ? "bg-[#5F7A8A] text-white"
+                : "bg-white text-[#6B6560] hover:bg-[#E8EFF5]"
+            }`}
+          >
+            {scale.toFixed(1)}
+          </button>
+        ))}
+      </div>
+      <label className="block text-[11px] text-[#6B6560]">
+        {title === "Current Scale" ? "Custom source scale" : "Custom target scale"}
+      </label>
+      <input
+        type="number"
+        min="0.1"
+        step="0.1"
+        value={selectedScale}
+        onChange={(event) => {
+          onCustomScaleChange(
+            normalizePositiveScaleInput(Number(event.target.value))
+          );
+        }}
+        className="mt-2 w-full rounded-xl border border-[#D4CFC7] bg-white px-3 py-2 text-sm text-[#3A3530] outline-none transition focus:border-[#5F7A8A]"
+      />
+    </div>
+  );
+}
+
 export function GpaScaleConverter() {
   const [fromScale, setFromScale] = useState(9);
   const [toScale, setToScale] = useState(4);
@@ -86,77 +141,19 @@ export function GpaScaleConverter() {
       <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-[#E8E3DC] bg-[#F8F5F0] p-4">
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6560]">
-                Current Scale
-              </p>
-              <div className="mb-3 flex flex-wrap gap-2">
-                {COMMON_SCALES.map((scale) => (
-                  <button
-                    key={`from-${scale}`}
-                    type="button"
-                    onClick={() => setFromScale(scale)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                      fromScale === scale
-                        ? "bg-[#5F7A8A] text-white"
-                        : "bg-white text-[#6B6560] hover:bg-[#E8EFF5]"
-                    }`}
-                  >
-                    {scale.toFixed(1)}
-                  </button>
-                ))}
-              </div>
-              <label className="block text-[11px] text-[#6B6560]">
-                Custom source scale
-              </label>
-              <input
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={fromScale}
-                onChange={(event) => {
-                  const nextValue = Number(event.target.value);
-                  setFromScale(Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 0);
-                }}
-                className="mt-2 w-full rounded-xl border border-[#D4CFC7] bg-white px-3 py-2 text-sm text-[#3A3530] outline-none transition focus:border-[#5F7A8A]"
-              />
-            </div>
+            <ScaleSelectorCard
+              title="Current Scale"
+              selectedScale={fromScale}
+              onPresetSelect={setFromScale}
+              onCustomScaleChange={setFromScale}
+            />
 
-            <div className="rounded-2xl border border-[#E8E3DC] bg-[#F8F5F0] p-4">
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6560]">
-                Target Scale
-              </p>
-              <div className="mb-3 flex flex-wrap gap-2">
-                {COMMON_SCALES.map((scale) => (
-                  <button
-                    key={`to-${scale}`}
-                    type="button"
-                    onClick={() => setToScale(scale)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                      toScale === scale
-                        ? "bg-[#5F7A8A] text-white"
-                        : "bg-white text-[#6B6560] hover:bg-[#E8EFF5]"
-                    }`}
-                  >
-                    {scale.toFixed(1)}
-                  </button>
-                ))}
-              </div>
-              <label className="block text-[11px] text-[#6B6560]">
-                Custom target scale
-              </label>
-              <input
-                type="number"
-                min="0.1"
-                step="0.1"
-                value={toScale}
-                onChange={(event) => {
-                  const nextValue = Number(event.target.value);
-                  setToScale(Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 0);
-                }}
-                className="mt-2 w-full rounded-xl border border-[#D4CFC7] bg-white px-3 py-2 text-sm text-[#3A3530] outline-none transition focus:border-[#5F7A8A]"
-              />
-            </div>
+            <ScaleSelectorCard
+              title="Target Scale"
+              selectedScale={toScale}
+              onPresetSelect={setToScale}
+              onCustomScaleChange={setToScale}
+            />
           </div>
 
           <div className="rounded-2xl border border-[#E8E3DC] bg-[#F8F5F0] p-4">
