@@ -801,6 +801,130 @@ export function exportToGoogleCalendar(
   }) as Promise<DeadlineExportResponse>;
 }
 
+// ─── Planning Types ─────────────────────────────────────────────────────────
+
+export type PlanningAlertType =
+  | "overdue_deadline"
+  | "near_term_deadline"
+  | "impossible_target"
+  | "high_weight_ungraded";
+
+export type PlanningAlertSeverity = "critical" | "high" | "medium" | "low";
+
+export type PlanningAlert = {
+  alert_id: string;
+  type: PlanningAlertType;
+  severity: PlanningAlertSeverity;
+  course_id: string;
+  course_name: string;
+  item_type: string;
+  item_label: string;
+  message: string;
+  rank: number;
+  deadline_id?: string;
+  due_date?: string | null;
+  due_time?: string | null;
+  due_at?: string | null;
+  assessment_name?: string | null;
+  assessment_weight?: number | null;
+  hours_overdue?: number;
+  hours_until_due?: number;
+  target?: number;
+  current_standing?: number;
+  maximum_possible?: number;
+  classification?: string;
+};
+
+export type PlanningAlertsResponse = {
+  generated_at: string;
+  reference_at: string;
+  rules: {
+    timezone: string;
+    near_term_window_hours: number;
+    high_weight_threshold: number;
+  };
+  summary: {
+    total_alerts: number;
+    course_count: number;
+    severity_counts: Record<string, number>;
+    type_counts: Record<string, number>;
+  };
+  alerts: PlanningAlert[];
+};
+
+export type WeeklyPlannerItem = {
+  deadline_id: string;
+  course_id: string;
+  course_name: string;
+  title: string;
+  deadline_type: string | null;
+  due_date: string;
+  due_time: string | null;
+  due_at: string;
+  days_until_due: number;
+  source: string;
+  assessment_name: string | null;
+  assessment_weight: number | null;
+};
+
+export type WeeklyPlannerConflict = {
+  conflict_id: string;
+  severity: string;
+  reason: string;
+  window_start: string;
+  window_end: string;
+  item_count: number;
+  course_count: number;
+  items: WeeklyPlannerItem[];
+};
+
+export type WeeklyPlannerDay = {
+  date: string;
+  item_count: number;
+  course_count: number;
+  items: WeeklyPlannerItem[];
+};
+
+export type WeeklyPlannerResponse = {
+  window: {
+    start_date: string;
+    end_date: string;
+    day_count: number;
+    timezone: string;
+    conflict_window_hours: number;
+  };
+  summary: {
+    item_count: number;
+    course_count: number;
+    days_with_items: number;
+    conflict_count: number;
+    busiest_day: {
+      date: string;
+      item_count: number;
+      course_count: number;
+    } | null;
+  };
+  days: WeeklyPlannerDay[];
+  items: WeeklyPlannerItem[];
+  conflicts: WeeklyPlannerConflict[];
+};
+
+// ─── Planning API Functions ─────────────────────────────────────────────────
+
+export function getPlanningAlerts(params?: { reference_at?: string }) {
+  const query = params?.reference_at
+    ? `?reference_at=${encodeURIComponent(params.reference_at)}`
+    : "";
+  return request(`/planning/alerts${query}`) as Promise<PlanningAlertsResponse>;
+}
+
+export function getWeeklyPlanner(params?: { start_date?: string }) {
+  const query = params?.start_date
+    ? `?start_date=${encodeURIComponent(params.start_date)}`
+    : "";
+  return request(`/planning/weekly${query}`) as Promise<WeeklyPlannerResponse>;
+}
+
 export function exportToIcs(
   courseId: string,
   payload?: {
