@@ -9,6 +9,7 @@ import {
   Clock,
   Link as LinkIcon,
   Loader2,
+  Pencil,
   Plus,
   ShieldCheck,
   X,
@@ -22,6 +23,7 @@ import {
   exportToGoogleCalendar,
   listDeadlines as listDeadlinesApi,
   createDeadline as createDeadlineApi,
+  updateDeadline as updateDeadlineApi,
   type Course,
   type Deadline as ApiDeadline,
 } from "@/lib/api";
@@ -154,6 +156,7 @@ export default function DeadlinesPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [draftDeadline, setDraftDeadline] =
     useState<DeadlineFormState>(EMPTY_DEADLINE_FORM);
+  const [editingDeadline, setEditingDeadline] = useState<Deadline | null>(null);
   const [selectedDeadlines, setSelectedDeadlines] = useState<Set<string>>(
     new Set()
   );
@@ -290,10 +293,26 @@ export default function DeadlinesPage() {
 
   const closeAddModal = () => {
     setShowAddModal(false);
+    setEditingDeadline(null);
     setDraftDeadline(EMPTY_DEADLINE_FORM);
+    setError("");
   };
 
-  const handleCreateDeadline = async () => {
+  const handleEditDeadline = (deadline: Deadline) => {
+    setEditingDeadline(deadline);
+    setDraftDeadline({
+      title: deadline.title,
+      assessment_name: deadline.assessment_name ?? "",
+      due_date: deadline.due_date,
+      due_time: deadline.due_time ?? "",
+      type: deadline.type,
+      notes: deadline.notes ?? "",
+    });
+    setError("");
+    setShowAddModal(true);
+  };
+
+  const handleSaveDeadline = async () => {
     if (!courseId) {
       setError("Choose a course before adding a deadline.");
       return;
@@ -311,7 +330,7 @@ export default function DeadlinesPage() {
 
     setIsSavingDeadline(true);
     try {
-      await createDeadlineApi(courseId, {
+      const payload = {
         title: draftDeadline.title.trim(),
         deadline_type: draftDeadline.type,
         assessment_name:
@@ -319,12 +338,23 @@ export default function DeadlinesPage() {
         due_date: draftDeadline.due_date,
         due_time: draftDeadline.due_time || null,
         notes: draftDeadline.notes.trim() || null,
-      });
+      };
+
+      if (editingDeadline) {
+        await updateDeadlineApi(courseId, editingDeadline.id, payload);
+      } else {
+        await createDeadlineApi(courseId, payload);
+      }
       await refreshDeadlines(courseId);
       setError("");
       closeAddModal();
     } catch (e) {
-      setError(getApiErrorMessage(e, "Error creating deadline."));
+      setError(
+        getApiErrorMessage(
+          e,
+          editingDeadline ? "Error updating deadline." : "Error creating deadline."
+        )
+      );
     } finally {
       setIsSavingDeadline(false);
     }
@@ -387,7 +417,9 @@ export default function DeadlinesPage() {
           </div>
           <button
             onClick={() => {
+              setEditingDeadline(null);
               setDraftDeadline(EMPTY_DEADLINE_FORM);
+              setError("");
               setShowAddModal(true);
             }}
             className="flex items-center gap-2 rounded-xl bg-[#5F7A8A] px-5 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
@@ -410,6 +442,8 @@ export default function DeadlinesPage() {
                 key={d.id}
                 deadline={d}
                 isSelected={selectedDeadlines.has(d.id)}
+                canEdit={hasConfirmed}
+                onEdit={() => handleEditDeadline(d)}
                 onToggleSelect={() =>
                   setSelectedDeadlines((p) => {
                     const n = new Set(p);
@@ -489,10 +523,12 @@ export default function DeadlinesPage() {
             <div className="mb-6 flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-2xl font-bold text-[#3A3530]">
-                  Add Deadline
+                  {editingDeadline ? "Edit Deadline" : "Add Deadline"}
                 </h3>
                 <p className="mt-1 text-sm text-[#6B6560]">
-                  Create a manual deadline for {courseName || "your course"}.
+                  {editingDeadline
+                    ? `Update the saved deadline for ${courseName || "your course"}.`
+                    : `Create a manual deadline for ${courseName || "your course"}.`}
                 </p>
               </div>
               <button
@@ -624,16 +660,18 @@ export default function DeadlinesPage() {
               </button>
               <button
                 type="button"
-                onClick={handleCreateDeadline}
+                onClick={handleSaveDeadline}
                 disabled={isSavingDeadline}
                 className="flex items-center justify-center gap-2 rounded-xl bg-[#5F7A8A] px-5 py-3 text-sm font-bold text-white transition hover:opacity-90 disabled:opacity-60"
               >
                 {isSavingDeadline ? (
                   <Loader2 size={16} className="animate-spin" />
+                ) : editingDeadline ? (
+                  <Check size={16} />
                 ) : (
                   <Plus size={16} />
                 )}
-                Save Deadline
+                {editingDeadline ? "Update Deadline" : "Save Deadline"}
               </button>
             </div>
           </div>
@@ -716,10 +754,14 @@ export default function DeadlinesPage() {
 function DeadlineRow({
   deadline,
   isSelected,
+  canEdit,
+  onEdit,
   onToggleSelect,
 }: {
   deadline: Deadline;
   isSelected: boolean;
+  canEdit?: boolean;
+  onEdit?: () => void;
   onToggleSelect: () => void;
 }) {
   const days = getDaysRemaining(deadline.due_date);
@@ -770,6 +812,16 @@ function DeadlineRow({
       >
         {formatCountdown(days)}
       </div>
+      {canEdit ? (
+        <button
+          type="button"
+          onClick={onEdit}
+          className="rounded-xl border border-[#D4CFC7] p-2 text-[#6B6560] transition hover:bg-[#F5F1EB] hover:text-[#3A3530]"
+          aria-label={`Edit ${deadline.title}`}
+        >
+          <Pencil size={16} />
+        </button>
+      ) : null}
     </div>
   );
 }
