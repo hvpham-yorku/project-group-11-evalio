@@ -15,6 +15,16 @@ import type {
 } from "@/lib/extraction-types";
 
 const ACTIVE_COURSE_STORAGE_KEY = "evalio_active_course_id";
+const EXTRACTION_STORAGE_PREFIX = "evalio_extraction_";
+const RULES_STORAGE_PREFIX = "evalio_rules_";
+
+function getExtractionStorageKey(courseId: string): string {
+  return `${EXTRACTION_STORAGE_PREFIX}${courseId}`;
+}
+
+function getRulesStorageKey(courseId: string): string {
+  return `${RULES_STORAGE_PREFIX}${courseId}`;
+}
 
 function readJsonFromStorage<T>(key: string): T | null {
   const raw = window.localStorage.getItem(key);
@@ -26,6 +36,14 @@ function readJsonFromStorage<T>(key: string): T | null {
     window.localStorage.removeItem(key);
     return null;
   }
+}
+
+function writeJsonToStorage<T>(key: string, value: T | null) {
+  if (value === null) {
+    window.localStorage.removeItem(key);
+    return;
+  }
+  window.localStorage.setItem(key, JSON.stringify(value));
 }
 
 type SetupCourseContextValue = {
@@ -67,10 +85,10 @@ export function SetupCourseProvider({
     }
 
     setExtractionResultState(
-      readJsonFromStorage(`evalio_extraction_${courseId}`)
+      readJsonFromStorage(getExtractionStorageKey(courseId))
     );
     setInstitutionalGradingRulesState(
-      readJsonFromStorage(`evalio_rules_${courseId}`)
+      readJsonFromStorage(getRulesStorageKey(courseId))
     );
   }, [courseId]);
 
@@ -86,11 +104,8 @@ export function SetupCourseProvider({
   const setExtractionResult = useCallback(
     (data: ExtractionResult | null) => {
       setExtractionResultState(data);
-      if (courseId && data) {
-        window.localStorage.setItem(
-          `evalio_extraction_${courseId}`,
-          JSON.stringify(data)
-        );
+      if (courseId) {
+        writeJsonToStorage(getExtractionStorageKey(courseId), data);
       }
     },
     [courseId]
@@ -99,11 +114,8 @@ export function SetupCourseProvider({
   const setInstitutionalGradingRules = useCallback(
     (rules: InstitutionalGradingRules | null) => {
       setInstitutionalGradingRulesState(rules);
-      if (courseId && rules) {
-        window.localStorage.setItem(
-          `evalio_rules_${courseId}`,
-          JSON.stringify(rules)
-        );
+      if (courseId) {
+        writeJsonToStorage(getRulesStorageKey(courseId), rules);
       }
     },
     [courseId]
