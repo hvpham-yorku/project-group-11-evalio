@@ -6,36 +6,9 @@ import { Upload, FileText, Sparkles } from "lucide-react";
 import { getApiErrorMessage } from "@/lib/errors";
 import { API_BASE_URL } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
+import type { ExtractionResult } from "@/lib/extraction-types";
 
 const PENDING_DEADLINES_KEY = "evalio_pending_deadlines_v1";
-
-type ExtractedAssessment = {
-  name: string;
-  weight: number;
-  is_bonus?: boolean;
-  rule_type?: string | null;
-  rule_config?: Record<string, unknown> | null;
-  children?: ExtractedAssessment[];
-};
-
-type ExtractionResponse = {
-  course_code?: string | null;
-  structure_valid: boolean;
-  assessments: ExtractedAssessment[];
-  deadlines: Array<{
-    title: string;
-    due_date?: string | null;
-    due_time?: string | null;
-  }>;
-  diagnostics: {
-    confidence_score: number;
-    confidence_level: string;
-    trigger_gpt: boolean;
-    trigger_reasons: string[];
-    parse_warnings?: string[];
-    failure_reason?: string | null;
-  };
-};
 
 function inferDeadlineType(title: string): "Assignment" | "Test" | "Exam" | "Quiz" | "Other" {
   const lowered = title.toLowerCase();
@@ -84,7 +57,7 @@ function toFriendlyExtractionMessage(message: string): string {
   return message;
 }
 
-function buildFailClosedMessage(response: ExtractionResponse): string {
+function buildFailClosedMessage(response: ExtractionResult): string {
   const base = "Could not extract grading structure from this outline.";
   const failureReason = response.diagnostics?.failure_reason?.trim();
   const firstWarning = response.diagnostics?.trigger_reasons?.[0] ?? response.diagnostics?.parse_warnings?.[0];
@@ -105,7 +78,7 @@ export function UploadStep() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failClosedMessage, setFailClosedMessage] = useState<string | null>(null);
-  const [diagnostics, setDiagnostics] = useState<ExtractionResponse["diagnostics"] | null>(null);
+  const [diagnostics, setDiagnostics] = useState<ExtractionResult["diagnostics"] | null>(null);
 
   const handleManualSetup = () => {
     setError(null);
@@ -164,7 +137,7 @@ export function UploadStep() {
         }
       );
 
-      const body = (await response.json().catch(() => null)) as ExtractionResponse | null;
+      const body = (await response.json().catch(() => null)) as ExtractionResult | null;
       if (!response.ok) {
         const detail =
           body &&

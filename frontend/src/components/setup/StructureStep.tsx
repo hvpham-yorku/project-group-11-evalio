@@ -12,6 +12,12 @@ import {
 import { confirmExtraction, listCourses, updateCourseStructure } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/errors";
 import { useSetupCourse } from "@/app/setup/course-context";
+import type {
+  ConfirmedExtractionResult,
+  ExtractedAssessment,
+  InstitutionalGradeBoundary,
+  InstitutionalGradingRules,
+} from "@/lib/extraction-types";
 
 type EditableAssessment = {
   id: string;
@@ -301,12 +307,7 @@ function findAssessmentValidationError(items: EditableAssessment[]): string | nu
   return null;
 }
 
-type GradeBoundary = {
-  letter: string;
-  minLabel: string; // e.g., "90–100" or "below 50"
-  points: string; // e.g., "9.0"
-  descriptor: string; // e.g., "Excellent"
-};
+type GradeBoundary = InstitutionalGradeBoundary;
 
 export default function StructureStep() {
   const router = useRouter();
@@ -375,7 +376,10 @@ export default function StructureStep() {
   // Convert extractionResult.assessments into local editable state (once per new extraction)
   useEffect(() => {
     const incoming = Array.isArray(extractionResult?.assessments) ? extractionResult.assessments : [];
-    const normalize = (items: any[], prefix = "a"): EditableAssessment[] =>
+    const normalize = (
+      items: ExtractedAssessment[],
+      prefix = "a"
+    ): EditableAssessment[] =>
       items.map((it, idx) => {
         const id = typeof it?.id === "string" ? it.id : `${prefix}-${idx}-${Date.now()}`;
         const childrenRaw = Array.isArray(it?.children) ? it.children : [];
@@ -633,7 +637,7 @@ export default function StructureStep() {
     try {
       setSaving(true);
       const combinedTerm = [termLabel.trim(), termYear.trim()].filter(Boolean).join(" ");
-      const selectedRules = {
+      const selectedRules: InstitutionalGradingRules = {
         institution: institutionName,
         scale: scaleName,
         grade_boundaries: gradeBoundaries,
@@ -664,8 +668,21 @@ export default function StructureStep() {
         router.push("/setup/grades");
       } else {
         // New course: confirm extraction
-        const patchedExtraction = {
-          ...extractionResult,
+        const baseExtraction = extractionResult ?? {
+          course_code: null,
+          structure_valid: true,
+          assessments: [],
+          deadlines: [],
+          diagnostics: {
+            confidence_score: 0,
+            confidence_level: "Manual",
+            trigger_gpt: false,
+            trigger_reasons: [],
+            failure_reason: null,
+          },
+        };
+        const patchedExtraction: ConfirmedExtractionResult = {
+          ...baseExtraction,
           course_name: courseName.trim(),
           term: combinedTerm || null,
           assessments: assessments,

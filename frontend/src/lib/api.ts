@@ -1,3 +1,5 @@
+import type { ConfirmedExtractionResult } from "@/lib/extraction-types";
+
 function getDefaultApiBaseUrl(): string {
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;
@@ -497,7 +499,7 @@ export function createCourse(payload: {
 export function confirmExtraction(payload: {
   course_name: string;
   term?: string | null;
-  extraction_result: any;
+  extraction_result: ConfirmedExtractionResult;
 }) {
   return request("/extraction/confirm", {
     method: "POST",

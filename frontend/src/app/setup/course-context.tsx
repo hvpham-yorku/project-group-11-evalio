@@ -9,6 +9,10 @@ import {
   useState,
 } from "react";
 import type { Course } from "@/lib/api";
+import type {
+  ExtractionResult,
+  InstitutionalGradingRules,
+} from "@/lib/extraction-types";
 
 const ACTIVE_COURSE_STORAGE_KEY = "evalio_active_course_id";
 
@@ -28,10 +32,10 @@ type SetupCourseContextValue = {
   courseId: string | null;
   setCourseId: (id: string | null) => void;
   ensureCourseIdFromList: (courses: Course[]) => string | null;
-  extractionResult: any | null;
-  setExtractionResult: (data: any | null) => void;
-  institutionalGradingRules: any | null;
-  setInstitutionalGradingRules: (rules: any) => void;
+  extractionResult: ExtractionResult | null;
+  setExtractionResult: (data: ExtractionResult | null) => void;
+  institutionalGradingRules: InstitutionalGradingRules | null;
+  setInstitutionalGradingRules: (rules: InstitutionalGradingRules | null) => void;
 };
 
 const SetupCourseContext = createContext<SetupCourseContextValue | null>(null);
@@ -42,11 +46,11 @@ export function SetupCourseProvider({
   children: React.ReactNode;
 }) {
   const [courseId, setCourseIdState] = useState<string | null>(null);
-  const [extractionResult, setExtractionResultState] = useState<any | null>(
+  const [extractionResult, setExtractionResultState] = useState<ExtractionResult | null>(
     null
   );
   const [institutionalGradingRules, setInstitutionalGradingRulesState] =
-    useState<any | null>(null);
+    useState<InstitutionalGradingRules | null>(null);
 
   // 1. Initial Load of active ID
   useEffect(() => {
@@ -80,7 +84,7 @@ export function SetupCourseProvider({
   }, []);
 
   const setExtractionResult = useCallback(
-    (data: any | null) => {
+    (data: ExtractionResult | null) => {
       setExtractionResultState(data);
       if (courseId && data) {
         window.localStorage.setItem(
@@ -93,7 +97,7 @@ export function SetupCourseProvider({
   );
 
   const setInstitutionalGradingRules = useCallback(
-    (rules: any) => {
+    (rules: InstitutionalGradingRules | null) => {
       setInstitutionalGradingRulesState(rules);
       if (courseId && rules) {
         window.localStorage.setItem(
