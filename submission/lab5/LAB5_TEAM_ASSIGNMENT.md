@@ -1,6 +1,7 @@
 # Lab 5 Team Assignment (Activities 1, 2, 3)
 
 This is the simple working plan for everyone.
+User Stories can be referred from log.md
 
 ## Story Assignment (3 stories per person)
 
