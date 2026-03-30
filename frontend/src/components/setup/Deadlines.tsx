@@ -254,6 +254,7 @@ export default function DeadlinesPage() {
             due_date: d.due_date,
             due_time: d.due_time ?? null,
             notes: d.notes ?? null,
+            source: "outline",
           })
         )
       );

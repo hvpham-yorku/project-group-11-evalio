@@ -743,6 +743,7 @@ export function createDeadline(
     due_time?: string | null;
     notes?: string | null;
     assessment_name?: string | null;
+    source?: string;
   }
 ) {
   return request(`/courses/${courseId}/deadlines`, {

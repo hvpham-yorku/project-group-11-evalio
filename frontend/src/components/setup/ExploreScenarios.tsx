@@ -1146,9 +1146,9 @@ export function ExploreScenarios() {
 
       {exploreTab === "course" ? (
       <>
-<div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
+<div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-5">
         {/* LEFT: WHAT-IF */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-3">
           <div className="rounded-3xl border border-[#D4CFC7] bg-white p-8 shadow-sm">
             <div className="flex justify-between items-center mb-6 gap-4">
               <div className="flex items-center gap-3">
@@ -1161,7 +1161,7 @@ export function ExploreScenarios() {
                 value={selectedScenarioId}
                 onChange={(e) => handleSelectScenario(e.target.value)}
                 disabled={loadingScenario}
-                className={`min-w-[180px] rounded-xl border border-[#D4CFC7] bg-[${COLORS.BG_CREAM}] px-4 py-2 text-sm text-[#6B6560] focus:border-[#5F7A8A] focus:outline-none disabled:opacity-70`}
+                className={`min-w-[180px] rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] px-4 py-2 text-sm text-[#6B6560] focus:border-[#5F7A8A] focus:outline-none disabled:opacity-70`}
               >
                 <option value="">Select Scenario</option>
                 <option value={DEFAULT_SCENARIO_WORST}>Worst Case</option>
@@ -1271,13 +1271,10 @@ export function ExploreScenarios() {
                               ? `Current: ${parentActual.toFixed(1)}%`
                               : hasChildren
                               ? "Derived from child inputs"
-                              : "Not graded"}{" "}
-                            •{" "}
-                            {`${parentValue.toFixed(
-                              1
-                            )}% (${parentContribution.toFixed(
-                              2
-                            )} / ${formatCompactNumber(group.weight)})`}
+                              : "Not graded"}
+                          </p>
+                          <p className="text-sm text-[#6B6560]">
+                            {`${parentValue.toFixed(1)}% (${parentContribution.toFixed(2)} / ${formatCompactNumber(group.weight)})`}
                           </p>
                           {group.is_mandatory_pass ? (
                             <p
@@ -1453,20 +1450,20 @@ export function ExploreScenarios() {
                   <button
                     onClick={handleOpenSaveDialog}
                     disabled={savingScenario}
-                    className={`inline-flex items-center gap-2 rounded-xl bg-[${COLORS.SUCCESS_GREEN}] px-5 py-3 font-medium text-white transition shadow-sm hover:opacity-90 disabled:opacity-70`}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#2E7D52] px-5 py-3 font-medium text-white transition shadow-sm hover:bg-[#256943] disabled:opacity-70"
                   >
                     Save Scenario
                   </button>
                   <button
                     onClick={handleDeleteScenarioClick}
                     disabled={deletingScenario}
-                    className={`inline-flex items-center gap-2 rounded-xl bg-[${COLORS.WARNING_RED}] px-5 py-3 font-medium text-white transition shadow-sm hover:opacity-90 disabled:opacity-70`}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#D94444] px-5 py-3 font-medium text-white transition shadow-sm hover:bg-[#C03636] disabled:opacity-70"
                   >
                     Delete Scenario
                   </button>
                   <button
                     onClick={handleResetAll}
-                    className={`inline-flex items-center gap-2 rounded-xl bg-[${COLORS.BG_CREAM}] px-5 py-3 font-medium text-[#3A3530] transition shadow-sm hover:opacity-90`}
+                    className={`inline-flex items-center gap-2 rounded-xl bg-[#F5F1EB] px-5 py-3 font-medium text-[#3A3530] transition shadow-sm hover:opacity-90`}
                   >
                     <RotateCcw size={16} />
                     Reset All
@@ -1478,7 +1475,7 @@ export function ExploreScenarios() {
         </div>
 
         {/* RIGHT: LIVE PROJECTION */}
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-2">
           <div className="rounded-3xl border border-[#D4CFC7] bg-white p-8 shadow-lg lg:sticky lg:top-6">
             <h3 className="mb-6 text-lg font-semibold text-[#3A3530]">
               Live Projection
@@ -1496,7 +1493,7 @@ export function ExploreScenarios() {
 
             <div className="mt-6 grid grid-cols-1 gap-3">
               <div
-                className={`rounded-2xl border border-[#E8E3DC] bg-[${COLORS.BG_CREAM}] px-4 py-3`}
+                className={`rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] px-4 py-3`}
               >
                 <p className="text-xs uppercase tracking-wide text-[#6B6560]">
                   Current Standing
@@ -1530,7 +1527,7 @@ export function ExploreScenarios() {
       {showSaveDialog ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div
-            className={`w-full max-w-md rounded-2xl border border-[${COLORS.BORDER_TAN}] bg-white p-6 shadow-2xl`}
+            className={`w-full max-w-md rounded-2xl border border-[#D4CFC7] bg-white p-6 shadow-2xl`}
           >
             <h4 className="text-lg font-semibold text-[#3A3530]">
               Save Scenario
@@ -1543,7 +1540,7 @@ export function ExploreScenarios() {
               type="text"
               value={scenarioName}
               onChange={(e) => setScenarioName(e.target.value)}
-              className={`mt-4 w-full rounded-xl border border-[${COLORS.BORDER_TAN}] bg-[${COLORS.BG_CREAM}] px-4 py-3 text-sm text-[#3A3530] focus:border-[#5F7A8A] focus:outline-none`}
+              className={`mt-4 w-full rounded-xl border border-[#D4CFC7] bg-[#F5F1EB] px-4 py-3 text-sm text-[#3A3530] focus:border-[#5F7A8A] focus:outline-none`}
               placeholder="Scenario name"
               autoFocus
             />
@@ -1555,14 +1552,14 @@ export function ExploreScenarios() {
                   setShowSaveDialog(false);
                   setScenarioName("");
                 }}
-                className={`rounded-xl bg-[${COLORS.BG_CREAM}] px-4 py-2 text-sm font-medium text-[#3A3530] transition hover:opacity-90`}
+                className={`rounded-xl bg-[#F5F1EB] px-4 py-2 text-sm font-medium text-[#3A3530] transition hover:opacity-90`}
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveScenario}
                 disabled={savingScenario}
-                className={`rounded-xl bg-[${COLORS.SUCCESS_GREEN}] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-70`}
+                className={`rounded-xl bg-[#6B9B7A] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-70`}
               >
                 Save
               </button>
@@ -1574,7 +1571,7 @@ export function ExploreScenarios() {
       {showDeleteDialog ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div
-            className={`w-full max-w-md rounded-2xl border border-[${COLORS.BORDER_TAN}] bg-white p-6 shadow-2xl`}
+            className={`w-full max-w-md rounded-2xl border border-[#D4CFC7] bg-white p-6 shadow-2xl`}
           >
             <h4 className="text-lg font-semibold text-[#3A3530]">
               Delete this scenario?
@@ -1589,14 +1586,14 @@ export function ExploreScenarios() {
                   if (deletingScenario) return;
                   setShowDeleteDialog(false);
                 }}
-                className={`rounded-xl bg-[${COLORS.BG_CREAM}] px-4 py-2 text-sm font-medium text-[#3A3530] transition hover:opacity-90`}
+                className={`rounded-xl bg-[#F5F1EB] px-4 py-2 text-sm font-medium text-[#3A3530] transition hover:opacity-90`}
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteScenario}
                 disabled={deletingScenario}
-                className={`rounded-xl bg-[${COLORS.WARNING_RED}] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-70`}
+                className={`rounded-xl bg-[#B86B6B] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-70`}
               >
                 Delete
               </button>

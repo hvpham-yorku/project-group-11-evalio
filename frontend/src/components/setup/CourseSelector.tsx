@@ -8,6 +8,7 @@ import { useSetupCourse } from "@/app/setup/course-context";
 
 const COURSE_TARGETS_STORAGE_KEY = "evalio_course_targets_v1";
 const COURSE_REFRESH_EVENT = "evalio:courses-updated";
+export const COURSE_FILTER_EVENT = "evalio:course-filter-changed";
 const DEFAULT_TARGET = 85;
 
 type SelectorSummary = {
@@ -45,11 +46,12 @@ function resolveCurrentGrade(result: { current_standing: number; final_total?: n
   return Number.isFinite(result.final_total) ? Number(result.final_total) : result.current_standing;
 }
 
-export function CourseSelector() {
+export function CourseSelector({ showAllOption = false }: { showAllOption?: boolean } = {}) {
   const router = useRouter();
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedAll, setSelectedAll] = useState(showAllOption);
   const [summary, setSummary] = useState<SelectorSummary>({
     current: 0,
     target: DEFAULT_TARGET,
@@ -105,7 +107,11 @@ export function CourseSelector() {
 
   useEffect(() => {
     setIsOpen(false);
-  }, [pathname]);
+    setSelectedAll(showAllOption);
+    if (showAllOption) {
+      window.dispatchEvent(new CustomEvent(COURSE_FILTER_EVENT, { detail: { courseId: null } }));
+    }
+  }, [pathname, showAllOption]);
 
   useEffect(() => {
     const handleRefresh = () => {
@@ -131,7 +137,7 @@ export function CourseSelector() {
       >
         <div className="flex items-center gap-3">
           <span className="text-sm font-bold text-[#3A3530]">
-            {currentCourse?.course_name ?? currentCourse?.name ?? "Select Course"}
+            {selectedAll ? "All Courses" : (currentCourse?.course_name ?? currentCourse?.name ?? "Select Course")}
           </span>
           <ChevronDown
             size={14}
@@ -139,34 +145,61 @@ export function CourseSelector() {
           />
         </div>
 
-        <div className="flex items-center gap-4 text-[11px]">
-          <span className="text-[#6B6560]">
-            Current: <b className="text-[#3A3530]">{toFixedOne(summary.current)}%</b>
-          </span>
-          <span className="text-[#6B6560]">
-            Target: <b className="text-[#3A3530]">{toFixedOne(summary.target)}%</b>
-          </span>
-          <span className={`px-2 py-0.5 rounded-full font-bold uppercase ${summary.riskClass}`}>
-            {summary.riskLabel}
-          </span>
-        </div>
+        {selectedAll ? (
+          <div className="flex items-center gap-4 text-[11px]">
+            <span className="text-[#6B6560]">
+              <b className="text-[#3A3530]">{courses.length}</b> course{courses.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-4 text-[11px]">
+            <span className="text-[#6B6560]">
+              Current: <b className="text-[#3A3530]">{toFixedOne(summary.current)}%</b>
+            </span>
+            <span className="text-[#6B6560]">
+              Target: <b className="text-[#3A3530]">{toFixedOne(summary.target)}%</b>
+            </span>
+            <span className={`px-2 py-0.5 rounded-full font-bold uppercase ${summary.riskClass}`}>
+              {summary.riskLabel}
+            </span>
+          </div>
+        )}
       </div>
 
       {isOpen ? (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
           <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-[1.25rem] border border-[#D4CFC7] bg-[#FFFFFF] shadow-xl">
+            {showAllOption ? (
+              <div
+                onClick={() => {
+                  setSelectedAll(true);
+                  setIsOpen(false);
+                  window.dispatchEvent(new CustomEvent(COURSE_FILTER_EVENT, { detail: { courseId: null } }));
+                }}
+                className="flex cursor-pointer items-center justify-between border-b border-[#E8E3DC] px-4 py-3 text-sm hover:bg-[#F5F1EB]"
+              >
+                <span className="font-medium">All Courses</span>
+                {selectedAll && (
+                  <Check size={14} className="text-[#5F7A8A]" />
+                )}
+              </div>
+            ) : null}
             {courses.map((course) => (
               <div
                 key={course.course_id}
                 onClick={() => {
+                  setSelectedAll(false);
                   setCourseId(course.course_id);
                   setIsOpen(false);
+                  if (showAllOption) {
+                    window.dispatchEvent(new CustomEvent(COURSE_FILTER_EVENT, { detail: { courseId: course.course_id } }));
+                  }
                 }}
                 className="flex cursor-pointer items-center justify-between border-b border-[#E8E3DC] px-4 py-3 text-sm hover:bg-[#F5F1EB]"
               >
                 <span>{course.course_name ?? course.name}</span>
-                {course.course_id === courseId && (
+                {!selectedAll && course.course_id === courseId && (
                   <Check size={14} className="text-[#5F7A8A]" />
                 )}
               </div>

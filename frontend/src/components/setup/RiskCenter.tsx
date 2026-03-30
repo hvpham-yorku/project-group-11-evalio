@@ -27,6 +27,7 @@ import {
   type WeeklyPlannerResponse,
 } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
+import { COURSE_FILTER_EVENT } from "@/components/setup/CourseSelector";
 
 // ─── Shared config ──────────────────────────────────────────────────────────
 
@@ -174,33 +175,39 @@ export default function RiskCenter() {
   const [viewMode, setViewMode] = useState<ViewMode>("alerts");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [filterCourseId, setFilterCourseId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setFilterCourseId(detail?.courseId ?? null);
+    };
+    window.addEventListener(COURSE_FILTER_EVENT, handler);
+    return () => window.removeEventListener(COURSE_FILTER_EVENT, handler);
+  }, []);
 
   // Alert state
   const [alertsData, setAlertsData] = useState<PlanningAlertsResponse | null>(null);
   const [alertFilter, setAlertFilter] = useState<AlertFilterType>("all");
-  const [resolvedOverdueIds, setResolvedOverdueIds] = useState<string[]>([]);
+  const [resolvedOverdueIds, setResolvedOverdueIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(RESOLVED_OVERDUE_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((value): value is string => typeof value === "string");
+      }
+    } catch {
+      window.localStorage.removeItem(RESOLVED_OVERDUE_STORAGE_KEY);
+    }
+    return [];
+  });
   const [showUndoBanner, setShowUndoBanner] = useState(false);
 
   // Weekly state
   const [weeklyData, setWeeklyData] = useState<WeeklyPlannerResponse | null>(null);
   const [weeklyFilter, setWeeklyFilter] = useState<WeeklyFilterType>("all");
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    try {
-      const raw = window.localStorage.getItem(RESOLVED_OVERDUE_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setResolvedOverdueIds(
-          parsed.filter((value): value is string => typeof value === "string")
-        );
-      }
-    } catch {
-      window.localStorage.removeItem(RESOLVED_OVERDUE_STORAGE_KEY);
-    }
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -240,10 +247,11 @@ export default function RiskCenter() {
 
   // ── Alert derived data ──────────────────────────────────────────────────
 
-  const alerts = useMemo(
-    () => alertsData?.alerts ?? [],
-    [alertsData]
-  );
+  const alerts = useMemo(() => {
+    const all = alertsData?.alerts ?? [];
+    if (!filterCourseId) return all;
+    return all.filter((a) => a.course_id === filterCourseId);
+  }, [alertsData, filterCourseId]);
 
   const displayAlerts = useMemo<DisplayAlert[]>(() => {
     return alerts.map((alert) => {
@@ -328,14 +336,16 @@ export default function RiskCenter() {
 
   // ── Weekly derived data ─────────────────────────────────────────────────
 
-  const weeklyItems = useMemo(
-    () => weeklyData?.items ?? [],
-    [weeklyData]
-  );
-  const weeklyConflicts = useMemo(
-    () => weeklyData?.conflicts ?? [],
-    [weeklyData]
-  );
+  const weeklyItems = useMemo(() => {
+    const all = weeklyData?.items ?? [];
+    if (!filterCourseId) return all;
+    return all.filter((item) => item.course_id === filterCourseId);
+  }, [weeklyData, filterCourseId]);
+  const weeklyConflicts = useMemo(() => {
+    const all = weeklyData?.conflicts ?? [];
+    if (!filterCourseId) return all;
+    return all.filter((c) => c.items.some((item) => item.course_id === filterCourseId));
+  }, [weeklyData, filterCourseId]);
   const weeklySummary = weeklyData?.summary;
 
   const conflictItemIds = useMemo(() => {

@@ -31,6 +31,7 @@ import {
   getDashboardSummary,
   getMinimumRequired,
   getUniformRequired,
+  getPlanningAlerts,
   listDeadlines as listDeadlinesApi,
   listCourses,
   type CgpaResponse,
@@ -38,6 +39,7 @@ import {
   type CourseGpaResponse,
   type DashboardSummaryResponse,
   type Deadline as ApiDeadline,
+  type PlanningAlertsResponse,
   type TargetCheckResponse,
   type UniformRequiredAssessment,
 } from "@/lib/api";
@@ -87,9 +89,7 @@ function getCourseDisplayName(
 
 function getDeadlineTargetMessage(deadline: DashboardDeadline): string | null {
   if (typeof deadline.minimum_required !== "number") return null;
-  if (deadline.minimum_required <= 0.05) {
-    return "Target already covered before this deadline.";
-  }
+  if (deadline.minimum_required <= 0.05) return null;
   return `Need at least ${deadline.minimum_required.toFixed(1)}% to hit your target.`;
 }
 
@@ -121,10 +121,7 @@ export function Dashboard() {
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [deadlines, setDeadlines] = useState<DashboardDeadline[]>([]);
-  const [riskDeadlines, setRiskDeadlines] = useState<ApiDeadline[]>([]);
-  const [riskTargetResults, setRiskTargetResults] = useState<
-    Record<string, TargetCheckResponse>
-  >({});
+  const [planningAlerts, setPlanningAlerts] = useState<PlanningAlertsResponse | null>(null);
   const [gpaScale, setGpaScale] = useState<GpaScale>("4.0");
   const [termGpa, setTermGpa] = useState<CgpaResponse | null>(null);
   const [termGpaCourses, setTermGpaCourses] = useState<CourseGpaResponse[]>([]);
@@ -205,8 +202,7 @@ export function Dashboard() {
           allCourseResults,
           summary,
           deadlineResponse,
-          allDeadlineResponses,
-          allTargetResults,
+          planningAlertsResult,
         ] =
           await Promise.all([
             Promise.resolve(
@@ -278,27 +274,7 @@ export function Dashboard() {
               deadlines: [],
               count: 0,
             })),
-            Promise.all(
-              courses.map(async (course) => {
-                try {
-                  return await listDeadlinesApi(course.course_id);
-                } catch {
-                  return { deadlines: [], count: 0 };
-                }
-              })
-            ),
-            Promise.all(
-              courses.map(async (course) => {
-                try {
-                  const result = await checkTarget(course.course_id, {
-                    target: resolvedTarget,
-                  });
-                  return [course.course_id, result] as const;
-                } catch {
-                  return null;
-                }
-              })
-            ),
+            getPlanningAlerts().catch(() => null),
           ]);
 
         setTargetResult(target);
@@ -354,17 +330,7 @@ export function Dashboard() {
           })
         );
         setDeadlines(decoratedDeadlines);
-        setRiskDeadlines(
-          allDeadlineResponses.flatMap((response) => response.deadlines ?? [])
-        );
-        setRiskTargetResults(
-          Object.fromEntries(
-            allTargetResults.filter(
-              (entry): entry is readonly [string, TargetCheckResponse] =>
-                entry !== null
-            )
-          )
-        );
+        setPlanningAlerts(planningAlertsResult);
 
         const validTermCourseResults = termCourseResults.filter(
           (item): item is CourseGpaResponse => item !== null
@@ -409,8 +375,7 @@ export function Dashboard() {
         setTermGpaCourses([]);
         setCumulativeGpa(null);
         setDeadlines([]);
-        setRiskDeadlines([]);
-        setRiskTargetResults({});
+        setPlanningAlerts(null);
       } finally {
         setLoading(false);
       }
@@ -543,106 +508,51 @@ export function Dashboard() {
   }, [cumulativeGpa, gpaScale]);
 
   const riskSummary = useMemo(() => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
+    if (!planningAlerts) {
+      return {
+        criticalCount: 0,
+        dueSoonCount: 0,
+        targetRiskCount: 0,
+        highWeightUngradedCount: 0,
+        totalAlerts: 0,
+        topAlerts: [] as RiskSummaryAlert[],
+      };
+    }
 
-    let criticalCount = 0;
-    let dueSoonCount = 0;
-    let targetRiskCount = 0;
-    let highWeightUngradedCount = 0;
-    const topAlerts: RiskSummaryAlert[] = [];
-
-    riskDeadlines.forEach((deadline) => {
-      const dueDate = new Date(deadline.due_date);
-      dueDate.setHours(0, 0, 0, 0);
-      const daysOverdue = Math.floor(
-        (now.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      if (daysOverdue > 0) {
-        criticalCount += 1;
-        const courseName = getCourseDisplayName(
-          courses,
-          deadline.course_id,
-          activeCourse
-        );
-
-        if (topAlerts.length < 3) {
-          topAlerts.push({
-            text: `${courseName} - ${deadline.title} overdue`,
-            severity: "critical",
-          });
+    // Read resolved/submitted overdue IDs from localStorage (same key as RiskCenter)
+    let resolvedIds: string[] = [];
+    try {
+      const raw = window.localStorage.getItem("evalio_resolved_overdue_deadlines");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          resolvedIds = parsed.filter((v): v is string => typeof v === "string");
         }
       }
-    });
+    } catch {
+      // ignore
+    }
 
-    riskDeadlines.forEach((deadline) => {
-      const dueDate = new Date(deadline.due_date);
-      dueDate.setHours(0, 0, 0, 0);
-      const hoursUntil = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    const isSubmitted = (a: (typeof planningAlerts.alerts)[number]) =>
+      a.type === "overdue_deadline" &&
+      typeof a.deadline_id === "string" &&
+      resolvedIds.includes(a.deadline_id);
 
-      if (hoursUntil > 0 && hoursUntil <= 72) {
-        dueSoonCount += 1;
-        if (hoursUntil <= 24) criticalCount += 1;
+    const activeAlerts = planningAlerts.alerts.filter(
+      (a) => !isSubmitted(a) && (!activeCourseId || a.course_id === activeCourseId)
+    );
+    const criticalCount = activeAlerts.filter((a) => a.severity === "critical").length;
+    const dueSoonCount = activeAlerts.filter((a) => a.type === "near_term_deadline").length;
+    const targetRiskCount = activeAlerts.filter((a) => a.type === "impossible_target").length;
+    const highWeightUngradedCount = activeAlerts.filter((a) => a.type === "high_weight_ungraded").length;
+    const totalAlerts = activeAlerts.length;
 
-        const courseName = getCourseDisplayName(
-          courses,
-          deadline.course_id,
-          activeCourse
-        );
-
-        if (topAlerts.length < 3) {
-          topAlerts.push({
-            text: `${courseName} - ${deadline.title} due in ${Math.ceil(hoursUntil)}h`,
-            severity: hoursUntil <= 24 ? "critical" : "warning",
-          });
-        }
-      }
-    });
-
-    courses.forEach((course) => {
-      const targetCheck = riskTargetResults[course.course_id];
-      if (targetCheck?.classification === "Not Possible") {
-        targetRiskCount += 1;
-        if (topAlerts.length < 3) {
-          topAlerts.push({
-            text: `${course.course_name || course.name} - Target not achievable`,
-            severity: "warning",
-          });
-        }
-      }
-    });
-
-    courses.forEach((course) => {
-      course.assessments.forEach((assessment) => {
-        const children = Array.isArray(assessment.children) ? assessment.children : [];
-        if (children.length) {
-          children.forEach((child) => {
-            const isUngraded = !(
-              typeof child.raw_score === "number" &&
-              typeof child.total_score === "number" &&
-              child.total_score > 0
-            );
-            if (isUngraded && child.weight >= 25) {
-              highWeightUngradedCount += 1;
-            }
-          });
-          return;
-        }
-
-        const isUngraded = !(
-          typeof assessment.raw_score === "number" &&
-          typeof assessment.total_score === "number" &&
-          assessment.total_score > 0
-        );
-        if (isUngraded && assessment.weight >= 25) {
-          highWeightUngradedCount += 1;
-        }
-      });
-    });
-
-    const totalAlerts =
-      criticalCount + dueSoonCount + targetRiskCount + highWeightUngradedCount;
+    const topAlerts: RiskSummaryAlert[] = activeAlerts
+      .slice(0, 3)
+      .map((alert) => ({
+        text: alert.message,
+        severity: alert.severity === "critical" ? "critical" : "warning",
+      }));
 
     return {
       criticalCount,
@@ -652,7 +562,7 @@ export function Dashboard() {
       totalAlerts,
       topAlerts,
     };
-  }, [activeCourse, courses, riskDeadlines, riskTargetResults]);
+  }, [planningAlerts, activeCourseId]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-10 px-4 pb-20 text-[#3A3530]">

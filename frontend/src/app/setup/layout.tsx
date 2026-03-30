@@ -138,7 +138,7 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
     return 1;
   })();
 
-  const showCourseSelector = activeStep > 1 || isDashboardView;
+  const showCourseSelector = activeStep > 1 || isDashboardView || isExploreView || isRiskCenterView;
 
   const stepRoutes: Record<number, string> = {
     1: "/setup/upload",
@@ -205,7 +205,7 @@ function SetupLayoutContent({ children }: { children: React.ReactNode }) {
 
         <div className={showStepProgress ? "border-t border-[#E8E3DC]" : ""}>
           <div className="mx-auto max-w-6xl px-8 pt-3 pb-1">
-            {showCourseSelector ? <CourseSelector /> : null}
+            {showCourseSelector ? <CourseSelector showAllOption={isRiskCenterView} /> : null}
           </div>
         </div>
 
