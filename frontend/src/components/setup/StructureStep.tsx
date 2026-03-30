@@ -232,12 +232,18 @@ function getRuleSummaryLabel(assessment: EditableAssessment): string | null {
 
 function findAssessmentValidationError(items: EditableAssessment[]): string | null {
   const WEIGHT_TOLERANCE = 0.01;
+  const seenSiblingNames = new Set<string>();
 
   for (const assessment of items) {
     const trimmedName = assessment.name.trim();
     if (!trimmedName) {
       return "Every assessment must have a name.";
     }
+    const normalizedName = trimmedName.toLowerCase();
+    if (seenSiblingNames.has(normalizedName)) {
+      return `Assessment name "${trimmedName}" is duplicated. Use unique names to avoid grade mapping conflicts.`;
+    }
+    seenSiblingNames.add(normalizedName);
 
     if (!Number.isFinite(assessment.weight) || assessment.weight <= 0) {
       return `Assessment "${trimmedName}" must have a positive weight.`;
@@ -258,11 +264,17 @@ function findAssessmentValidationError(items: EditableAssessment[]): string | nu
 
     const children = Array.isArray(assessment.children) ? assessment.children : [];
     if (children.length > 0) {
+      const seenChildNames = new Set<string>();
       for (const child of children) {
         const childName = child.name.trim();
         if (!childName) {
           return `Assessment "${trimmedName}" has a child item with an empty name.`;
         }
+        const normalizedChildName = childName.toLowerCase();
+        if (seenChildNames.has(normalizedChildName)) {
+          return `Assessment "${trimmedName}" has duplicate child item name "${childName}".`;
+        }
+        seenChildNames.add(normalizedChildName);
         if (!Number.isFinite(child.weight) || child.weight <= 0) {
           return `Child item "${childName}" under "${trimmedName}" must have a positive weight.`;
         }

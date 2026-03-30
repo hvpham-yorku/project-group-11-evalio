@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   ShieldCheck,
+  Trash2,
   X,
   FileSearch,
   Sparkles,
@@ -23,6 +24,7 @@ import {
   exportToGoogleCalendar,
   listDeadlines as listDeadlinesApi,
   createDeadline as createDeadlineApi,
+  deleteDeadline as deleteDeadlineApi,
   updateDeadline as updateDeadlineApi,
   type Course,
   type Deadline as ApiDeadline,
@@ -57,8 +59,6 @@ type DeadlineFormState = {
 };
 
 const PENDING_DEADLINES_KEY = "evalio_pending_deadlines_v1";
-const TARGET_STORAGE_KEY = "evalio_target_grade";
-const DEFAULT_TARGET_GRADE = 85;
 const GCAL_CONNECTED_KEY = "evalio_gcal_connected";
 
 const EMPTY_DEADLINE_FORM: DeadlineFormState = {
@@ -165,6 +165,9 @@ export default function DeadlinesPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [isSavingDeadline, setIsSavingDeadline] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Deadline | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
 
   const refreshGoogleCalendarStatus = useCallback(async () => {
@@ -284,6 +287,11 @@ export default function DeadlinesPage() {
       await refreshDeadlines(courseId);
       setSelectedDeadlines(new Set());
       setShowExportModal(false);
+      setSuccessMessage(
+        `Exported ${ids.length === 0 ? "selected" : ids.length} deadline${
+          ids.length === 1 ? "" : "s"
+        } to Google Calendar.`
+      );
     } catch (e) {
       setError(getApiErrorMessage(e, "Export failed."));
     } finally {
@@ -299,6 +307,7 @@ export default function DeadlinesPage() {
   };
 
   const handleEditDeadline = (deadline: Deadline) => {
+    setSuccessMessage("");
     setEditingDeadline(deadline);
     setDraftDeadline({
       title: deadline.title,
@@ -310,6 +319,35 @@ export default function DeadlinesPage() {
     });
     setError("");
     setShowAddModal(true);
+  };
+
+  const handleDeleteDeadline = (deadline: Deadline) => {
+    if (!courseId || !hasConfirmed) return;
+    setSuccessMessage("");
+    setError("");
+    setDeleteTarget(deadline);
+  };
+
+  const confirmDelete = async () => {
+    if (!courseId || !deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteDeadlineApi(courseId, deleteTarget.id);
+      await refreshDeadlines(courseId);
+      setSelectedDeadlines((previous) => {
+        const next = new Set(previous);
+        next.delete(deleteTarget.id);
+        return next;
+      });
+      setSuccessMessage(`Deleted deadline "${deleteTarget.title}".`);
+      setError("");
+      setDeleteTarget(null);
+    } catch (e) {
+      setError(getApiErrorMessage(e, "Error deleting deadline."));
+      setDeleteTarget(null);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleSaveDeadline = async () => {
@@ -369,6 +407,12 @@ export default function DeadlinesPage() {
             ? "Review and sync your academic schedule."
             : "Confirm the deadlines extracted from your outline."}
         </p>
+        {successMessage ? (
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-[#C4E4D0] bg-[#E8F5EE] px-4 py-3 text-sm text-[#4F7F5F]">
+            <Check size={16} />
+            <span>{successMessage}</span>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex items-center gap-4 mb-8 overflow-x-auto pb-2 scrollbar-hide">
@@ -419,6 +463,7 @@ export default function DeadlinesPage() {
             onClick={() => {
               setEditingDeadline(null);
               setDraftDeadline(EMPTY_DEADLINE_FORM);
+              setSuccessMessage("");
               setError("");
               setShowAddModal(true);
             }}
@@ -444,6 +489,7 @@ export default function DeadlinesPage() {
                 isSelected={selectedDeadlines.has(d.id)}
                 canEdit={hasConfirmed}
                 onEdit={() => handleEditDeadline(d)}
+                onDelete={() => handleDeleteDeadline(d)}
                 onToggleSelect={() =>
                   setSelectedDeadlines((p) => {
                     const n = new Set(p);
@@ -747,6 +793,76 @@ export default function DeadlinesPage() {
           </div>
         </div>
       )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3A3530]/35 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-[#D4CFC7] bg-white p-8 shadow-2xl">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-bold text-[#3A3530]">
+                  Delete deadline?
+                </h3>
+                <p className="mt-1 text-sm text-[#6B6560]">
+                  &ldquo;{deleteTarget.title}&rdquo; will be permanently removed.
+                  This action cannot be undone.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isDeleting) return;
+                  setDeleteTarget(null);
+                }}
+                className="rounded-full border border-[#E8E3DC] p-2 text-[#6B6560] transition hover:bg-[#F5F1EB]"
+                aria-label="Close delete confirmation"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-[#F1D2D2] bg-[#FFF5F5] p-5">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-[#F9EAEA] p-2">
+                  <Trash2 size={18} className="text-[#B86B6B]" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[#3A3530]">
+                    {deleteTarget.title}
+                  </p>
+                  <p className="text-xs text-[#6B6560]">
+                    Due {formatDateLabel(deleteTarget.due_date)}
+                    {deleteTarget.due_time ? ` at ${deleteTarget.due_time}` : ""}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={isDeleting}
+                className="rounded-xl border border-[#D4CFC7] px-5 py-3 text-sm font-bold text-[#6B6560] transition hover:bg-[#F5F1EB] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={isDeleting}
+                className="flex items-center justify-center gap-2 rounded-xl bg-[#B86B6B] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#A95858] disabled:opacity-60"
+              >
+                {isDeleting ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Trash2 size={16} />
+                )}
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -756,12 +872,14 @@ function DeadlineRow({
   isSelected,
   canEdit,
   onEdit,
+  onDelete,
   onToggleSelect,
 }: {
   deadline: Deadline;
   isSelected: boolean;
   canEdit?: boolean;
   onEdit?: () => void;
+  onDelete?: () => void;
   onToggleSelect: () => void;
 }) {
   const days = getDaysRemaining(deadline.due_date);
@@ -813,14 +931,24 @@ function DeadlineRow({
         {formatCountdown(days)}
       </div>
       {canEdit ? (
-        <button
-          type="button"
-          onClick={onEdit}
-          className="rounded-xl border border-[#D4CFC7] p-2 text-[#6B6560] transition hover:bg-[#F5F1EB] hover:text-[#3A3530]"
-          aria-label={`Edit ${deadline.title}`}
-        >
-          <Pencil size={16} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded-xl border border-[#D4CFC7] p-2 text-[#6B6560] transition hover:bg-[#F5F1EB] hover:text-[#3A3530]"
+            aria-label={`Edit ${deadline.title}`}
+          >
+            <Pencil size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded-xl border border-[#E6CFCF] p-2 text-[#B86B6B] transition hover:bg-[#FFF5F5] hover:text-[#A95858]"
+            aria-label={`Delete ${deadline.title}`}
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       ) : null}
     </div>
   );
