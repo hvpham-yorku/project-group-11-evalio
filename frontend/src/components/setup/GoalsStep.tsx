@@ -6,8 +6,7 @@ import { ChevronDown, ChevronUp, Target, TrendingUp } from "lucide-react";
 import { checkTarget, getDashboardSummary, listCourses, type TargetCheckResponse } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
-
-const TARGET_STORAGE_KEY = "evalio_target_grade";
+import { readStoredTargetGrade, writeStoredTargetGrade } from "@/lib/target-storage";
 
 export function GoalsStep() {
   const router = useRouter();
@@ -40,25 +39,14 @@ export function GoalsStep() {
   const { courseId, ensureCourseIdFromList } = useSetupCourse();
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(TARGET_STORAGE_KEY);
-    if (saved === null) {
-      setTarget(75);
-    } else {
-      const parsed = Number.parseFloat(saved);
-      if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 100) {
-        setTarget(parsed);
-      } else {
-        setTarget(75);
-      }
-    }
+    setTarget(readStoredTargetGrade(courseId, 75));
     setIsTargetLoaded(true);
-  }, []);
+  }, [courseId]);
 
   useEffect(() => {
-    if (isTargetLoaded) {
-      window.localStorage.setItem(TARGET_STORAGE_KEY, String(target));
-    }
-  }, [target, isTargetLoaded]);
+    if (!isTargetLoaded) return;
+    writeStoredTargetGrade(courseId, target);
+  }, [target, isTargetLoaded, courseId]);
 
   useEffect(() => {
     const loadCourse = async () => {
