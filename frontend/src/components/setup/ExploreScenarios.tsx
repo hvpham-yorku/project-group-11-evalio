@@ -20,6 +20,7 @@ import {
 } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
+import { GpaScaleConverter } from "@/components/setup/GpaScaleConverter";
 
 const CHILD_ASSESSMENT_SEPARATOR = "::";
 const DEFAULT_SCENARIO_WORST = "__default_worst_case__";
@@ -664,6 +665,8 @@ export function ExploreScenarios() {
   const [savedScenarios, setSavedScenarios] = useState<SavedScenario[]>([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState("");
   const [loadingScenario, setLoadingScenario] = useState(false);
+  const [exploreTab, setExploreTab] = useState<"course" | "gpa">("course");
+
   const { courseId, ensureCourseIdFromList } = useSetupCourse();
   const [dashboardSummary, setDashboardSummary] =
     useState<DashboardSummaryResponse | null>(null);
@@ -778,6 +781,7 @@ export function ExploreScenarios() {
     dashboardSummary?.current_normalised ??
     dashboardSummary?.current_grade ??
     0;
+
   const mandatoryPassWarnings = useMemo(() => {
     const explicitWarnings = scenarioProjection?.mandatory_pass_warnings ?? [];
     const status = scenarioProjection?.mandatory_pass_status;
@@ -1108,7 +1112,41 @@ export function ExploreScenarios() {
 
       {error ? <p className="mt-4 text-sm text-[#B86B6B]">{error}</p> : null}
 
-      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-3">
+      {/* Tab toggle */}
+      <div className="mt-6 mb-2">
+        <div className="inline-flex rounded-lg border border-[#D4CFC7] bg-[#F5F1EB] p-1">
+          <button
+            onClick={() => setExploreTab("course")}
+            className={`rounded-md px-5 py-2 text-sm font-medium transition ${
+              exploreTab === "course"
+                ? "bg-[#5F7A8A] text-white shadow-sm"
+                : "text-[#6B6560] hover:text-[#3A3530]"
+            }`}
+          >
+            Course
+          </button>
+          <button
+            onClick={() => setExploreTab("gpa")}
+            className={`rounded-md px-5 py-2 text-sm font-medium transition ${
+              exploreTab === "gpa"
+                ? "bg-[#5F7A8A] text-white shadow-sm"
+                : "text-[#6B6560] hover:text-[#3A3530]"
+            }`}
+          >
+            GPA
+          </button>
+        </div>
+      </div>
+
+      {exploreTab === "gpa" ? (
+        <div className="mt-6">
+          <GpaScaleConverter />
+        </div>
+      ) : null}
+
+      {exploreTab === "course" ? (
+      <>
+<div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* LEFT: WHAT-IF */}
         <div className="lg:col-span-2">
           <div className="rounded-3xl border border-[#D4CFC7] bg-white p-8 shadow-sm">
@@ -1486,6 +1524,8 @@ export function ExploreScenarios() {
           </div>
         </div>
       </div>
+      </>
+      ) : null}
 
       {showSaveDialog ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
