@@ -31,6 +31,17 @@ import { useSetupCourse } from "@/app/setup/course-context";
 // ─── Shared config ──────────────────────────────────────────────────────────
 
 type ViewMode = "alerts" | "weekly";
+const RESOLVED_OVERDUE_STORAGE_KEY = "evalio_resolved_overdue_deadlines";
+type DisplayAlertSeverity = PlanningAlertSeverity | "submitted";
+type DisplayAlertType = PlanningAlertType | "submitted";
+
+type DisplayAlert = PlanningAlert & {
+  displaySeverity: DisplayAlertSeverity;
+  displayType: DisplayAlertType;
+  displayMessage: string;
+  displayContext: string;
+  isSubmitted: boolean;
+};
 
 const SEVERITY_CONFIG = {
   critical: {
@@ -65,16 +76,25 @@ const SEVERITY_CONFIG = {
     label: "Low",
     accent: "#6B9B7A",
   },
+  submitted: {
+    color: "text-[#6B9B7A]",
+    bgColor: "bg-[#EAF4EC]",
+    borderColor: "border-[#CFE3D5]",
+    icon: CheckCircle,
+    label: "Submitted",
+    accent: "#6B9B7A",
+  },
 } as const;
 
 const ALERT_TYPE_CONFIG: Record<
-  PlanningAlertType,
+  DisplayAlertType,
   { label: string; icon: typeof Clock }
 > = {
   overdue_deadline: { label: "Overdue", icon: Clock },
   near_term_deadline: { label: "Due Soon", icon: Calendar },
   impossible_target: { label: "Impossible Target", icon: Target },
   high_weight_ungraded: { label: "High-Weight Ungraded", icon: FileQuestion },
+  submitted: { label: "Submitted", icon: CheckCircle },
 };
 
 function alertActionFor(alert: PlanningAlert): {
@@ -118,29 +138,8 @@ type AlertFilterType =
   | "overdue"
   | "due-soon"
   | "target-risk"
-  | "ungraded";
-
-const ALERT_FILTERS: Array<{ value: AlertFilterType; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "critical", label: "Critical" },
-  { value: "overdue", label: "Overdue" },
-  { value: "due-soon", label: "Due Soon" },
-  { value: "target-risk", label: "Target Risk" },
-  { value: "ungraded", label: "Ungraded" },
-];
-
-function matchesAlertFilter(
-  alert: PlanningAlert,
-  filter: AlertFilterType
-): boolean {
-  if (filter === "all") return true;
-  if (filter === "critical") return alert.severity === "critical";
-  if (filter === "overdue") return alert.type === "overdue_deadline";
-  if (filter === "due-soon") return alert.type === "near_term_deadline";
-  if (filter === "target-risk") return alert.type === "impossible_target";
-  if (filter === "ungraded") return alert.type === "high_weight_ungraded";
-  return true;
-}
+  | "ungraded"
+  | "submitted";
 
 // ─── Weekly filter types ────────────────────────────────────────────────────
 
@@ -179,10 +178,45 @@ export default function RiskCenter() {
   // Alert state
   const [alertsData, setAlertsData] = useState<PlanningAlertsResponse | null>(null);
   const [alertFilter, setAlertFilter] = useState<AlertFilterType>("all");
+  const [resolvedOverdueIds, setResolvedOverdueIds] = useState<string[]>([]);
+  const [showUndoBanner, setShowUndoBanner] = useState(false);
 
   // Weekly state
   const [weeklyData, setWeeklyData] = useState<WeeklyPlannerResponse | null>(null);
   const [weeklyFilter, setWeeklyFilter] = useState<WeeklyFilterType>("all");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const raw = window.localStorage.getItem(RESOLVED_OVERDUE_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setResolvedOverdueIds(
+          parsed.filter((value): value is string => typeof value === "string")
+        );
+      }
+    } catch {
+      window.localStorage.removeItem(RESOLVED_OVERDUE_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      RESOLVED_OVERDUE_STORAGE_KEY,
+      JSON.stringify(resolvedOverdueIds)
+    );
+  }, [resolvedOverdueIds]);
+
+  useEffect(() => {
+    if (!showUndoBanner) return;
+    const timeoutId = window.setTimeout(() => {
+      setShowUndoBanner(false);
+    }, 6000);
+    return () => window.clearTimeout(timeoutId);
+  }, [showUndoBanner]);
 
   useEffect(() => {
     const load = async () => {
@@ -210,17 +244,87 @@ export default function RiskCenter() {
     () => alertsData?.alerts ?? [],
     [alertsData]
   );
-  const alertSummary = alertsData?.summary;
 
-  const filteredAlerts = useMemo(
-    () => alerts.filter((a) => matchesAlertFilter(a, alertFilter)),
-    [alerts, alertFilter]
-  );
+  const displayAlerts = useMemo<DisplayAlert[]>(() => {
+    return alerts.map((alert) => {
+      const isSubmitted =
+        alert.type === "overdue_deadline" &&
+        typeof alert.deadline_id === "string" &&
+        resolvedOverdueIds.includes(alert.deadline_id);
 
-  const criticalCount = alertSummary?.severity_counts?.critical ?? 0;
-  const dueSoonCount = alertSummary?.type_counts?.near_term_deadline ?? 0;
-  const impossibleCount = alertSummary?.type_counts?.impossible_target ?? 0;
-  const ungradedCount = alertSummary?.type_counts?.high_weight_ungraded ?? 0;
+      let displayContext = alert.message;
+      if (alert.type === "overdue_deadline" && alert.hours_overdue != null) {
+        const hours = Math.round(alert.hours_overdue);
+        displayContext =
+          hours >= 24
+            ? `Overdue by ${Math.floor(hours / 24)} day${Math.floor(hours / 24) !== 1 ? "s" : ""}`
+            : `Overdue by ${hours} hour${hours !== 1 ? "s" : ""}`;
+      } else if (
+        alert.type === "near_term_deadline" &&
+        alert.hours_until_due != null
+      ) {
+        const hours = Math.round(alert.hours_until_due);
+        if (hours <= 1) displayContext = "Due within the hour";
+        else if (hours < 24) displayContext = `Due in ${hours} hours`;
+        else {
+          const days = Math.floor(hours / 24);
+          displayContext =
+            days === 0
+              ? "Due today"
+              : days === 1
+                ? "Due tomorrow"
+                : `Due in ${days} days`;
+        }
+      } else if (alert.type === "impossible_target") {
+        displayContext = `Target ${alert.target ?? ""}% is not achievable (max possible: ${alert.maximum_possible?.toFixed(1) ?? "?"}%)`;
+      } else if (alert.type === "high_weight_ungraded") {
+        displayContext = `Worth ${alert.assessment_weight ?? "?"}% of final grade`;
+      }
+
+      return {
+        ...alert,
+        displaySeverity: isSubmitted ? "submitted" : alert.severity,
+        displayType: isSubmitted ? "submitted" : alert.type,
+        displayMessage: isSubmitted
+          ? "Marked as submitted and removed from active overdue risks."
+          : alert.message,
+        displayContext: isSubmitted ? "Submitted" : displayContext,
+        isSubmitted,
+      };
+    });
+  }, [alerts, resolvedOverdueIds]);
+
+  const filteredAlerts = useMemo(() => {
+    return displayAlerts.filter((alert) => {
+      if (alertFilter === "submitted") {
+        return alert.displayType === "submitted";
+      }
+      if (alert.isSubmitted) return false;
+      if (alertFilter === "all") return true;
+      if (alertFilter === "critical") return alert.displaySeverity === "critical";
+      if (alertFilter === "overdue") return alert.displayType === "overdue_deadline";
+      if (alertFilter === "due-soon") return alert.displayType === "near_term_deadline";
+      if (alertFilter === "target-risk") return alert.displayType === "impossible_target";
+      if (alertFilter === "ungraded") return alert.displayType === "high_weight_ungraded";
+      return true;
+    });
+  }, [alertFilter, displayAlerts]);
+
+  const criticalCount = displayAlerts.filter(
+    (alert) => alert.displaySeverity === "critical" && !alert.isSubmitted
+  ).length;
+  const dueSoonCount = displayAlerts.filter(
+    (alert) => alert.displayType === "near_term_deadline"
+  ).length;
+  const impossibleCount = displayAlerts.filter(
+    (alert) => alert.displayType === "impossible_target"
+  ).length;
+  const ungradedCount = displayAlerts.filter(
+    (alert) => alert.displayType === "high_weight_ungraded"
+  ).length;
+  const submittedCount = displayAlerts.filter(
+    (alert) => alert.displayType === "submitted"
+  ).length;
 
   // ── Weekly derived data ─────────────────────────────────────────────────
 
@@ -266,6 +370,22 @@ export default function RiskCenter() {
     setCourseId(alert.course_id);
     const action = alertActionFor(alert);
     router.push(action.path);
+  };
+
+  const handleResolveOverdue = (deadlineId: string) => {
+    setResolvedOverdueIds((current) =>
+      current.includes(deadlineId) ? current : [...current, deadlineId]
+    );
+    setShowUndoBanner(true);
+  };
+
+  const handleUndoResolved = () => {
+    setResolvedOverdueIds([]);
+    setShowUndoBanner(false);
+  };
+
+  const handleRestoreSubmitted = (deadlineId: string) => {
+    setResolvedOverdueIds((current) => current.filter((id) => id !== deadlineId));
   };
 
   // ── Loading ─────────────────────────────────────────────────────────────
@@ -326,9 +446,15 @@ export default function RiskCenter() {
           dueSoonCount={dueSoonCount}
           impossibleCount={impossibleCount}
           ungradedCount={ungradedCount}
+          submittedCount={submittedCount}
           activeFilter={alertFilter}
           onFilterChange={setAlertFilter}
           onAlertAction={handleAlertAction}
+          resolvedCount={resolvedOverdueIds.length}
+          showUndoBanner={showUndoBanner}
+          onUndoResolved={handleUndoResolved}
+          onResolveOverdue={handleResolveOverdue}
+          onRestoreSubmitted={handleRestoreSubmitted}
           onNavigateDashboard={() => router.push("/setup/dashboard")}
         />
       ) : (
@@ -357,19 +483,31 @@ function AlertsView({
   dueSoonCount,
   impossibleCount,
   ungradedCount,
+  submittedCount,
   activeFilter,
   onFilterChange,
   onAlertAction,
+  resolvedCount,
+  showUndoBanner,
+  onUndoResolved,
+  onResolveOverdue,
+  onRestoreSubmitted,
   onNavigateDashboard,
 }: {
-  alerts: PlanningAlert[];
+  alerts: DisplayAlert[];
   criticalCount: number;
   dueSoonCount: number;
   impossibleCount: number;
   ungradedCount: number;
+  submittedCount: number;
   activeFilter: AlertFilterType;
   onFilterChange: (f: AlertFilterType) => void;
   onAlertAction: (a: PlanningAlert) => void;
+  resolvedCount: number;
+  showUndoBanner: boolean;
+  onUndoResolved: () => void;
+  onResolveOverdue: (deadlineId: string) => void;
+  onRestoreSubmitted: (deadlineId: string) => void;
   onNavigateDashboard: () => void;
 }) {
   return (
@@ -397,10 +535,18 @@ function AlertsView({
       {/* Filter chips */}
       <div className="mb-6">
         <div className="flex flex-wrap gap-2">
-          {ALERT_FILTERS.map((filter) => (
+          {[
+            { value: "all", label: "All" },
+            { value: "critical", label: "Critical" },
+            { value: "overdue", label: "Overdue" },
+            { value: "due-soon", label: "Due Soon" },
+            { value: "target-risk", label: "Target Risk" },
+            { value: "ungraded", label: "Ungraded" },
+            { value: "submitted", label: `Submitted (${submittedCount})` },
+          ].map((filter) => (
             <button
               key={filter.value}
-              onClick={() => onFilterChange(filter.value)}
+              onClick={() => onFilterChange(filter.value as AlertFilterType)}
               className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
                 activeFilter === filter.value
                   ? "bg-[#5F7A8A] text-white"
@@ -411,49 +557,33 @@ function AlertsView({
             </button>
           ))}
         </div>
+        {showUndoBanner && resolvedCount > 0 ? (
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#D4CFC7] bg-white px-4 py-3 text-sm text-[#6B6560]">
+            <span>
+              {resolvedCount} overdue alert
+              {resolvedCount !== 1 ? "s" : ""} marked as submitted.
+            </span>
+            <button
+              onClick={onUndoResolved}
+              className="rounded-lg border border-[#D4CFC7] px-3 py-1.5 text-sm font-medium text-[#5F7A8A] transition hover:bg-[#F5F1EB]"
+            >
+              Undo All
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* Alert cards */}
       {alerts.length > 0 ? (
         <div className="space-y-4">
           {alerts.map((alert) => {
-            const severity = alert.severity as PlanningAlertSeverity;
             const config =
-              SEVERITY_CONFIG[severity] ?? SEVERITY_CONFIG.medium;
+              SEVERITY_CONFIG[alert.displaySeverity] ?? SEVERITY_CONFIG.medium;
             const typeInfo =
-              ALERT_TYPE_CONFIG[alert.type] ?? ALERT_TYPE_CONFIG.high_weight_ungraded;
+              ALERT_TYPE_CONFIG[alert.displayType] ?? ALERT_TYPE_CONFIG.high_weight_ungraded;
             const SeverityIcon = config.icon;
             const TypeIcon = typeInfo.icon;
             const action = alertActionFor(alert);
-
-            let context = alert.message;
-            if (alert.type === "overdue_deadline" && alert.hours_overdue != null) {
-              const hours = Math.round(alert.hours_overdue);
-              context =
-                hours >= 24
-                  ? `Overdue by ${Math.floor(hours / 24)} day${Math.floor(hours / 24) !== 1 ? "s" : ""}`
-                  : `Overdue by ${hours} hour${hours !== 1 ? "s" : ""}`;
-            } else if (
-              alert.type === "near_term_deadline" &&
-              alert.hours_until_due != null
-            ) {
-              const hours = Math.round(alert.hours_until_due);
-              if (hours <= 1) context = "Due within the hour";
-              else if (hours < 24) context = `Due in ${hours} hours`;
-              else {
-                const days = Math.floor(hours / 24);
-                context =
-                  days === 0
-                    ? "Due today"
-                    : days === 1
-                      ? "Due tomorrow"
-                      : `Due in ${days} days`;
-              }
-            } else if (alert.type === "impossible_target") {
-              context = `Target ${alert.target ?? ""}% is not achievable (max possible: ${alert.maximum_possible?.toFixed(1) ?? "?"}%)`;
-            } else if (alert.type === "high_weight_ungraded") {
-              context = `Worth ${alert.assessment_weight ?? "?"}% of final grade`;
-            }
 
             return (
               <div
@@ -488,19 +618,37 @@ function AlertsView({
                     </div>
 
                     <p className="mb-2 text-sm text-[#6B6560]">
-                      {alert.message}
+                      {alert.displayMessage}
                     </p>
 
                     <div className="flex items-center justify-between gap-4">
                       <span className={`text-sm font-medium ${config.color}`}>
-                        {context}
+                        {alert.displayContext}
                       </span>
-                      <button
-                        onClick={() => onAlertAction(alert)}
-                        className="rounded-lg bg-[#5F7A8A] px-3 py-1.5 text-sm text-white transition hover:bg-[#6B8BA8]"
-                      >
-                        {action.label}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {alert.displayType === "overdue_deadline" && alert.deadline_id ? (
+                          <button
+                            onClick={() => onResolveOverdue(alert.deadline_id!)}
+                            className="rounded-lg border border-[#D4CFC7] bg-white px-3 py-1.5 text-sm text-[#6B6560] transition hover:bg-[#F5F1EB]"
+                          >
+                            Mark Submitted
+                          </button>
+                        ) : null}
+                        {alert.displayType === "submitted" && alert.deadline_id ? (
+                          <button
+                            onClick={() => onRestoreSubmitted(alert.deadline_id!)}
+                            className="rounded-lg border border-[#D4CFC7] bg-white px-3 py-1.5 text-sm text-[#6B6560] transition hover:bg-[#F5F1EB]"
+                          >
+                            Undo Submit
+                          </button>
+                        ) : null}
+                        <button
+                          onClick={() => onAlertAction(alert)}
+                          className="rounded-lg bg-[#5F7A8A] px-3 py-1.5 text-sm text-white transition hover:bg-[#6B8BA8]"
+                        >
+                          {action.label}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

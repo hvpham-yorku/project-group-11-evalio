@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ChevronDown, Lightbulb, RotateCcw } from "lucide-react";
+import { AlertTriangle, ChevronDown, Lightbulb, RotateCcw, Sigma } from "lucide-react";
 import {
   deleteSavedScenario,
   getDashboardSummary,
@@ -20,10 +20,13 @@ import {
 } from "@/lib/api";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
+import { GpaScaleConverter } from "@/components/setup/GpaScaleConverter";
 
 const CHILD_ASSESSMENT_SEPARATOR = "::";
 const DEFAULT_SCENARIO_WORST = "__default_worst_case__";
 const DEFAULT_SCENARIO_BEST = "__default_best_case__";
+const DEFAULT_TARGET_GRADE = 85;
+const TARGET_STORAGE_KEY = "evalio_target_grade";
 
 type ScenarioAssessment = {
   id: number;
@@ -590,6 +593,11 @@ export function ExploreScenarios() {
     useState<DashboardSummaryResponse | null>(null);
   const [scenarioProjection, setScenarioProjection] =
     useState<DashboardWhatIfResponse | null>(null);
+  const [performanceWhatIfResult, setPerformanceWhatIfResult] =
+    useState<DashboardWhatIfResponse | null>(null);
+  const [targetGrade, setTargetGrade] = useState(DEFAULT_TARGET_GRADE);
+  const [assumedPerformance, setAssumedPerformance] = useState(75);
+  const [showProjectionMath, setShowProjectionMath] = useState(false);
 
   const [activeScenario, setActiveScenario] = useState<Record<string, number>>({});
   const [expandedByKey, setExpandedByKey] = useState<Record<string, boolean>>({});
@@ -606,6 +614,17 @@ export function ExploreScenarios() {
   useEffect(() => {
     const loadCourse = async () => {
       try {
+        const savedTarget = window.localStorage.getItem(TARGET_STORAGE_KEY);
+        const parsedTarget =
+          savedTarget === null ? NaN : Number.parseFloat(savedTarget);
+        const resolvedTarget =
+          Number.isFinite(parsedTarget) &&
+          parsedTarget >= 0 &&
+          parsedTarget <= 100
+            ? parsedTarget
+            : DEFAULT_TARGET_GRADE;
+        setTargetGrade(resolvedTarget);
+
         const courses = await listCourses();
         const resolvedCourseId = ensureCourseIdFromList(courses);
         if (!resolvedCourseId) {
@@ -652,6 +671,14 @@ export function ExploreScenarios() {
     () => flattenScenarioLeafTargets(assessments, activeScenario),
     [assessments, activeScenario]
   );
+  const performanceAssumptionGroups = useMemo(
+    () => buildScenarioGroups(courseAssessments),
+    [courseAssessments]
+  );
+  const clampedPerformanceAssumption = Math.max(
+    0,
+    Math.min(assumedPerformance, 100)
+  );
 
   useEffect(() => {
     if (!courseId || !assessments.length) return;
@@ -680,6 +707,49 @@ export function ExploreScenarios() {
     return () => window.clearTimeout(timer);
   }, [courseId, leafTargets, assessments]);
 
+  useEffect(() => {
+    if (!courseId || !performanceAssumptionGroups.length) {
+      setPerformanceWhatIfResult(null);
+      return;
+    }
+
+    const scenarioEntries = flattenScenarioLeafTargets(
+      performanceAssumptionGroups,
+      buildDefaultScenarioOverrides(
+        performanceAssumptionGroups,
+        clampedPerformanceAssumption
+      )
+    )
+      .filter((target) => !target.graded || target.overrideSelf || target.overrideParent)
+      .map((target) => ({
+        assessment_name: target.assessment_name,
+        score: clampPercent(target.score),
+      }));
+
+    if (!scenarioEntries.length) {
+      setPerformanceWhatIfResult(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    runDashboardWhatIf(courseId, { scenarios: scenarioEntries })
+      .then((response) => {
+        if (!cancelled) {
+          setPerformanceWhatIfResult(response);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPerformanceWhatIfResult(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clampedPerformanceAssumption, courseId, performanceAssumptionGroups]);
+
   const hasChanges = Object.keys(activeScenario).length > 0;
 
   const projectedFinal = (() => {
@@ -693,6 +763,70 @@ export function ExploreScenarios() {
 
   const currentStanding =
     dashboardSummary?.current_normalised ?? dashboardSummary?.current_grade ?? 0;
+  const currentContribution = dashboardSummary?.current_grade ?? 0;
+  const remainingWeight = Math.max(
+    0,
+    Math.min(100, dashboardSummary?.remaining_weight ?? 0)
+  );
+  const boundaryBestCase = dashboardSummary
+    ? dashboardSummary.normalisation_applied
+      ? dashboardSummary.max_normalised
+      : dashboardSummary.max_grade
+    : currentStanding;
+  const performanceProjectedFinal = useMemo(() => {
+    if (performanceWhatIfResult) {
+      if (performanceWhatIfResult.normalisation_applied) {
+        return (
+          performanceWhatIfResult.projected_normalised ??
+          performanceWhatIfResult.projected_grade
+        );
+      }
+      return performanceWhatIfResult.projected_grade;
+    }
+    return (
+      currentContribution +
+      (remainingWeight * clampedPerformanceAssumption) / 100
+    );
+  }, [
+    clampedPerformanceAssumption,
+    currentContribution,
+    performanceWhatIfResult,
+    remainingWeight,
+  ]);
+  const performanceProjectedMaximum = useMemo(() => {
+    if (performanceWhatIfResult) {
+      if (performanceWhatIfResult.normalisation_applied) {
+        return (
+          performanceWhatIfResult.maximum_possible_normalised ??
+          performanceWhatIfResult.maximum_possible
+        );
+      }
+      return performanceWhatIfResult.maximum_possible;
+    }
+    return boundaryBestCase;
+  }, [boundaryBestCase, performanceWhatIfResult]);
+  const shortfall = targetGrade - performanceProjectedFinal;
+  const belowTarget = shortfall > 0;
+  const performanceProjectionBreakdown = useMemo(
+    () => performanceWhatIfResult?.breakdown ?? [],
+    [performanceWhatIfResult]
+  );
+  const performanceProjectionContributionTotal = useMemo(
+    () =>
+      performanceProjectionBreakdown.reduce(
+        (sum, entry) => sum + entry.contribution,
+        0
+      ),
+    [performanceProjectionBreakdown]
+  );
+  const performanceProjectionMaxContributionTotal = useMemo(
+    () =>
+      performanceProjectionBreakdown.reduce(
+        (sum, entry) => sum + entry.max_contribution,
+        0
+      ),
+    [performanceProjectionBreakdown]
+  );
   const mandatoryPassWarnings = useMemo(() => {
     const explicitWarnings = scenarioProjection?.mandatory_pass_warnings ?? [];
     const status = scenarioProjection?.mandatory_pass_status;
@@ -1008,6 +1142,107 @@ export function ExploreScenarios() {
       </p>
 
       {error ? <p className="mt-4 text-sm text-[#B86B6B]">{error}</p> : null}
+
+      <div className="mt-10 rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
+        <div className="mb-2 flex items-center justify-between gap-4">
+          <h3 className="font-bold text-[#3A3530]">Performance Assumption</h3>
+          <button
+            type="button"
+            onClick={() => setShowProjectionMath((value) => !value)}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#C4D6E4] bg-[#E8EFF5] px-3 py-2 text-xs font-medium text-[#5F7A8A] transition hover:opacity-90"
+          >
+            <Sigma size={14} />
+            {showProjectionMath ? "Hide Math" : "Show Math"}
+          </button>
+        </div>
+        <p className="mb-6 text-xs text-[#6B6560]">
+          Adjust the slider to apply a temporary what-if score to every remaining assessment.
+        </p>
+        <div className="mb-8 flex items-center gap-6">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={assumedPerformance}
+            onChange={(e) => setAssumedPerformance(Number(e.target.value))}
+            className="flex-1 h-2 cursor-pointer appearance-none rounded-full bg-[#E8E3DC] accent-[#C9945F]"
+          />
+          <span className="text-3xl font-bold text-[#C9945F]">
+            {clampedPerformanceAssumption.toFixed(0)}%
+          </span>
+        </div>
+        <div className="flex items-center justify-between rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-6">
+          <div>
+            <p className="text-[10px] uppercase text-[#6B6560]">
+              Projected Final Grade
+            </p>
+            <p className="text-4xl font-bold text-[#3A3530]">
+              {performanceProjectedFinal.toFixed(1)}%
+            </p>
+            <p className="mt-2 text-[10px] uppercase text-[#6B6560]">
+              Max reachable under this plan: {performanceProjectedMaximum.toFixed(1)}%
+            </p>
+          </div>
+          <div className="text-right">
+            {belowTarget ? (
+              <p className="flex items-center justify-end gap-1 text-xs font-bold text-[#C9945F]">
+                <AlertTriangle size={14} /> Below Target
+              </p>
+            ) : (
+              <p className="text-xs font-bold text-[#6B9B7A]">On Track</p>
+            )}
+            <p className="mt-1 text-[10px] text-[#6B6560]">
+              {belowTarget
+                ? `Short by ${shortfall.toFixed(1)}%.`
+                : `Above by ${(performanceProjectedFinal - targetGrade).toFixed(1)}%.`}
+            </p>
+          </div>
+        </div>
+
+        {showProjectionMath ? (
+          <div className="mt-6 space-y-3 border-t border-[#E8E3DC] pt-6">
+            <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#6B6560]">
+                Projection Totals
+              </p>
+              <div className="mt-3 space-y-3 text-xs text-[#6B6560]">
+                <div>
+                  <p className="font-semibold text-[#3A3530]">Projected Final Grade</p>
+                  <p className="font-mono">
+                    {(performanceProjectionBreakdown.length
+                      ? performanceProjectionBreakdown
+                          .map((entry) => entry.contribution.toFixed(2))
+                          .join(" + ")
+                      : currentContribution.toFixed(2)) || "0.00"}
+                    {" = "}
+                    {(performanceProjectionBreakdown.length
+                      ? performanceProjectionContributionTotal
+                      : performanceProjectedFinal
+                    ).toFixed(2)}
+                    %
+                  </p>
+                </div>
+                <div>
+                  <p className="font-semibold text-[#3A3530]">Max Reachable Under This Plan</p>
+                  <p className="font-mono">
+                    {(performanceProjectionBreakdown.length
+                      ? performanceProjectionBreakdown
+                          .map((entry) => entry.max_contribution.toFixed(2))
+                          .join(" + ")
+                      : performanceProjectedMaximum.toFixed(2)) || "0.00"}
+                    {" = "}
+                    {(performanceProjectionBreakdown.length
+                      ? performanceProjectionMaxContributionTotal
+                      : performanceProjectedMaximum
+                    ).toFixed(2)}
+                    %
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* LEFT: WHAT-IF */}
@@ -1377,6 +1612,10 @@ export function ExploreScenarios() {
             ) : null}
           </div>
         </div>
+      </div>
+
+      <div className="mt-10">
+        <GpaScaleConverter />
       </div>
 
       {showSaveDialog ? (

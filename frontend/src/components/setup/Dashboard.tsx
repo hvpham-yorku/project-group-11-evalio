@@ -10,7 +10,6 @@ import {
   Calendar,
   Plus,
   ChevronDown,
-  Sigma,
 } from "lucide-react";
 import { useSetupCourse } from "@/app/setup/course-context";
 import { getApiErrorMessage } from "@/lib/errors";
@@ -38,13 +37,10 @@ import {
   type Course,
   type CourseGpaResponse,
   type DashboardSummaryResponse,
-  type DashboardWhatIfResponse,
   type Deadline as ApiDeadline,
   type TargetCheckResponse,
   type UniformRequiredAssessment,
-  runDashboardWhatIf,
 } from "@/lib/api";
-import { GpaScaleConverter } from "@/components/setup/GpaScaleConverter";
 
 const DEFAULT_TARGET_GRADE = 85;
 const GPA_SCALES = ["4.0", "9.0", "10.0"] as const;
@@ -98,9 +94,7 @@ export function Dashboard() {
     Record<string, boolean>
   >({});
   const [gradedWeight, setGradedWeight] = useState(0);
-  const [currentContribution, setCurrentContribution] = useState(0);
   const [targetGrade, setTargetGrade] = useState(DEFAULT_TARGET_GRADE);
-  const [assumedPerformance, setAssumedPerformance] = useState(75);
   const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [deadlines, setDeadlines] = useState<DashboardDeadline[]>([]);
@@ -114,9 +108,6 @@ export function Dashboard() {
   const [cumulativeGpa, setCumulativeGpa] = useState<CgpaResponse | null>(null);
   const [dashboardSummary, setDashboardSummary] =
     useState<DashboardSummaryResponse | null>(null);
-  const [whatIfResult, setWhatIfResult] =
-    useState<DashboardWhatIfResponse | null>(null);
-  const [showProjectionMath, setShowProjectionMath] = useState(false);
   const { ensureCourseIdFromList } = useSetupCourse();
 
   useEffect(() => {
@@ -294,7 +285,6 @@ export function Dashboard() {
         setExpandedAssessments({});
         setDashboardSummary(summary);
         setGradedWeight(summary.graded_weight);
-        setCurrentContribution(summary.current_grade);
 
         const decoratedDeadlines = await Promise.all(
           (deadlineResponse.deadlines ?? []).map(async (deadline: ApiDeadline) => {
@@ -393,9 +383,7 @@ export function Dashboard() {
         setError(getApiErrorMessage(e, "Failed to load dashboard."));
         setAssessmentGroups([]);
         setExpandedAssessments({});
-        setCurrentContribution(0);
         setDashboardSummary(null);
-        setWhatIfResult(null);
         setTermGpa(null);
         setTermGpaCourses([]);
         setCumulativeGpa(null);
@@ -427,10 +415,6 @@ export function Dashboard() {
     Math.min(100, dashboardSummary?.remaining_weight ?? 100 - gradedWeight)
   );
   const progressWidth = `${Math.max(0, Math.min(targetGrade, 100))}%`;
-  const clampedPerformanceAssumption = Math.max(
-    0,
-    Math.min(assumedPerformance, 100)
-  );
   const targetClassification = targetResult?.classification ?? "Challenging";
 
   const targetTone =
@@ -471,42 +455,6 @@ export function Dashboard() {
     targetResult?.explanation ??
     "Your target is possible but will require strong performance.";
 
-  const projectedFinal = useMemo(() => {
-    if (whatIfResult) {
-      if (whatIfResult.normalisation_applied) {
-        return (
-          whatIfResult.projected_normalised ?? whatIfResult.projected_grade
-        );
-      }
-      return whatIfResult.projected_grade;
-    }
-    return (
-      currentContribution +
-      (remainingWeight * clampedPerformanceAssumption) / 100
-    );
-  }, [
-    clampedPerformanceAssumption,
-    currentContribution,
-    remainingWeight,
-    whatIfResult,
-  ]);
-
-  const projectedMaximum = useMemo(() => {
-    if (whatIfResult) {
-      if (whatIfResult.normalisation_applied) {
-        return (
-          whatIfResult.maximum_possible_normalised ??
-          whatIfResult.maximum_possible
-        );
-      }
-      return whatIfResult.maximum_possible;
-    }
-    return boundaryBestCase;
-  }, [boundaryBestCase, whatIfResult]);
-
-  const shortfall = targetGrade - projectedFinal;
-  const belowTarget = shortfall > 0;
-
   const metrics = [
     {
       label: "Current Grade",
@@ -542,53 +490,10 @@ export function Dashboard() {
       .slice(0, 3);
   }, [deadlines]);
 
-  const projectionBreakdown = useMemo(
-    () => whatIfResult?.breakdown ?? [],
-    [whatIfResult]
-  );
-
   const activeCourse = useMemo(
     () => courses.find((course) => course.course_id === activeCourseId) ?? null,
     [activeCourseId, courses]
   );
-
-  useEffect(() => {
-    if (!activeCourseId || !activeCourse) {
-      setWhatIfResult(null);
-      return;
-    }
-
-    const scenarios = buildAssessmentTargetGroups(activeCourse.assessments)
-      .flatMap((group) => (group.children.length ? group.children : [group.parent]))
-      .filter((assessment) => !assessment.isBonus && !assessment.graded)
-      .map((assessment) => ({
-        assessment_name: assessment.assessmentName,
-        score: clampedPerformanceAssumption,
-      }));
-
-    if (!scenarios.length) {
-      setWhatIfResult(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    runDashboardWhatIf(activeCourseId, { scenarios })
-      .then((response) => {
-        if (!cancelled) {
-          setWhatIfResult(response);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setWhatIfResult(null);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [activeCourse, activeCourseId, clampedPerformanceAssumption]);
 
   const termLabel = activeCourse?.term?.trim() || "Current selection";
 
@@ -728,18 +633,6 @@ export function Dashboard() {
     };
   }, [courses, riskDeadlines, riskTargetResults]);
 
-  const projectionContributionTotal = useMemo(
-    () =>
-      projectionBreakdown.reduce((sum, entry) => sum + entry.contribution, 0),
-    [projectionBreakdown]
-  );
-
-  const projectionMaxContributionTotal = useMemo(
-    () =>
-      projectionBreakdown.reduce((sum, entry) => sum + entry.max_contribution, 0),
-    [projectionBreakdown]
-  );
-
   return (
     <div className="mx-auto max-w-4xl space-y-10 px-4 pb-20 text-[#3A3530]">
       {/* 1. Header Section */}
@@ -771,7 +664,30 @@ export function Dashboard() {
         ))}
       </div>
 
-      {/* 3. Assessment Breakdown */}
+      {/* 3. Target */}
+      <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
+        <div className="mb-6 flex items-center justify-between">
+          <h3 className="font-bold text-[#3A3530]">Target: {targetGrade}%</h3>
+          <span
+            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${targetBadgeClass}`}
+          >
+            <TrendingUp size={12} /> {targetClassification}
+          </span>
+        </div>
+        <div className="mb-4 h-3 w-full rounded-full bg-[#E8E3DC]">
+          <div
+            className={`h-full rounded-full transition-all ${targetBarClass}`}
+            style={{ width: progressWidth }}
+          />
+        </div>
+        <div
+          className={`rounded-xl border p-4 text-xs leading-relaxed ${targetMessageClass}`}
+        >
+          {targetExplanation}
+        </div>
+      </div>
+
+      {/* 4. Assessment Breakdown */}
       <div className="space-y-4">
         <h3 className="font-bold text-[#3A3530]">Assessment Breakdown</h3>
         {(loading ? [] : assessmentGroups).map((group) => {
@@ -904,132 +820,7 @@ export function Dashboard() {
         })}
       </div>
 
-      {/* 5. Target */}
-      <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
-        <div className="mb-6 flex justify-between items-center">
-          <h3 className="font-bold text-[#3A3530]">Target: {targetGrade}%</h3>
-          <span
-            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${targetBadgeClass}`}
-          >
-            <TrendingUp size={12} /> {targetClassification}
-          </span>
-        </div>
-        <div className="mb-4 h-3 w-full rounded-full bg-[#E8E3DC]">
-          <div
-            className={`h-full rounded-full transition-all ${targetBarClass}`}
-            style={{ width: progressWidth }}
-          />
-        </div>
-        <div
-          className={`rounded-xl border p-4 text-xs leading-relaxed ${targetMessageClass}`}
-        >
-          {targetExplanation}
-        </div>
-      </div>
-
-      {/* 6. Performance Assumption */}
-      <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
-        <div className="mb-2 flex items-center justify-between gap-4">
-          <h3 className="font-bold text-[#3A3530]">Performance Assumption</h3>
-          <button
-            type="button"
-            onClick={() => setShowProjectionMath((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-xl border border-[#C4D6E4] bg-[#E8EFF5] px-3 py-2 text-xs font-medium text-[#5F7A8A] transition hover:opacity-90"
-          >
-            <Sigma size={14} />
-            {showProjectionMath ? "Hide Math" : "Show Math"}
-          </button>
-        </div>
-        <p className="mb-6 text-xs text-[#6B6560]">
-          Adjust the slider to apply a temporary what-if score to every remaining assessment.
-        </p>
-        <div className="mb-8 flex items-center gap-6">
-          <input
-            type="range"
-            min="0"
-            max="100"
-            value={assumedPerformance}
-            onChange={(e) => setAssumedPerformance(Number(e.target.value))}
-            className="flex-1 h-2 cursor-pointer appearance-none rounded-full bg-[#E8E3DC] accent-[#C9945F]"
-          />
-          <span className="text-3xl font-bold text-[#C9945F]">
-            {clampedPerformanceAssumption.toFixed(0)}%
-          </span>
-        </div>
-        <div className="flex items-center justify-between rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-6">
-          <div>
-            <p className="text-[10px] uppercase text-[#6B6560]">
-              Projected Final Grade
-            </p>
-            <p className="text-4xl font-bold text-[#3A3530]">
-              {projectedFinal.toFixed(1)}%
-            </p>
-            <p className="mt-2 text-[10px] uppercase text-[#6B6560]">
-              Max reachable under this plan: {projectedMaximum.toFixed(1)}%
-            </p>
-          </div>
-          <div className="text-right">
-            {belowTarget ? (
-              <p className="flex items-center justify-end gap-1 text-xs font-bold text-[#C9945F]">
-                <AlertTriangle size={14} /> Below Target
-              </p>
-            ) : (
-              <p className="text-xs font-bold text-[#6B9B7A]">On Track</p>
-            )}
-            <p className="mt-1 text-[10px] text-[#6B6560]">
-              {belowTarget
-                ? `Short by ${shortfall.toFixed(1)}%.`
-                : `Above by ${(projectedFinal - targetGrade).toFixed(1)}%.`}
-            </p>
-          </div>
-        </div>
-
-        {showProjectionMath ? (
-          <div className="mt-6 space-y-3 border-t border-[#E8E3DC] pt-6">
-            <div className="rounded-2xl border border-[#E8E3DC] bg-[#F5F1EB] p-4">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-[#6B6560]">
-                Projection Totals
-              </p>
-              <div className="mt-3 space-y-3 text-xs text-[#6B6560]">
-                <div>
-                  <p className="font-semibold text-[#3A3530]">Projected Final Grade</p>
-                  <p className="font-mono">
-                    {(projectionBreakdown.length
-                      ? projectionBreakdown
-                          .map((entry) => entry.contribution.toFixed(2))
-                          .join(" + ")
-                      : currentContribution.toFixed(2)) || "0.00"}
-                    {" = "}
-                    {(projectionBreakdown.length
-                      ? projectionContributionTotal
-                      : projectedFinal
-                    ).toFixed(2)}
-                    %
-                  </p>
-                </div>
-                <div>
-                  <p className="font-semibold text-[#3A3530]">Max Reachable Under This Plan</p>
-                  <p className="font-mono">
-                    {(projectionBreakdown.length
-                      ? projectionBreakdown
-                          .map((entry) => entry.max_contribution.toFixed(2))
-                          .join(" + ")
-                      : projectedMaximum.toFixed(2)) || "0.00"}
-                    {" = "}
-                    {(projectionBreakdown.length
-                      ? projectionMaxContributionTotal
-                      : projectedMaximum
-                    ).toFixed(2)}
-                    %
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      {/* 7. Upcoming Deadlines */}
+      {/* 5. Upcoming Deadlines */}
       <div className="rounded-3xl border border-[#D4CFC7] bg-[#FFFFFF] p-8 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="font-bold text-[#3A3530]">
@@ -1350,7 +1141,6 @@ export function Dashboard() {
           </div>
         </div>
 
-        <GpaScaleConverter />
       </div>
 
       {/* Action Button */}

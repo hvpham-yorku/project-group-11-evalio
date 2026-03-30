@@ -563,6 +563,15 @@ export default function DeadlinesPage() {
         </div>
       )}
 
+      <div className="mt-12 flex justify-center">
+        <button
+          onClick={() => router.push("/setup/dashboard")}
+          className="rounded-2xl bg-[#5F7A8A] px-10 py-4 text-base font-bold text-white shadow-lg transition hover:bg-[#6B8BA8]"
+        >
+          Continue to Dashboard
+        </button>
+      </div>
+
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#3A3530]/35 px-4 backdrop-blur-sm">
           <div className="w-full max-w-xl rounded-[2rem] border border-[#D4CFC7] bg-white p-8 shadow-2xl">
