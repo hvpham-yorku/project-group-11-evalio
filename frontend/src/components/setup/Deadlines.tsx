@@ -185,10 +185,24 @@ export default function DeadlinesPage() {
 
   useEffect(() => {
     const gcalConnected = searchParams.get("gcal_connected");
+    const gcalError = searchParams.get("gcal_error");
+    let shouldCleanQuery = false;
+
     if (gcalConnected === "true") {
       setIsCalendarConnected(true);
       window.localStorage.setItem(GCAL_CONNECTED_KEY, "true");
       void refreshGoogleCalendarStatus();
+      shouldCleanQuery = true;
+    }
+    if (gcalError) {
+      try {
+        setError(decodeURIComponent(gcalError));
+      } catch {
+        setError(gcalError);
+      }
+      shouldCleanQuery = true;
+    }
+    if (shouldCleanQuery) {
       router.replace("/setup/deadlines", { scroll: false });
     }
     void refreshGoogleCalendarStatus();
@@ -269,10 +283,13 @@ export default function DeadlinesPage() {
 
   const handleConnectCalendar = async () => {
     setIsConnecting(true);
+    setError("");
+    setSuccessMessage("");
     try {
       const { authorization_url } = await getGoogleAuthUrl();
       window.location.href = authorization_url;
-    } catch {
+    } catch (e) {
+      setError(getApiErrorMessage(e, "Unable to start Google Calendar connection."));
       setIsConnecting(false);
     }
   };
@@ -280,21 +297,56 @@ export default function DeadlinesPage() {
   const handleExport = async () => {
     if (!courseId) return;
     setIsExporting(true);
+    setError("");
+    setSuccessMessage("");
     const ids = Array.from(selectedDeadlines);
     try {
-      await exportToGoogleCalendar(courseId, {
+      const result = await exportToGoogleCalendar(courseId, {
         deadlineIds: ids.length > 0 ? ids : undefined,
       });
       await refreshDeadlines(courseId);
       setSelectedDeadlines(new Set());
       setShowExportModal(false);
-      setSuccessMessage(
-        `Exported ${ids.length === 0 ? "selected" : ids.length} deadline${
-          ids.length === 1 ? "" : "s"
-        } to Google Calendar.`
-      );
+
+      const exportedCount = Number(result?.exported_count ?? 0);
+      const skippedCount = Number(result?.skipped_duplicates ?? 0);
+      const failedCount = (result?.events ?? []).filter(
+        (event) => event?.status === "failed"
+      ).length;
+      const firstFailureReason = (result?.events ?? []).find(
+        (event) => event?.status === "failed" && typeof event?.error === "string"
+      )?.error;
+
+      if (failedCount > 0) {
+        setError(
+          `Google Calendar export finished with ${failedCount} failure${
+            failedCount === 1 ? "" : "s"
+          }.${firstFailureReason ? ` ${firstFailureReason}` : ""}`
+        );
+      }
+
+      if (exportedCount > 0) {
+        const parts = [
+          `Exported ${exportedCount} deadline${exportedCount === 1 ? "" : "s"} to Google Calendar.`,
+        ];
+        if (skippedCount > 0) {
+          parts.push(
+            `${skippedCount} already existed and ${skippedCount === 1 ? "was" : "were"} skipped.`
+          );
+        }
+        setSuccessMessage(parts.join(" "));
+      } else if (skippedCount > 0 && failedCount === 0) {
+        setSuccessMessage(
+          `No new deadlines exported. ${skippedCount} duplicate deadline${
+            skippedCount === 1 ? "" : "s"
+          } ${skippedCount === 1 ? "was" : "were"} skipped.`
+        );
+      } else if (failedCount === 0) {
+        setSuccessMessage("No deadlines were exported.");
+      }
     } catch (e) {
       setError(getApiErrorMessage(e, "Export failed."));
+      void refreshGoogleCalendarStatus();
     } finally {
       setIsExporting(false);
     }

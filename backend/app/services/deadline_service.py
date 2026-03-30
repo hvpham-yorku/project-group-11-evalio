@@ -98,6 +98,41 @@ def google_calendar_configured() -> bool:
     return bool(GOOGLE_CLIENT_ID) and bool(GOOGLE_CLIENT_SECRET)
 
 
+def _coerce_token_expiry(raw: Any) -> datetime | None:
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo is not None else raw.replace(tzinfo=UTC)
+    if isinstance(raw, str) and raw.strip():
+        normalized = raw.strip()
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+    return None
+
+
+def _with_token_expiry(tokens: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(tokens)
+    expires_in = normalized.get("expires_in")
+    if isinstance(expires_in, (int, float)) and expires_in > 0:
+        normalized["token_expiry"] = datetime.now(UTC) + timedelta(seconds=int(expires_in))
+        return normalized
+
+    expiry = _coerce_token_expiry(normalized.get("token_expiry"))
+    if expiry is not None:
+        normalized["token_expiry"] = expiry
+    return normalized
+
+
+def _token_expired(tokens: dict[str, Any], *, skew_seconds: int = 60) -> bool:
+    expiry = _coerce_token_expiry(tokens.get("token_expiry"))
+    if expiry is None:
+        return False
+    return datetime.now(UTC) >= (expiry - timedelta(seconds=skew_seconds))
+
+
 # ─── Lightweight date parser ──────────────────────────────────────────────────
 
 _MONTH_MAP = {
@@ -461,7 +496,10 @@ def exchange_google_code(code: str) -> dict[str, Any]:
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read())
+            payload = json.loads(resp.read())
+            if not isinstance(payload, dict):
+                raise GoogleCalendarError("Token exchange failed: invalid token payload")
+            return _with_token_expiry(payload)
     except HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         details = ""
@@ -480,6 +518,49 @@ def exchange_google_code(code: str) -> dict[str, Any]:
         ) from exc
     except Exception as exc:
         raise GoogleCalendarError(f"Token exchange failed: {exc}") from exc
+
+
+def refresh_google_access_token(refresh_token: str) -> dict[str, Any]:
+    if not google_calendar_configured():
+        raise GoogleCalendarError("Google Calendar not configured")
+
+    data = urllib.parse.urlencode({
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "refresh_token": refresh_token,
+        "grant_type": "refresh_token",
+    }).encode()
+    req = urllib.request.Request(
+        _GOOGLE_TOKEN_URL,
+        data=data,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            payload = json.loads(resp.read())
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        details = ""
+        try:
+            parsed = json.loads(body)
+            err = parsed.get("error")
+            err_desc = parsed.get("error_description")
+            if err and err_desc:
+                details = f" ({err}: {err_desc})"
+            elif err:
+                details = f" ({err})"
+        except Exception:
+            details = ""
+        raise GoogleCalendarError(
+            f"Token refresh failed: HTTP {exc.code}{details}"
+        ) from exc
+    except Exception as exc:
+        raise GoogleCalendarError(f"Token refresh failed: {exc}") from exc
+
+    if not isinstance(payload, dict):
+        raise GoogleCalendarError("Token refresh failed: invalid token payload")
+    payload.setdefault("refresh_token", refresh_token)
+    return _with_token_expiry(payload)
 
 
 def create_google_calendar_event(
@@ -504,12 +585,23 @@ def create_google_calendar_event(
     }
 
     if deadline.due_time:
-        dt = f"{deadline.due_date}T{deadline.due_time}:00"
-        event_body["start"] = {"dateTime": dt, "timeZone": "America/Toronto"}
-        event_body["end"] = {"dateTime": dt, "timeZone": "America/Toronto"}
+        start_at = datetime.strptime(
+            f"{deadline.due_date} {deadline.due_time}", "%Y-%m-%d %H:%M"
+        )
+        end_at = start_at + timedelta(minutes=30)
+        event_body["start"] = {
+            "dateTime": start_at.strftime("%Y-%m-%dT%H:%M:%S"),
+            "timeZone": "America/Toronto",
+        }
+        event_body["end"] = {
+            "dateTime": end_at.strftime("%Y-%m-%dT%H:%M:%S"),
+            "timeZone": "America/Toronto",
+        }
     else:
-        event_body["start"] = {"date": deadline.due_date}
-        event_body["end"] = {"date": deadline.due_date}
+        all_day_start = date.fromisoformat(deadline.due_date)
+        all_day_end = all_day_start + timedelta(days=1)
+        event_body["start"] = {"date": all_day_start.isoformat()}
+        event_body["end"] = {"date": all_day_end.isoformat()}
 
     # 7-day reminder
     event_body["reminders"] = {
@@ -531,6 +623,26 @@ def create_google_calendar_event(
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        details = ""
+        try:
+            payload = json.loads(body)
+            if isinstance(payload, dict):
+                if isinstance(payload.get("error"), dict):
+                    message = payload["error"].get("message")
+                    status = payload["error"].get("status")
+                    if status and message:
+                        details = f" ({status}: {message})"
+                    elif message:
+                        details = f" ({message})"
+                elif payload.get("error"):
+                    details = f" ({payload.get('error')})"
+        except Exception:
+            details = ""
+        raise GoogleCalendarError(
+            f"Calendar event creation failed: HTTP {exc.code}{details}"
+        ) from exc
     except Exception as exc:
         raise GoogleCalendarError(f"Calendar event creation failed: {exc}") from exc
 
@@ -717,21 +829,22 @@ class DeadlineService:
     # ── Google Calendar Export ──
 
     def store_google_tokens(self, user_id: UUID, tokens: dict[str, Any]) -> None:
-        self._google_tokens[user_id] = tokens
+        normalized_tokens = _with_token_expiry(tokens)
+        self._google_tokens[user_id] = normalized_tokens
         if self._calendar_repo is None:
             return
 
-        access_token = tokens.get("access_token")
+        access_token = normalized_tokens.get("access_token")
         if not isinstance(access_token, str) or not access_token:
             return
 
         existing_tokens = self._calendar_repo.get_tokens(user_id, "google") or {}
-        refresh_token = tokens.get("refresh_token")
+        refresh_token = normalized_tokens.get("refresh_token")
         if refresh_token is None:
             refresh_token = existing_tokens.get("refresh_token")
-        token_expiry = tokens.get("token_expiry")
+        token_expiry = _coerce_token_expiry(normalized_tokens.get("token_expiry"))
         if token_expiry is None:
-            token_expiry = existing_tokens.get("token_expiry")
+            token_expiry = _coerce_token_expiry(existing_tokens.get("token_expiry"))
 
         existing_connection = self._calendar_repo.get_by_user_and_provider(user_id, "google")
         if existing_connection is None:
@@ -752,20 +865,44 @@ class DeadlineService:
             token_expiry=token_expiry,
         )
 
+    def _refresh_tokens(self, user_id: UUID, tokens: dict[str, Any]) -> str | None:
+        refresh_token = tokens.get("refresh_token")
+        if not isinstance(refresh_token, str) or not refresh_token:
+            return None
+        refreshed = refresh_google_access_token(refresh_token)
+        self.store_google_tokens(user_id, refreshed)
+        access_token = refreshed.get("access_token")
+        if isinstance(access_token, str) and access_token:
+            return access_token
+        return None
+
     def get_google_access_token(self, user_id: UUID) -> str | None:
         tokens = self._google_tokens.get(user_id)
-        if tokens and tokens.get("access_token"):
-            return tokens.get("access_token")
+        if tokens:
+            access_token = tokens.get("access_token")
+            if isinstance(access_token, str) and access_token:
+                if not _token_expired(tokens):
+                    return access_token
+                refreshed = self._refresh_tokens(user_id, tokens)
+                if refreshed:
+                    return refreshed
 
         if self._calendar_repo is not None:
             persisted = self._calendar_repo.get_tokens(user_id, "google")
             if persisted and persisted.get("access_token"):
-                self._google_tokens[user_id] = {
+                cached = _with_token_expiry({
                     "access_token": persisted.get("access_token"),
                     "refresh_token": persisted.get("refresh_token"),
                     "token_expiry": persisted.get("token_expiry"),
-                }
-                return persisted.get("access_token")
+                })
+                self._google_tokens[user_id] = cached
+                if not _token_expired(cached):
+                    access_token = cached.get("access_token")
+                    if isinstance(access_token, str) and access_token:
+                        return access_token
+                refreshed = self._refresh_tokens(user_id, cached)
+                if refreshed:
+                    return refreshed
 
         return None
 
@@ -826,10 +963,27 @@ class DeadlineService:
                     "status": "exported",
                 })
                 exported += 1
-            except GoogleCalendarError:
+            except GoogleCalendarError as exc:
+                lowered = str(exc).lower()
+                is_auth_issue = (
+                    "http 401" in lowered
+                    or "http 403" in lowered
+                    or "invalid_grant" in lowered
+                    or "invalid credentials" in lowered
+                    or "autherror" in lowered
+                )
+                if is_auth_issue:
+                    # Force reconnect when Google says token/session is no longer valid.
+                    self._google_tokens.pop(user_id, None)
+                    if self._calendar_repo is not None:
+                        self._calendar_repo.disconnect(user_id, "google")
+                    raise GoogleCalendarError(
+                        "Google Calendar authorization expired. Please reconnect your Google account."
+                    ) from exc
                 events.append({
                     "deadline_id": str(dl.deadline_id),
                     "status": "failed",
+                    "error": str(exc),
                 })
 
         return {

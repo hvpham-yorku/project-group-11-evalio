@@ -15,16 +15,20 @@ GET    /deadlines/google/callback              → Google OAuth2 callback
 from __future__ import annotations
 
 import os
+import secrets
+import urllib.parse
 from typing import Any, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 from app.config import AUTH_COOKIE_NAME
 # Frontend URL for OAuth callback redirect
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+GOOGLE_OAUTH_STATE_COOKIE = "evalio_google_oauth_state"
+GOOGLE_OAUTH_STATE_MAX_AGE_SECONDS = 10 * 60
 
 from app.dependencies import (
     get_auth_service,
@@ -79,31 +83,52 @@ def _resolve_google_callback_user(
     auth_service: AuthService,
     user_repo: UserRepository,
 ) -> AuthenticatedUser:
-    """Resolve the user for the OAuth callback from cookie first, then state."""
+    """
+    Resolve the user for OAuth callback by validating state nonce + user binding.
+    """
+    expected_nonce = request.cookies.get(GOOGLE_OAUTH_STATE_COOKIE)
+    if not expected_nonce:
+        raise HTTPException(
+            status_code=401,
+            detail="Google OAuth session expired. Please reconnect calendar.",
+        )
+
+    state_user_raw, sep, state_nonce = state.partition(":")
+    if not sep or not state_user_raw or not state_nonce:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Google OAuth state.",
+        )
+    if not secrets.compare_digest(state_nonce, expected_nonce):
+        raise HTTPException(
+            status_code=401,
+            detail="Google OAuth state mismatch. Please reconnect calendar.",
+        )
+
+    try:
+        state_user_id = UUID(state_user_raw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Google OAuth state user.",
+        ) from exc
+
     token = request.cookies.get(AUTH_COOKIE_NAME)
     if token:
         try:
-            return auth_service.get_current_user(token)
+            current_user = auth_service.get_current_user(token)
+            if current_user.user_id != state_user_id:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authenticated user does not match Google OAuth state.",
+                )
+            return current_user
         except AuthenticationError:
             pass
 
-    if state:
-        try:
-            return auth_service.get_current_user(state)
-        except AuthenticationError:
-            pass
-
-        try:
-            user_id = UUID(state)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=401,
-                detail="Authentication required to complete Google Calendar connection",
-            ) from exc
-
-        stored_user = user_repo.get_by_id(user_id)
-        if stored_user is not None:
-            return AuthenticatedUser(user_id=stored_user.user_id, email=stored_user.email)
+    stored_user = user_repo.get_by_id(state_user_id)
+    if stored_user is not None:
+        return AuthenticatedUser(user_id=stored_user.user_id, email=stored_user.email)
 
     raise HTTPException(
         status_code=401,
@@ -317,7 +342,6 @@ def export_ics(
 
 @router.get("/deadlines/google/authorize", response_model=GoogleAuthUrlResponse)
 def google_authorize(
-    request: Request,
     current_user: AuthenticatedUser = Depends(get_current_user),
 ):
     """
@@ -327,9 +351,22 @@ def google_authorize(
     Returns 501 if ``GOOGLE_CLIENT_ID`` is not configured.
     """
     try:
-        return get_google_auth_url(
-            state=request.cookies.get(AUTH_COOKIE_NAME, str(current_user.user_id))
+        nonce = secrets.token_urlsafe(24)
+        state = f"{current_user.user_id}:{nonce}"
+        payload = get_google_auth_url(
+            state=state
         )
+        response = JSONResponse(content=payload)
+        response.set_cookie(
+            key=GOOGLE_OAUTH_STATE_COOKIE,
+            value=nonce,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=GOOGLE_OAUTH_STATE_MAX_AGE_SECONDS,
+            path="/",
+        )
+        return response
     except GoogleCalendarError as exc:
         raise HTTPException(status_code=501, detail=str(exc)) from exc
 
@@ -369,17 +406,29 @@ def google_callback(
         tokens = exchange_google_code(code)
     except GoogleCalendarError as exc:
         # Redirect to frontend with error
-        return RedirectResponse(
-            url=f"{FRONTEND_URL}/setup/deadlines?gcal_error={exc}",
+        response = RedirectResponse(
+            url=f"{FRONTEND_URL}/setup/deadlines?gcal_error={urllib.parse.quote(str(exc), safe='')}",
             status_code=302,
         )
+        response.delete_cookie(
+            key=GOOGLE_OAUTH_STATE_COOKIE,
+            path="/",
+            samesite="lax",
+        )
+        return response
 
     dl_service.store_google_tokens(current_user.user_id, tokens)
     # Redirect to frontend with success
-    return RedirectResponse(
+    response = RedirectResponse(
         url=f"{FRONTEND_URL}/setup/deadlines?gcal_connected=true",
         status_code=302,
     )
+    response.delete_cookie(
+        key=GOOGLE_OAUTH_STATE_COOKIE,
+        path="/",
+        samesite="lax",
+    )
+    return response
 
 
 @router.post(

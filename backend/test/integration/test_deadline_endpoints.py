@@ -241,6 +241,13 @@ class TestDeadlineEndpoints:
         assert r.status_code == 200
         return r.json()["course_id"]
 
+    def _oauth_state_for_current_user(self, auth_client, nonce: str = "test-oauth-nonce") -> str:
+        me = auth_client.get("/auth/me")
+        assert me.status_code == 200
+        user_id = me.json()["user_id"]
+        auth_client.cookies.set(deadline_routes.GOOGLE_OAUTH_STATE_COOKIE, nonce)
+        return f"{user_id}:{nonce}"
+
     def test_create_and_list_deadlines(self, auth_client):
         course_id = self._create_course(auth_client)
 
@@ -429,9 +436,10 @@ class TestDeadlineEndpoints:
                 "refresh_token": "refresh-token",
             },
         )
+        state = self._oauth_state_for_current_user(auth_client)
 
         response = auth_client.get(
-            "/deadlines/google/callback?code=test-code",
+            f"/deadlines/google/callback?code=test-code&state={state}",
             follow_redirects=False,
         )
 
@@ -445,6 +453,14 @@ class TestDeadlineEndpoints:
         status = auth_client.get("/deadlines/google/status")
         assert status.status_code == 200
         assert status.json()["connected"] is True
+
+    def test_google_callback_requires_matching_oauth_state(self, auth_client):
+        response = auth_client.get(
+            "/deadlines/google/callback?code=test-code",
+            follow_redirects=False,
+        )
+        assert response.status_code == 401
+        assert "oauth" in response.json()["detail"].lower()
 
     def test_google_export_unconfigured_returns_501(self, auth_client, monkeypatch):
         course_id = self._create_course(auth_client)
@@ -490,9 +506,10 @@ class TestDeadlineEndpoints:
             "create_google_calendar_event",
             lambda **_kwargs: {"id": "evt_123"},
         )
+        state = self._oauth_state_for_current_user(auth_client)
 
         callback = auth_client.get(
-            "/deadlines/google/callback?code=test-code",
+            f"/deadlines/google/callback?code=test-code&state={state}",
             follow_redirects=False,
         )
         assert callback.status_code == 302
@@ -549,9 +566,10 @@ class TestDeadlineEndpoints:
             "create_google_calendar_event",
             _capture_event,
         )
+        state = self._oauth_state_for_current_user(auth_client)
 
         callback = auth_client.get(
-            "/deadlines/google/callback?code=test-code",
+            f"/deadlines/google/callback?code=test-code&state={state}",
             follow_redirects=False,
         )
         assert callback.status_code == 302
@@ -568,6 +586,56 @@ class TestDeadlineEndpoints:
         assert exported.json()["exported_count"] == 1
         assert captured_min_grade_text
         assert "72.5" in captured_min_grade_text[0]
+
+    def test_google_export_auth_failure_forces_reconnect(self, auth_client, monkeypatch):
+        service = get_deadline_service()
+        service._google_tokens.clear()
+        get_calendar_repo().clear()
+
+        course_id = self._create_course(auth_client)
+        created = auth_client.post(
+            f"/courses/{course_id}/deadlines",
+            json={
+                "title": "Final Exam",
+                "due_date": "2026-04-20",
+            },
+        )
+        assert created.status_code == 200
+
+        monkeypatch.setattr(
+            deadline_routes,
+            "exchange_google_code",
+            lambda _code: {"access_token": "token"},
+        )
+        monkeypatch.setattr(
+            deadline_routes,
+            "google_calendar_configured",
+            lambda: True,
+        )
+        monkeypatch.setattr(
+            deadline_service_module,
+            "create_google_calendar_event",
+            lambda **_kwargs: (_ for _ in ()).throw(
+                deadline_service_module.GoogleCalendarError(
+                    "Calendar event creation failed: HTTP 401 (UNAUTHENTICATED: invalid credentials)"
+                )
+            ),
+        )
+
+        state = self._oauth_state_for_current_user(auth_client)
+        callback = auth_client.get(
+            f"/deadlines/google/callback?code=test-code&state={state}",
+            follow_redirects=False,
+        )
+        assert callback.status_code == 302
+
+        exported = auth_client.post(f"/courses/{course_id}/deadlines/export/gcal")
+        assert exported.status_code == 401
+        assert "reconnect" in exported.json()["detail"].lower()
+
+        status = auth_client.get("/deadlines/google/status")
+        assert status.status_code == 200
+        assert status.json()["connected"] is False
 
     def test_extract_endpoint_uses_text_fallback_parser(self, auth_client, monkeypatch):
         course_id = self._create_course(auth_client)

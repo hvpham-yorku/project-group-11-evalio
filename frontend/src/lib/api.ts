@@ -725,7 +725,12 @@ export type GoogleCalendarStatusResponse = {
 export type DeadlineExportResponse = {
   exported_count: number;
   skipped_duplicates: number;
-  events: Array<{ deadline_id: string; gcal_event_id?: string; status?: string }>;
+  events: Array<{
+    deadline_id: string;
+    gcal_event_id?: string;
+    status?: string;
+    error?: string;
+  }>;
 };
 
 // ─── Deadline & Google Calendar API Functions ─────────────────────────────────
@@ -797,6 +802,7 @@ export function exportToGoogleCalendar(
 ) {
   return request(`/courses/${courseId}/deadlines/export/gcal`, {
     method: "POST",
+    skipAuthRedirect: true,
     body: JSON.stringify({
       deadline_ids: payload?.deadlineIds ?? null,
       min_grade_info: payload?.minGradeInfo ?? null,
