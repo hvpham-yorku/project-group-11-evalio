@@ -70,6 +70,29 @@ type RiskSummaryAlert = {
   severity: "critical" | "warning";
 };
 
+function getCourseDisplayName(
+  courses: Course[],
+  courseId: string,
+  activeCourse: Course | null
+): string {
+  const matchedCourse = courses.find((course) => course.course_id === courseId);
+  if (matchedCourse) {
+    return matchedCourse.course_name || matchedCourse.name || "Unknown Course";
+  }
+  if (activeCourse && activeCourse.course_id === courseId) {
+    return activeCourse.course_name || activeCourse.name || "Unknown Course";
+  }
+  return "Unknown Course";
+}
+
+function getDeadlineTargetMessage(deadline: DashboardDeadline): string | null {
+  if (typeof deadline.minimum_required !== "number") return null;
+  if (deadline.minimum_required <= 0.05) {
+    return "Target already covered before this deadline.";
+  }
+  return `Need at least ${deadline.minimum_required.toFixed(1)}% to hit your target.`;
+}
+
 // --- Helper Components ---
 function StatItem({ label, value }: { label: string; value: string }) {
   return (
@@ -129,7 +152,6 @@ export function Dashboard() {
           setExpandedAssessments({});
           setTargetResult(null);
           setDashboardSummary(null);
-          setWhatIfResult(null);
           setTermGpa(null);
           setTermGpaCourses([]);
           setCumulativeGpa(null);
@@ -146,7 +168,6 @@ export function Dashboard() {
           setExpandedAssessments({});
           setTargetResult(null);
           setDashboardSummary(null);
-          setWhatIfResult(null);
           setTermGpa(null);
           setTermGpaCourses([]);
           setCumulativeGpa(null);
@@ -540,11 +561,11 @@ export function Dashboard() {
 
       if (daysOverdue > 0) {
         criticalCount += 1;
-        const courseName =
-          courses.find((course) => course.course_id === deadline.course_id)
-            ?.course_name ||
-          courses.find((course) => course.course_id === deadline.course_id)?.name ||
-          "Unknown";
+        const courseName = getCourseDisplayName(
+          courses,
+          deadline.course_id,
+          activeCourse
+        );
 
         if (topAlerts.length < 3) {
           topAlerts.push({
@@ -564,11 +585,11 @@ export function Dashboard() {
         dueSoonCount += 1;
         if (hoursUntil <= 24) criticalCount += 1;
 
-        const courseName =
-          courses.find((course) => course.course_id === deadline.course_id)
-            ?.course_name ||
-          courses.find((course) => course.course_id === deadline.course_id)?.name ||
-          "Unknown";
+        const courseName = getCourseDisplayName(
+          courses,
+          deadline.course_id,
+          activeCourse
+        );
 
         if (topAlerts.length < 3) {
           topAlerts.push({
@@ -631,7 +652,7 @@ export function Dashboard() {
       totalAlerts,
       topAlerts,
     };
-  }, [courses, riskDeadlines, riskTargetResults]);
+  }, [activeCourse, courses, riskDeadlines, riskTargetResults]);
 
   return (
     <div className="mx-auto max-w-4xl space-y-10 px-4 pb-20 text-[#3A3530]">
@@ -853,10 +874,12 @@ export function Dashboard() {
             {upcomingDeadlines.map((deadline) => {
               const dueDate = new Date(deadline.due_date);
               const daysLeft = getDaysLeft(deadline.due_date);
-              const courseName =
-                courses.find(
-                  (course) => course.course_id === deadline.course_id
-                )?.course_name || "Unknown Course";
+              const courseName = getCourseDisplayName(
+                courses,
+                deadline.course_id,
+                activeCourse
+              );
+              const deadlineTargetMessage = getDeadlineTargetMessage(deadline);
 
               return (
                 <div
@@ -884,9 +907,9 @@ export function Dashboard() {
                         </span>
                       ) : null}
                     </div>
-                    {typeof deadline.minimum_required === "number" ? (
+                    {deadlineTargetMessage ? (
                       <div className="mt-1 text-[11px] text-[#6B6560]">
-                        Need at least {deadline.minimum_required.toFixed(1)}% to hit your target.
+                        {deadlineTargetMessage}
                       </div>
                     ) : null}
                   </div>
