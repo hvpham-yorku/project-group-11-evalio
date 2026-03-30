@@ -600,16 +600,16 @@ This section records the planning, development process, task assignments, time t
 
 **Discussion:**
 
-* Reviewed the goals and expectations for Iteration 2.
-* Discussed the main features to be implemented during ITR2.
-* Finalized the ITR2 user stories based on project priorities and feasibility.
-* Aligned team members on implementation ownership for the selected stories.
+- Reviewed the goals and expectations for Iteration 2.
+- Discussed the main features to be implemented during ITR2.
+- Finalized the ITR2 user stories based on project priorities and feasibility.
+- Aligned team members on implementation ownership for the selected stories.
 
 **Outcome:**
 
-* ITR2 user stories were finalized.
-* Initial task ownership was discussed and agreed upon.
-* Development direction for Iteration 2 was confirmed.
+- ITR2 user stories were finalized.
+- Initial task ownership was discussed and agreed upon.
+- Development direction for Iteration 2 was confirmed.
 
 ---
 
@@ -620,16 +620,16 @@ This section records the planning, development process, task assignments, time t
 
 **Discussion:**
 
-* Discussed the requirements and preparation needed for Deliverable 1.
-* Worked on the presentation content and slide organization.
-* Prepared the supporting document(s) required for submission.
-* Completed the peer evaluation form.
+- Discussed the requirements and preparation needed for Deliverable 1.
+- Worked on the presentation content and slide organization.
+- Prepared the supporting document(s) required for submission.
+- Completed the peer evaluation form.
 
 **Outcome:**
 
-* Deliverable 1 presentation was prepared.
-* Required supporting document for submission was completed.
-* Peer evaluation form was finalized.
+- Deliverable 1 presentation was prepared.
+- Required supporting document for submission was completed.
+- Peer evaluation form was finalized.
 
 ## 2. Plan Review (ITR1 → ITR2)
 
@@ -639,11 +639,11 @@ The team decided to continue building on the existing foundation from ITR1 rathe
 
 Compared to ITR1:
 
-* The overall project direction remained the same.
-* New ITR2 user stories were added based on the planned next phase of development.
-* No previously planned ITR1 stories were significantly changed or redefined.
-* No major priority changes were introduced during ITR2 planning.
-* No major scope reductions or dropped items were identified at the planning stage.
+- The overall project direction remained the same.
+- New ITR2 user stories were added based on the planned next phase of development.
+- No previously planned ITR1 stories were significantly changed or redefined.
+- No major priority changes were introduced during ITR2 planning.
+- No major scope reductions or dropped items were identified at the planning stage.
 
 The team proceeded with ITR2 by expanding the system with the next set of planned features while keeping the original Evalio concept and structure consistent.
 
@@ -663,85 +663,89 @@ As a student, I want to upload my course outline (PDF or image) and automaticall
 
 #### Scope (ITR2)
 
-* AI is used only to assist in extracting structured grading information.
-* Core evaluation logic remains independent and fully functional without AI.
-* User can upload a course outline in supported file formats.
-* System extracts assessment components such as:
+- AI is used only to assist in extracting structured grading information.
+- Core evaluation logic remains independent and fully functional without AI.
+- User can upload a course outline in supported file formats.
+- System extracts assessment components such as:
 
-  * Tests
-  * Quizzes
-  * Assignments
-  * Exams
-* System extracts corresponding weight percentages for each assessment.
-* System detects supported grading rules such as:
+  - Tests
+  - Quizzes
+  - Assignments
+  - Exams
 
-  * Best X of Y
-  * Drop Lowest
-* Extracted information is converted into structured grading data.
-* Extracted grading structure is shown in an editable preview screen.
-* User can:
+- System extracts corresponding weight percentages for each assessment.
+- System detects supported grading rules such as:
 
-  * edit assessment names
-  * modify weight percentages
-  * adjust grading rule parameters
-* System requires explicit user confirmation before saving extracted data.
-* System validates extracted data before saving, including:
+  - Best X of Y
+  - Drop Lowest
 
-  * no negative weights
-  * valid total weight
-  * logical consistency of grading rules
-* Manual setup remains available if extraction fails or AI is unavailable.
-* Core grading calculations must continue working correctly without AI extraction.
+- Extracted information is converted into structured grading data.
+- Extracted grading structure is shown in an editable preview screen.
+- User can:
+
+  - edit assessment names
+  - modify weight percentages
+  - adjust grading rule parameters
+
+- System requires explicit user confirmation before saving extracted data.
+- System validates extracted data before saving, including:
+
+  - no negative weights
+  - valid total weight
+  - logical consistency of grading rules
+
+- Manual setup remains available if extraction fails or AI is unavailable.
+- Core grading calculations must continue working correctly without AI extraction.
 
 #### Out of Scope (Future Iterations)
 
-* Advanced grading rule semantics such as mandatory pass requirements and bonus-cap behavior.
-* Institution-specific extraction customization beyond the currently supported grading rule patterns.
-* Fully automatic correction of ambiguous or incomplete course outlines without user review.
-* AI-driven academic recommendations based on extracted course data.
+- Advanced grading rule semantics such as mandatory pass requirements and bonus-cap behavior.
+- Institution-specific extraction customization beyond the currently supported grading rule patterns.
+- Fully automatic correction of ambiguous or incomplete course outlines without user review.
+- AI-driven academic recommendations based on extracted course data.
 
 #### Development Subtasks & Assignments
 
 1. Backend: Extraction pipeline & validation logic
 
-   * Assignee: Shivam ([SCRUM-101](https://rimaaa.atlassian.net/browse/SCRUM-101))
+   - Assignee: Shivam ([SCRUM-101](https://rimaaa.atlassian.net/browse/SCRUM-101))
 
 2. Frontend: Upload interface & editable extraction preview
 
-   * Assignee: Shadi ([SCRUM-102](https://rimaaa.atlassian.net/browse/SCRUM-102))
+   - Assignee: Shadi ([SCRUM-102](https://rimaaa.atlassian.net/browse/SCRUM-102))
 
 3. Frontend: UI/UX design in Figma
 
-   * Assignee: Shadi ([SCRUM-127](https://rimaaa.atlassian.net/browse/SCRUM-127))
+   - Assignee: Shadi ([SCRUM-127](https://rimaaa.atlassian.net/browse/SCRUM-127))
 
 4. Frontend–Backend integration for extraction flow
 
-   * Assignee: Shivam ([SCRUM-133](https://rimaaa.atlassian.net/browse/SCRUM-133))
+   - Assignee: Shivam ([SCRUM-133](https://rimaaa.atlassian.net/browse/SCRUM-133))
 
 5. Database: Design schema for extracted course persistence
 
-   * Assignee: Himanshi ([SCRUM-105](https://rimaaa.atlassian.net/browse/SCRUM-105))
+   - Assignee: Himanshi ([SCRUM-105](https://rimaaa.atlassian.net/browse/SCRUM-105))
 
 6. Backend–Database integration for extracted course persistence
 
-   * Assignee: Shivam ([SCRUM-134](https://rimaaa.atlassian.net/browse/SCRUM-134))
+   - Assignee: Shivam ([SCRUM-134](https://rimaaa.atlassian.net/browse/SCRUM-134))
 
 7. Testing: Unit & integration tests for extraction flow
 
-   * Assignee: Shivam ([SCRUM-103](https://rimaaa.atlassian.net/browse/SCRUM-103))
+   - Assignee: Shivam ([SCRUM-103](https://rimaaa.atlassian.net/browse/SCRUM-103))
 
 8. Docs: Update `log.md`
 
-   * Assignee: Shivam ([SCRUM-104](https://rimaaa.atlassian.net/browse/SCRUM-104))
+   - Assignee: Shivam ([SCRUM-104](https://rimaaa.atlassian.net/browse/SCRUM-104))
 
 #### Notes / Reflection
 
-* Implemented a modular backend extraction pipeline to support multiple file types and improve maintainability.
-* Added PDF parsing and OCR fallback to support scanned or low-quality course outlines.
-* Ensured extracted data is not persisted automatically and only saved after explicit user confirmation.
-* Validation and confirmation flow improved reliability by preventing invalid extracted structures from being accepted directly.
-* AI was limited to extraction support only, while all grading and evaluation logic remained deterministic and independent of AI.
-* No major blockers were encountered, although extraction robustness required handling inconsistent formatting across different course outline documents.
+- Implemented a modular backend extraction pipeline to support multiple file types and improve maintainability.
+- Added PDF parsing and OCR fallback to support scanned or low-quality course outlines.
+- Ensured extracted data is not persisted automatically and only saved after explicit user confirmation.
+- Validation and confirmation flow improved reliability by preventing invalid extracted structures from being accepted directly.
+- AI was limited to extraction support only, while all grading and evaluation logic remained deterministic and independent of AI.
+- No major blockers were encountered, although extraction robustness required handling inconsistent formatting across different course outline documents.
 
 ### ITR2-2 — Persistent Multi-Course Planning System (DB + Multi-Course Support)
 
@@ -757,97 +761,111 @@ As a student, when I manage my courses, I want my courses, grades, and what-if s
 
 #### Scope (ITR2)
 
-* Course persistence:
-  * Save extracted course structure, including assessments, weights, and grading rules.
-  * Load saved courses automatically when the application restarts.
-  * Allow students to edit and delete saved courses.
-  * Ensure course data remains consistent after reload.
+- Course persistence:
 
-* Score and scenario persistence:
-  * Save entered grades for assessments.
-  * Allow stored scores to be updated and deleted.
-  * Save and label what-if scenarios.
-  * Reload saved scenarios without overwriting actual grades.
-  * Recalculate grades and feasibility correctly after loading persisted data.
+  - Save extracted course structure, including assessments, weights, and grading rules.
+  - Load saved courses automatically when the application restarts.
+  - Allow students to edit and delete saved courses.
+  - Ensure course data remains consistent after reload.
 
-* Multi-course planning:
-  * Allow each student to create and manage multiple courses.
-  * Provide an overview page displaying:
-    * Course name
-    * Current grade
-    * Target grade
-    * Feasibility status
-  * Allow switching between courses without data loss.
-  * Support cascading deletion of course-related data.
+- Score and scenario persistence:
 
-* Dual database support:
-  * Implement repository abstraction.
-  * Support both:
-    * Stub (in-memory) database
-    * PostgreSQL database
-  * Enable database switching through configuration.
-  * Include PostgreSQL initialization scripts.
-  * Provide integration tests for real database persistence behavior.
+  - Save entered grades for assessments.
+  - Allow stored scores to be updated and deleted.
+  - Save and label what-if scenarios.
+  - Reload saved scenarios without overwriting actual grades.
+  - Recalculate grades and feasibility correctly after loading persisted data.
+
+- Multi-course planning:
+
+  - Allow each student to create and manage multiple courses.
+  - Provide an overview page displaying:
+    - Course name
+    - Current grade
+    - Target grade
+    - Feasibility status
+  - Allow switching between courses without data loss.
+  - Support cascading deletion of course-related data.
+
+- Dual database support:
+  - Implement repository abstraction.
+  - Support both:
+    - Stub (in-memory) database
+    - PostgreSQL database
+  - Enable database switching through configuration.
+  - Include PostgreSQL initialization scripts.
+  - Provide integration tests for real database persistence behavior.
 
 #### Out of Scope (Future Iterations)
 
-* Cloud-hosted database deployment and scaling concerns.
-* Real-time collaboration or shared course editing between multiple users.
-* Cross-device sync beyond the configured persistence layer.
-* Automatic migration tools for future schema evolution.
+- Cloud-hosted database deployment and scaling concerns.
+- Real-time collaboration or shared course editing between multiple users.
+- Cross-device sync beyond the configured persistence layer.
+- Automatic migration tools for future schema evolution.
 
 #### Development Subtasks & Assignments
 
-1. Backend: Implement Repository Layer & Multi-Course CRUD Logic  
-   * Assignee: Shivam ([SCRUM-96](https://rimaaa.atlassian.net/browse/SCRUM-96))
+1. Backend: Implement Repository Layer & Multi-Course CRUD Logic
 
-2. Frontend: Multi-Course Overview & Switching Interface  
-   * Assignee: Rima ([SCRUM-98](https://rimaaa.atlassian.net/browse/SCRUM-98))
+   - Assignee: Shivam ([SCRUM-96](https://rimaaa.atlassian.net/browse/SCRUM-96))
 
-3. Frontend: UI/UX Design in Figma  
-   * Assignee: Shadi ([SCRUM-128](https://rimaaa.atlassian.net/browse/SCRUM-128))
+2. Frontend: Multi-Course Overview & Switching Interface
 
-4. Frontend–Backend Integration for Multi-Course Planning  
-   * Assignee: Shivam ([SCRUM-135](https://rimaaa.atlassian.net/browse/SCRUM-135))
+   - Assignee: Rima ([SCRUM-98](https://rimaaa.atlassian.net/browse/SCRUM-98))
 
-5. Database: Relational Schema Design & Initialization Script  
-   * Assignee: Himanshi ([SCRUM-97](https://rimaaa.atlassian.net/browse/SCRUM-97))
+3. Frontend: UI/UX Design in Figma
 
-6. Docs: Create ER Diagram (Database Schema)  
-   * Assignee: Himanshi ([SCRUM-121](https://rimaaa.atlassian.net/browse/SCRUM-121))
+   - Assignee: Shadi ([SCRUM-128](https://rimaaa.atlassian.net/browse/SCRUM-128))
 
-7. Backend–Database Integration for Persistent Multi-Course Support  
-   * Assignee: Shivam ([SCRUM-136](https://rimaaa.atlassian.net/browse/SCRUM-136))
+4. Frontend–Backend Integration for Multi-Course Planning
 
-8. Testing: Unit & Integration Tests for Persistence  
-   * Assignee: Bardiya ([SCRUM-99](https://rimaaa.atlassian.net/browse/SCRUM-99))
+   - Assignee: Shivam ([SCRUM-135](https://rimaaa.atlassian.net/browse/SCRUM-135))
 
-9. Docs: Update Class Diagram (Persistence Architecture)  
-   * Assignee: Bardiya ([SCRUM-100](https://rimaaa.atlassian.net/browse/SCRUM-100))
+5. Database: Relational Schema Design & Initialization Script
 
-10. Docs: Create Sequence Diagrams for Persistence Flows  
-   * Assignee: Bardiya ([SCRUM-120](https://rimaaa.atlassian.net/browse/SCRUM-120))
+   - Assignee: Himanshi ([SCRUM-97](https://rimaaa.atlassian.net/browse/SCRUM-97))
 
-11. Docs: Update `log.md` (Persistence Architecture)  
-   * Assignee: Himanshi ([SCRUM-122](https://rimaaa.atlassian.net/browse/SCRUM-122))
+6. Docs: Create ER Diagram (Database Schema)
+
+   - Assignee: Himanshi ([SCRUM-121](https://rimaaa.atlassian.net/browse/SCRUM-121))
+
+7. Backend–Database Integration for Persistent Multi-Course Support
+
+   - Assignee: Shivam ([SCRUM-136](https://rimaaa.atlassian.net/browse/SCRUM-136))
+
+8. Testing: Unit & Integration Tests for Persistence
+
+   - Assignee: Bardiya ([SCRUM-99](https://rimaaa.atlassian.net/browse/SCRUM-99))
+
+9. Docs: Update Class Diagram (Persistence Architecture)
+
+   - Assignee: Bardiya ([SCRUM-100](https://rimaaa.atlassian.net/browse/SCRUM-100))
+
+10. Docs: Create Sequence Diagrams for Persistence Flows
+
+- Assignee: Bardiya ([SCRUM-120](https://rimaaa.atlassian.net/browse/SCRUM-120))
+
+11. Docs: Update `log.md` (Persistence Architecture)
+
+- Assignee: Himanshi ([SCRUM-122](https://rimaaa.atlassian.net/browse/SCRUM-122))
 
 #### Acceptance Criteria
 
-* Students can create, edit, delete, and load multiple courses.
-* Course, score, and what-if scenario data persists after restarting the application.
-* Persisted scores and scenarios reload accurately without corrupting actual grade data.
-* Switching between stub and PostgreSQL implementations works without errors.
-* The multi-course overview page displays accurate summaries.
-* Integration tests validate PostgreSQL persistence behavior.
+- Students can create, edit, delete, and load multiple courses.
+- Course, score, and what-if scenario data persists after restarting the application.
+- Persisted scores and scenarios reload accurately without corrupting actual grade data.
+- Switching between stub and PostgreSQL implementations works without errors.
+- The multi-course overview page displays accurate summaries.
+- Integration tests validate PostgreSQL persistence behavior.
 
 #### Notes / Reflection
 
-* Implemented a repository abstraction layer so that business logic remains independent of the storage implementation.
-* Designed a relational schema to persist courses, assessments, scores, scenarios, and related course data in PostgreSQL.
-* Added support for multiple courses per user, including overview and course-switching functionality.
-* Ensured persistence logic works with both the stub database and PostgreSQL through configuration-based switching.
-* Added integration coverage to verify persistence behavior, reload consistency, and database-backed CRUD flows.
-* No major blockers were encountered, although coordinating persistence across multiple layers required careful backend and database alignment.
+- Implemented a repository abstraction layer so that business logic remains independent of the storage implementation.
+- Designed a relational schema to persist courses, assessments, scores, scenarios, and related course data in PostgreSQL.
+- Added support for multiple courses per user, including overview and course-switching functionality.
+- Ensured persistence logic works with both the stub database and PostgreSQL through configuration-based switching.
+- Added integration coverage to verify persistence behavior, reload consistency, and database-backed CRUD flows.
+- No major blockers were encountered, although coordinating persistence across multiple layers required careful backend and database alignment.
 
 ### ITR2-3 — Universal GPA Converter (4.0, 9.0, & 10.0 Scales)
 
@@ -863,67 +881,75 @@ As a student, I want to convert my course percentages and YorkU grade points int
 
 #### Scope (ITR2)
 
-* Multi-scale GPA support:
-  * Implement conversion logic for the OMSAS 4.0 scale.
-  * Implement conversion logic for the YorkU 9.0 scale.
-  * Implement conversion logic for a standard 10.0 scale used in international conversions.
+- Multi-scale GPA support:
 
-* Weighted GPA calculation:
-  * Calculate cumulative GPA (cGPA) by weighting course grade points using course credit values.
-  * Support GPA calculations across multiple manually supplied courses.
-  * Distinguish between term GPA and cumulative GPA use cases.
+  - Implement conversion logic for the OMSAS 4.0 scale.
+  - Implement conversion logic for the YorkU 9.0 scale.
+  - Implement conversion logic for a standard 10.0 scale used in international conversions.
 
-* Visual data representation:
-  * Provide a summary view comparing student standing across all three GPA scales.
-  * Show a clear conversion path such as percentage → letter grade → GPA value.
+- Weighted GPA calculation:
 
-* System agnosticism:
-  * Ensure the converter works for both actual grades and what-if scenarios.
-  * Keep GPA conversion logic decoupled from the UI so additional scales can be added in future iterations.
+  - Calculate cumulative GPA (cGPA) by weighting course grade points using course credit values.
+  - Support GPA calculations across multiple manually supplied courses.
+  - Distinguish between term GPA and cumulative GPA use cases.
+
+- Visual data representation:
+
+  - Provide a summary view comparing student standing across all three GPA scales.
+  - Show a clear conversion path such as percentage → letter grade → GPA value.
+
+- System agnosticism:
+  - Ensure the converter works for both actual grades and what-if scenarios.
+  - Keep GPA conversion logic decoupled from the UI so additional scales can be added in future iterations.
 
 #### Out of Scope (Future Iterations)
 
-* Institution-specific custom GPA scale definitions beyond the supported 4.0, 9.0, and 10.0 systems.
-* Transcript-style GPA exports or official reporting formats.
-* Persisting GPA history over time.
-* Automatic GPA recalculation triggers tied to all course updates across the system.
+- Institution-specific custom GPA scale definitions beyond the supported 4.0, 9.0, and 10.0 systems.
+- Transcript-style GPA exports or official reporting formats.
+- Persisting GPA history over time.
+- Automatic GPA recalculation triggers tied to all course updates across the system.
 
 #### Development Subtasks & Assignments
 
-1. Backend: Implement GPA Conversion Logic (4.0 / 9.0 / 10.0 scales)  
-   * Assignee: Kartik ([SCRUM-109](https://rimaaa.atlassian.net/browse/SCRUM-109))
+1. Backend: Implement GPA Conversion Logic (4.0 / 9.0 / 10.0 scales)
 
-2. Frontend: GPA Summary Component & Scale Toggle  
-   * Assignee: Rima ([SCRUM-111](https://rimaaa.atlassian.net/browse/SCRUM-111))
+   - Assignee: Kartik ([SCRUM-109](https://rimaaa.atlassian.net/browse/SCRUM-109))
 
-3. Frontend: UI/UX Design in Figma  
-   * Assignee: Shadi ([SCRUM-129](https://rimaaa.atlassian.net/browse/SCRUM-129))
+2. Frontend: GPA Summary Component & Scale Toggle
 
-4. Tests: Unit tests for boundary cases (e.g., 79.4% vs 79.5%)  
-   * Assignee: Bardiya ([SCRUM-113](https://rimaaa.atlassian.net/browse/SCRUM-113))
+   - Assignee: Rima ([SCRUM-111](https://rimaaa.atlassian.net/browse/SCRUM-111))
 
-5. Docs: Update API documentation for GPA endpoints  
-   * Assignee: Kartik ([SCRUM-114](https://rimaaa.atlassian.net/browse/SCRUM-114))
+3. Frontend: UI/UX Design in Figma
 
-6. Database: Support GPA Conversion Data  
-   * Assignee: Himanshi ([SCRUM-119](https://rimaaa.atlassian.net/browse/SCRUM-119))
+   - Assignee: Shadi ([SCRUM-129](https://rimaaa.atlassian.net/browse/SCRUM-129))
+
+4. Tests: Unit tests for boundary cases (e.g., 79.4% vs 79.5%)
+
+   - Assignee: Bardiya ([SCRUM-113](https://rimaaa.atlassian.net/browse/SCRUM-113))
+
+5. Docs: Update API documentation for GPA endpoints
+
+   - Assignee: Kartik ([SCRUM-114](https://rimaaa.atlassian.net/browse/SCRUM-114))
+
+6. Database: Support GPA Conversion Data
+   - Assignee: Himanshi ([SCRUM-119](https://rimaaa.atlassian.net/browse/SCRUM-119))
 
 #### Acceptance Criteria
 
-* The system accurately converts a percentage to the correct grade point on the 4.0, 9.0, and 10.0 scales.
-* Users can include course credit weights so cumulative GPA calculations are weighted correctly.
-* The dashboard displays a side-by-side comparison of all three scales.
-* GPA calculations update correctly for what-if scenarios.
-* The system handles non-numeric grades such as Pass/Fail or Withdrawn without breaking the calculation engine.
+- The system accurately converts a percentage to the correct grade point on the 4.0, 9.0, and 10.0 scales.
+- Users can include course credit weights so cumulative GPA calculations are weighted correctly.
+- The dashboard displays a side-by-side comparison of all three scales.
+- GPA calculations update correctly for what-if scenarios.
+- The system handles non-numeric grades such as Pass/Fail or Withdrawn without breaking the calculation engine.
 
 #### Notes / Reflection
 
-* Designed the GPA conversion engine as a stateless backend module so that conversion logic remains reusable and independent of the frontend.
-* Implemented support for three recognized GPA systems to make the feature useful for both York University requirements and external application contexts.
-* Added weighted GPA support so cumulative calculations reflect course credit differences correctly.
-* Ensured the same conversion logic can be reused for both actual grades and hypothetical what-if projections.
-* Boundary-value testing was important for preventing ambiguity around grade cutoffs such as 79.4% versus 79.5%.
-* No major blockers were encountered during implementation.
+- Designed the GPA conversion engine as a stateless backend module so that conversion logic remains reusable and independent of the frontend.
+- Implemented support for three recognized GPA systems to make the feature useful for both York University requirements and external application contexts.
+- Added weighted GPA support so cumulative calculations reflect course credit differences correctly.
+- Ensured the same conversion logic can be reused for both actual grades and hypothetical what-if projections.
+- Boundary-value testing was important for preventing ambiguity around grade cutoffs such as 79.4% versus 79.5%.
+- No major blockers were encountered during implementation.
 
 ### ITR2-4 — Course Evaluation & Rule Modeling
 
@@ -939,88 +965,99 @@ As a student, I want the system to evaluate my course performance using York Uni
 
 #### Scope (ITR2)
 
-* Institutional grading logic:
-  * Map calculated percentages to the YorkU 9-point scale.
-  * Generate structured evaluation results including:
-    * Letter grade
-    * Grade point value
-    * Performance descriptor
+- Institutional grading logic:
 
-* Target feasibility analysis:
-  * Calculate the exact average required on remaining coursework to achieve a user-defined target.
+  - Map calculated percentages to the YorkU 9-point scale.
+  - Generate structured evaluation results including:
+    - Letter grade
+    - Grade point value
+    - Performance descriptor
 
-* Dynamic difficulty classification:
-  * Categorize the target as:
-    * Comfortable
-    * Achievable
-    * Challenging
-    * Very Challenging
-    * Not Possible
-    * Already Achieved
+- Target feasibility analysis:
 
-* Engine integrity:
-  * Ensure the evaluation engine is deterministic and read-only.
-  * Prevent evaluation logic from mutating or overwriting stored course data.
-  * Keep the evaluation engine fully independent of AI components.
-  * Handle edge cases such as:
-    * 0% remaining weight
-    * target already met
-    * required averages above 100%
+  - Calculate the exact average required on remaining coursework to achieve a user-defined target.
 
-* Stability and integration:
-  * Maintain compatibility with the ITR1 in-memory stub database.
-  * Ensure numerical stability and consistent rounding at boundary thresholds.
+- Dynamic difficulty classification:
+
+  - Categorize the target as:
+    - Comfortable
+    - Achievable
+    - Challenging
+    - Very Challenging
+    - Not Possible
+    - Already Achieved
+
+- Engine integrity:
+
+  - Ensure the evaluation engine is deterministic and read-only.
+  - Prevent evaluation logic from mutating or overwriting stored course data.
+  - Keep the evaluation engine fully independent of AI components.
+  - Handle edge cases such as:
+    - 0% remaining weight
+    - target already met
+    - required averages above 100%
+
+- Stability and integration:
+  - Maintain compatibility with the ITR1 in-memory stub database.
+  - Ensure numerical stability and consistent rounding at boundary thresholds.
 
 #### Out of Scope (Future Iterations)
 
-* Support for grading systems beyond York University’s 9-point scale.
-* Saving evaluation history or trend tracking over time.
-* Institution-specific grading customization by the user.
-* Advanced advisory recommendations beyond rule-based difficulty classification.
+- Support for grading systems beyond York University’s 9-point scale.
+- Saving evaluation history or trend tracking over time.
+- Institution-specific grading customization by the user.
+- Advanced advisory recommendations beyond rule-based difficulty classification.
 
 #### Development Subtasks & Assignments
 
-1. Backend: Evaluation & Rule Modeling Engine  
-   * Assignee: Shivam ([SCRUM-112](https://rimaaa.atlassian.net/browse/SCRUM-112))
+1. Backend: Evaluation & Rule Modeling Engine
 
-2. Frontend: Evaluation Results Display  
-   * Assignee: Shadi ([SCRUM-115](https://rimaaa.atlassian.net/browse/SCRUM-115))
+   - Assignee: Shivam ([SCRUM-112](https://rimaaa.atlassian.net/browse/SCRUM-112))
 
-3. Frontend: UI/UX Design in Figma  
-   * Assignee: Shadi ([SCRUM-130](https://rimaaa.atlassian.net/browse/SCRUM-130))
+2. Frontend: Evaluation Results Display
 
-4. Frontend–Backend Integration for Course Evaluation & Rule Modeling  
-   * Assignee: Shivam ([SCRUM-137](https://rimaaa.atlassian.net/browse/SCRUM-137))
+   - Assignee: Shadi ([SCRUM-115](https://rimaaa.atlassian.net/browse/SCRUM-115))
 
-5. Database: Support Evaluation Data (Stub Compatible)  
-   * Assignee: Himanshi ([SCRUM-116](https://rimaaa.atlassian.net/browse/SCRUM-116))
+3. Frontend: UI/UX Design in Figma
 
-6. Backend–Database Integration for Evaluation Data Consistency  
-   * Assignee: Shivam ([SCRUM-138](https://rimaaa.atlassian.net/browse/SCRUM-138))
+   - Assignee: Shadi ([SCRUM-130](https://rimaaa.atlassian.net/browse/SCRUM-130))
 
-7. Testing: Unit & Integration Tests for Evaluation Logic  
-   * Assignee: Bardiya ([SCRUM-117](https://rimaaa.atlassian.net/browse/SCRUM-117))
+4. Frontend–Backend Integration for Course Evaluation & Rule Modeling
 
-8. Docs: Update `log.md` & Technical Notes  
-   * Assignee: Bardiya ([SCRUM-118](https://rimaaa.atlassian.net/browse/SCRUM-118))
+   - Assignee: Shivam ([SCRUM-137](https://rimaaa.atlassian.net/browse/SCRUM-137))
+
+5. Database: Support Evaluation Data (Stub Compatible)
+
+   - Assignee: Himanshi ([SCRUM-116](https://rimaaa.atlassian.net/browse/SCRUM-116))
+
+6. Backend–Database Integration for Evaluation Data Consistency
+
+   - Assignee: Shivam ([SCRUM-138](https://rimaaa.atlassian.net/browse/SCRUM-138))
+
+7. Testing: Unit & Integration Tests for Evaluation Logic
+
+   - Assignee: Bardiya ([SCRUM-117](https://rimaaa.atlassian.net/browse/SCRUM-117))
+
+8. Docs: Update `log.md` & Technical Notes
+   - Assignee: Bardiya ([SCRUM-118](https://rimaaa.atlassian.net/browse/SCRUM-118))
 
 #### Acceptance Criteria
 
-* Percentages map correctly to YorkU grade boundaries.
-* The required remaining average is mathematically accurate for partially graded courses.
-* Difficulty labels trigger correctly based on the calculated remaining average.
-* Running an evaluation does not modify the underlying course or grade data.
-* The system handles 0–100% input constraints and provides clear explanations for impossible targets.
-* Calculations remain stable across repeated calls without rounding drift.
+- Percentages map correctly to YorkU grade boundaries.
+- The required remaining average is mathematically accurate for partially graded courses.
+- Difficulty labels trigger correctly based on the calculated remaining average.
+- Running an evaluation does not modify the underlying course or grade data.
+- The system handles 0–100% input constraints and provides clear explanations for impossible targets.
+- Calculations remain stable across repeated calls without rounding drift.
 
 #### Notes / Reflection
 
-* Implemented a deterministic evaluation engine to keep academic standing calculations mathematically reliable and reproducible.
-* Added YorkU-specific rule modeling so users can view results in the grading format most relevant to their institution.
-* Designed the feature to remain read-only, ensuring that running evaluations or projections never changes stored grade data.
-* Covered important edge cases such as already-achieved targets, no remaining weight, and impossible score requirements.
-* Consistent rounding and threshold handling were important to avoid incorrect results near YorkU boundary cutoffs.
-* No major blockers were encountered, although ensuring stable rule behavior across repeated evaluations required careful testing.
+- Implemented a deterministic evaluation engine to keep academic standing calculations mathematically reliable and reproducible.
+- Added YorkU-specific rule modeling so users can view results in the grading format most relevant to their institution.
+- Designed the feature to remain read-only, ensuring that running evaluations or projections never changes stored grade data.
+- Covered important edge cases such as already-achieved targets, no remaining weight, and impossible score requirements.
+- Consistent rounding and threshold handling were important to avoid incorrect results near YorkU boundary cutoffs.
+- No major blockers were encountered, although ensuring stable rule behavior across repeated evaluations required careful testing.
 
 ### ITR2-5 — Interactive Strategy Dashboard (Grade Boundaries + Calculation Transparency + Learning Optimization)
 
@@ -1036,74 +1073,83 @@ As a student, I want an interactive dashboard that models my best and worst-case
 
 #### Scope (ITR2)
 
-* Interactive planning dashboard:
-  * Create a central dashboard view showing current progress, remaining assessments, and projected outcomes.
-  * Present grade-related information in a clear, student-friendly format.
+- Interactive planning dashboard:
 
-* Grade boundary modeling:
-  * Calculate and display worst-case scenarios, such as the minimum scores needed to pass or reach a target.
-  * Calculate and display best-case scenarios, such as the maximum possible final grade based on remaining assessments.
+  - Create a central dashboard view showing current progress, remaining assessments, and projected outcomes.
+  - Present grade-related information in a clear, student-friendly format.
 
-* Calculation transparency:
-  * Include a “Show Calculations” toggle or expandable section for each estimate.
-  * Display the underlying weighted-average math used to generate projections.
+- Grade boundary modeling:
 
-* Smart learning strategies:
-  * Suggest study strategies based on assessment importance and remaining time.
-  * Include techniques such as:
-    * 80/20 Rule (Pareto Principle)
-    * Active Recall
-    * Spaced Repetition
-    * Feynman Technique
+  - Calculate and display worst-case scenarios, such as the minimum scores needed to pass or reach a target.
+  - Calculate and display best-case scenarios, such as the maximum possible final grade based on remaining assessments.
 
-* Dynamic updating:
-  * Update projections immediately when the user enters what-if scores.
-  * Ensure hypothetical inputs do not overwrite actual stored grades.
-  * Continue functioning even when course weights do not yet sum to 100%.
+- Calculation transparency:
+
+  - Include a “Show Calculations” toggle or expandable section for each estimate.
+  - Display the underlying weighted-average math used to generate projections.
+
+- Smart learning strategies:
+
+  - Suggest study strategies based on assessment importance and remaining time.
+  - Include techniques such as:
+    - 80/20 Rule (Pareto Principle)
+    - Active Recall
+    - Spaced Repetition
+    - Feynman Technique
+
+- Dynamic updating:
+  - Update projections immediately when the user enters what-if scores.
+  - Ensure hypothetical inputs do not overwrite actual stored grades.
+  - Continue functioning even when course weights do not yet sum to 100%.
 
 #### Out of Scope (Future Iterations)
 
-* AI-personalized study recommendations based on learning history.
-* Automatic calendar-based study scheduling.
-* Advanced visual analytics such as heatmaps or long-term trend graphs.
-* Saving and comparing multiple dashboard strategy snapshots.
+- AI-personalized study recommendations based on learning history.
+- Automatic calendar-based study scheduling.
+- Advanced visual analytics such as heatmaps or long-term trend graphs.
+- Saving and comparing multiple dashboard strategy snapshots.
 
 #### Development Subtasks & Assignments
 
-1. Backend: Implement grade boundary algorithms (Min/Max), what-if scenario support, and projection logic  
-   * Assignee: Kartik ([SCRUM-90](https://rimaaa.atlassian.net/browse/SCRUM-90))
+1. Backend: Implement grade boundary algorithms (Min/Max), what-if scenario support, and projection logic
 
-2. Frontend: Build interactive dashboard UI including what-if inputs, expandable calculations, and strategy display  
-   * Assignee: Rima ([SCRUM-91](https://rimaaa.atlassian.net/browse/SCRUM-91))
+   - Assignee: Kartik ([SCRUM-90](https://rimaaa.atlassian.net/browse/SCRUM-90))
 
-3. Frontend: UI/UX Design in Figma  
-   * Assignee: Shadi ([SCRUM-131](https://rimaaa.atlassian.net/browse/SCRUM-131))
+2. Frontend: Build interactive dashboard UI including what-if inputs, expandable calculations, and strategy display
 
-4. Database: Update schema to support grade targets, weighted category structure, and related dashboard data needs  
-   * Assignee: Himanshi ([SCRUM-92](https://rimaaa.atlassian.net/browse/SCRUM-92))
+   - Assignee: Rima ([SCRUM-91](https://rimaaa.atlassian.net/browse/SCRUM-91))
 
-5. Tests: Add unit tests for weighted grade math accuracy and integration tests for dashboard projection behavior  
-   * Assignee: Bardiya ([SCRUM-93](https://rimaaa.atlassian.net/browse/SCRUM-93))
+3. Frontend: UI/UX Design in Figma
 
-6. Docs: Document grade projection algorithms, 80/20 rule logic, and update relevant notes  
-   * Assignee: Rima ([SCRUM-94](https://rimaaa.atlassian.net/browse/SCRUM-94))
+   - Assignee: Shadi ([SCRUM-131](https://rimaaa.atlassian.net/browse/SCRUM-131))
+
+4. Database: Update schema to support grade targets, weighted category structure, and related dashboard data needs
+
+   - Assignee: Himanshi ([SCRUM-92](https://rimaaa.atlassian.net/browse/SCRUM-92))
+
+5. Tests: Add unit tests for weighted grade math accuracy and integration tests for dashboard projection behavior
+
+   - Assignee: Bardiya ([SCRUM-93](https://rimaaa.atlassian.net/browse/SCRUM-93))
+
+6. Docs: Document grade projection algorithms, 80/20 rule logic, and update relevant notes
+   - Assignee: Rima ([SCRUM-94](https://rimaaa.atlassian.net/browse/SCRUM-94))
 
 #### Acceptance Criteria
 
-* The dashboard displays clear minimum and maximum grade boundaries for the final course result.
-* A “Show Math” or expandable view reveals the formulas used for the displayed projections.
-* The system suggests at least one specific learning technique for each major upcoming assessment or deadline.
-* What-if inputs do not overwrite actual saved grades.
-* Calculations remain accurate even when course weightings do not sum to 100%.
+- The dashboard displays clear minimum and maximum grade boundaries for the final course result.
+- A “Show Math” or expandable view reveals the formulas used for the displayed projections.
+- The system suggests at least one specific learning technique for each major upcoming assessment or deadline.
+- What-if inputs do not overwrite actual saved grades.
+- Calculations remain accurate even when course weightings do not sum to 100%.
 
 #### Notes / Reflection
 
-* Built the dashboard as a strategy-focused planning surface rather than just a static results page.
-* Combined projection logic with transparent formulas so users can verify how each estimate is calculated.
-* Added support for what-if exploration without mutating real course data, which improves safety and user trust.
-* Included lightweight study strategy recommendations so the feature supports decision-making as well as grade tracking.
-* Special handling was required for incomplete grading structures where total course weight had not yet reached 100%.
-* No major blockers were encountered, though syncing frontend dashboard behavior with backend projection logic required careful coordination.
+- Built the dashboard as a strategy-focused planning surface rather than just a static results page.
+- Combined projection logic with transparent formulas so users can verify how each estimate is calculated.
+- Added support for what-if exploration without mutating real course data, which improves safety and user trust.
+- Included lightweight study strategy recommendations so the feature supports decision-making as well as grade tracking.
+- Special handling was required for incomplete grading structures where total course weight had not yet reached 100%.
+- No major blockers were encountered, though syncing frontend dashboard behavior with backend projection logic required careful coordination.
 
 ### ITR2-6 — Smart Deadline Management (OCR + Manual Entry + Calendar Sync)
 
@@ -1119,68 +1165,69 @@ As a student, I want my assignment and test deadlines to be automatically extrac
 
 #### Scope (ITR2)
 
-* Use OCR to extract assessment names, due dates, and times (if available) from uploaded course outlines.
-* Display all detected deadlines in an editable list view.
-* Allow users to:
+- Use OCR to extract assessment names, due dates, and times (if available) from uploaded course outlines.
+- Display all detected deadlines in an editable list view.
+- Allow users to:
 
-  * edit any deadline (name, date, time, type, notes)
-  * delete incorrect entries
-  * add new deadlines manually at any time
-* If OCR detects no deadlines, show a clear empty state with an “Add Deadline” button.
-* Include a review and confirm step before exporting deadlines to Google Calendar.
-* Allow users to export selected or all deadlines to Google Calendar using the Google Calendar API.
-* Exported events include:
+  - edit any deadline (name, date, time, type, notes)
+  - delete incorrect entries
+  - add new deadlines manually at any time
 
-  * course name + assessment title
-  * due date/time
-  * automatic reminder 1 week before the due date
-  * minimum grade needed (if calculated) in the event description
-* Show a countdown display on the dashboard for upcoming deadlines.
-* Mark deadlines with a badge such as “From Outline” or “Manual” for clarity.
-* Prevent duplicate exports of the same deadline.
+- If OCR detects no deadlines, show a clear empty state with an “Add Deadline” button.
+- Include a review and confirm step before exporting deadlines to Google Calendar.
+- Allow users to export selected or all deadlines to Google Calendar using the Google Calendar API.
+- Exported events include:
+
+  - course name + assessment title
+  - due date/time
+  - automatic reminder 1 week before the due date
+  - minimum grade needed (if calculated) in the event description
+
+- Show a countdown display on the dashboard for upcoming deadlines.
+- Mark deadlines with a badge such as “From Outline” or “Manual” for clarity.
+- Prevent duplicate exports of the same deadline.
 
 #### Out of Scope (Future Iterations)
 
-* Advanced recurring deadline logic for repeated academic tasks.
-* Support for external calendar providers beyond Google Calendar.
-* Full natural-language deadline extraction from highly ambiguous course outlines.
-* Smart prioritization or scheduling recommendations based on workload and time remaining.
+- Advanced recurring deadline logic for repeated academic tasks.
+- Support for external calendar providers beyond Google Calendar.
+- Full natural-language deadline extraction from highly ambiguous course outlines.
+- Smart prioritization or scheduling recommendations based on workload and time remaining.
 
 #### Development Tasks & Assignments
 
 1. Backend: Deadline management, OCR parsing, and calendar integration
 
-   * Assignee: Kartik ([SCRUM-83](https://rimaaa.atlassian.net/browse/SCRUM-83))
+   - Assignee: Kartik ([SCRUM-83](https://rimaaa.atlassian.net/browse/SCRUM-83))
 
 2. Frontend: Deadline management UI, review flow, and countdown display
 
-   * Assignee: Shadi ([SCRUM-84](https://rimaaa.atlassian.net/browse/SCRUM-84))
+   - Assignee: Shadi ([SCRUM-84](https://rimaaa.atlassian.net/browse/SCRUM-84))
 
 3. Frontend: UI/UX design in Figma
 
-   * Assignee: Shadi ([SCRUM-132](https://rimaaa.atlassian.net/browse/SCRUM-132))
+   - Assignee: Shadi ([SCRUM-132](https://rimaaa.atlassian.net/browse/SCRUM-132))
 
 4. Database: Deadline storage and calendar sync schema
 
-   * Assignee: Himanshi ([SCRUM-85](https://rimaaa.atlassian.net/browse/SCRUM-85))
+   - Assignee: Himanshi ([SCRUM-85](https://rimaaa.atlassian.net/browse/SCRUM-85))
 
 5. Testing: Unit & integration tests for deadline flow
 
-   * Assignee: Bardiya ([SCRUM-86](https://rimaaa.atlassian.net/browse/SCRUM-86))
+   - Assignee: Bardiya ([SCRUM-86](https://rimaaa.atlassian.net/browse/SCRUM-86))
 
 6. Docs: Update `log.md` for deadline feature architecture, API endpoints, and flow
 
-   * Assignee: Shadi ([SCRUM-87](https://rimaaa.atlassian.net/browse/SCRUM-87))
-
+   - Assignee: Shadi ([SCRUM-87](https://rimaaa.atlassian.net/browse/SCRUM-87))
 
 #### Notes / Reflection
 
-* Combined OCR-based extraction with manual deadline management to reduce user effort while still allowing full control over deadline data.
-* Added editable deadline review flow so extracted results can be corrected before being used or exported.
-* Integrated countdown display to improve visibility of upcoming academic tasks directly in the dashboard.
-* Designed the feature so manually added deadlines and OCR-detected deadlines behave consistently across editing, display, and export flows.
-* Google Calendar integration required careful handling of event export behavior and duplicate prevention logic.
-* No major blockers were encountered during this story.
+- Combined OCR-based extraction with manual deadline management to reduce user effort while still allowing full control over deadline data.
+- Added editable deadline review flow so extracted results can be corrected before being used or exported.
+- Integrated countdown display to improve visibility of upcoming academic tasks directly in the dashboard.
+- Designed the feature so manually added deadlines and OCR-detected deadlines behave consistently across editing, display, and export flows.
+- Google Calendar integration required careful handling of event export behavior and duplicate prevention logic.
+- No major blockers were encountered during this story.
 
 ## 4. Major Design Decisions (ITR2)
 
@@ -1224,11 +1271,11 @@ This decision allows the conversion logic to be reused across single-course GPA,
 
 ## 5. Concerns / Issues (ITR2)
 
-* No major group conflicts occurred during Iteration 2.
-* Some integration work required extra coordination between backend, frontend, and database components due to the larger scope of persistence and extraction features.
-* A few features were implemented in a phased manner, where backend functionality was completed before full frontend refinement.
-* Minor adjustments were needed during testing to align persistence behavior, extraction flow, and multi-course interactions.
-* No critical blockers prevented completion of the main ITR2 goals.
+- No major group conflicts occurred during Iteration 2.
+- Some integration work required extra coordination between backend, frontend, and database components due to the larger scope of persistence and extraction features.
+- A few features were implemented in a phased manner, where backend functionality was completed before full frontend refinement.
+- Minor adjustments were needed during testing to align persistence behavior, extraction flow, and multi-course interactions.
+- No critical blockers prevented completion of the main ITR2 goals.
 
 ## 6. Iteration Summary (ITR2)
 
@@ -1238,15 +1285,15 @@ During Iteration 2, the team expanded Evalio from a stub-based single-course pro
 
 The team successfully delivered:
 
-* Persistent multi-course storage with repository abstraction and PostgreSQL support
-* Automatic course outline extraction with editable confirmation flow
-* Universal GPA Converter with three recognized scales (4.0 OMSAS, 9.0 York, 10.0 International), including single-course GPA, what-if GPA projections, and cumulative GPA calculation
-* YorkU-based evaluation and rule modeling
-* Interactive dashboard and multi-course management improvements
-* Smart deadline management with OCR/manual support, ICS export, and Google Calendar integration
-* User-scoped authentication and protected course access
-* Expanded backend/frontend integration across newly added features
-* Improved test coverage with both unit and integration testing
+- Persistent multi-course storage with repository abstraction and PostgreSQL support
+- Automatic course outline extraction with editable confirmation flow
+- Universal GPA Converter with three recognized scales (4.0 OMSAS, 9.0 York, 10.0 International), including single-course GPA, what-if GPA projections, and cumulative GPA calculation
+- YorkU-based evaluation and rule modeling
+- Interactive dashboard and multi-course management improvements
+- Smart deadline management with OCR/manual support, ICS export, and Google Calendar integration
+- User-scoped authentication and protected course access
+- Expanded backend/frontend integration across newly added features
+- Improved test coverage with both unit and integration testing
 
 Overall, Iteration 2 introduced significantly more architectural complexity than Iteration 1, especially through persistence, extraction, authentication, and multi-feature integration. Despite this, the main ITR2 goals were completed and the project progressed toward a more realistic end-to-end system.
 
@@ -1270,56 +1317,59 @@ As a returning student, I want Evalio to reopen into my saved academic workspace
 
 #### Scope (ITR3)
 
-* Detect whether an authenticated user already has one or more saved courses.
-* Route returning users directly to the appropriate dashboard/workspace instead of forcing setup.
-* Persist and restore the active course selection.
-* Persist and restore target-grade state per course.
-* Ensure dashboard data loads consistently after refresh/relogin.
-* Make persistence behavior truthful and reliable for demo use.
-* Remove inconsistent target-state behavior caused by scattered localStorage handling.
+- Detect whether an authenticated user already has one or more saved courses.
+- Route returning users directly to the appropriate dashboard/workspace instead of forcing setup.
+- Persist and restore the active course selection.
+- Persist and restore target-grade state per course.
+- Ensure dashboard data loads consistently after refresh/relogin.
+- Make persistence behavior truthful and reliable for demo use.
+- Remove inconsistent target-state behavior caused by scattered localStorage handling.
 
 #### Out of Scope (Future Iterations)
 
-* Broader cross-device synchronization beyond the configured persistence mode.
-* Advanced profile/workspace personalization not required for resume correctness.
-* Non-essential UX refinements unrelated to resume-state correctness.
+- Broader cross-device synchronization beyond the configured persistence mode.
+- Advanced profile/workspace personalization not required for resume correctness.
+- Non-essential UX refinements unrelated to resume-state correctness.
 
 #### Development Subtasks & Assignments
 
-1. DB: Target persistence and persistence-mode truthfulness  
-   * Assignee: Shivam ([SCRUM-142](https://rimaaa.atlassian.net/browse/SCRUM-142)) — **DONE**
+1. DB: Target persistence and persistence-mode truthfulness
 
-2. Backend: Persist and restore returning-user planning state  
-   * Assignee: Shivam ([SCRUM-141](https://rimaaa.atlassian.net/browse/SCRUM-141)) — **DONE**
+   - Assignee: Shivam ([SCRUM-142](https://rimaaa.atlassian.net/browse/SCRUM-142)) — **DONE**
 
-3. Frontend: Returning user dashboard resume flow  
-   * Assignee: Rima ([SCRUM-140](https://rimaaa.atlassian.net/browse/SCRUM-140)) — **TO DO**
+2. Backend: Persist and restore returning-user planning state
 
-4. Testing: Integration and customer tests for resume flow  
-   * Assignee: Bardiya ([SCRUM-143](https://rimaaa.atlassian.net/browse/SCRUM-143)) — **TO DO**
+   - Assignee: Shivam ([SCRUM-141](https://rimaaa.atlassian.net/browse/SCRUM-141)) — **DONE**
 
-5. Docs: Update README/log/demo notes for truthful persistence behavior  
-   * Assignee: Shivam ([SCRUM-144](https://rimaaa.atlassian.net/browse/SCRUM-144)) — **TO DO**
+3. Frontend: Returning user dashboard resume flow
+
+   - Assignee: Rima ([SCRUM-140](https://rimaaa.atlassian.net/browse/SCRUM-140)) — **TO DO**
+
+4. Testing: Integration and customer tests for resume flow
+
+   - Assignee: Bardiya ([SCRUM-143](https://rimaaa.atlassian.net/browse/SCRUM-143)) — **TO DO**
+
+5. Docs: Update README/log/demo notes for truthful persistence behavior
+   - Assignee: Shivam ([SCRUM-144](https://rimaaa.atlassian.net/browse/SCRUM-144)) — **TO DO**
 
 #### Acceptance Criteria
 
-* Authenticated users with existing courses are taken directly to the correct dashboard/workspace on login/revisit.
-* Authenticated users with no saved courses follow setup/new-course flow.
-* Selected/active course restores correctly after refresh/relogin.
-* Target grade is stored and restored correctly in a course-scoped way.
-* Switching between courses shows the correct saved target and course context.
-* Dashboard data loads correctly for the restored course without manual re-entry.
-* Conflicting global vs per-course localStorage target behavior is removed.
-* Persistence behavior is documented truthfully in README/log/demo notes.
-* At least one integration test covers resume behavior.
-* At least one customer/system test covers login → resume → course switch → refresh.
+- Authenticated users with existing courses are taken directly to the correct dashboard/workspace on login/revisit.
+- Authenticated users with no saved courses follow setup/new-course flow.
+- Selected/active course restores correctly after refresh/relogin.
+- Target grade is stored and restored correctly in a course-scoped way.
+- Switching between courses shows the correct saved target and course context.
+- Dashboard data loads correctly for the restored course without manual re-entry.
+- Conflicting global vs per-course localStorage target behavior is removed.
+- Persistence behavior is documented truthfully in README/log/demo notes.
+- At least one integration test covers resume behavior.
+- At least one customer/system test covers login → resume → course switch → refresh.
 
 #### Notes / Reflection
 
-* Backend and DB persistence-path hardening were completed first to make resume behavior trustworthy.
-* Frontend resume flow and system-test coverage remain tracked under dedicated subtasks.
-* Story progress is intentionally split by layer to keep ownership and validation clear.
-
+- Backend and DB persistence-path hardening were completed first to make resume behavior trustworthy.
+- Frontend resume flow and system-test coverage remain tracked under dedicated subtasks.
+- Story progress is intentionally split by layer to keep ownership and validation clear.
 
 ### ITR3-2 — Hierarchical Grade Analytics
 
@@ -1328,63 +1378,71 @@ As a returning student, I want Evalio to reopen into my saved academic workspace
 **Actual Effort:** Completed
 
 #### Story Description
+
 As a student, I want Evalio analytics to work correctly for parent-child assessment structures, so that my completion status, minimum required scores, and projections reflect real course grading trees.
 
 #### Scope (ITR3)
-* Support child assessments in minimum required score analysis.
-* Support child assessments in what-if analysis.
-* Ensure parent completion status is calculated correctly when child grades are incomplete.
-* Improve hierarchical grade interpretation across dashboard and planning flows.
-* Ensure nested assessment structures are handled consistently in backend logic and frontend display.
-* Strengthen correctness of hierarchical analytics introduced in earlier iterations.
+
+- Support child assessments in minimum required score analysis.
+- Support child assessments in what-if analysis.
+- Ensure parent completion status is calculated correctly when child grades are incomplete.
+- Improve hierarchical grade interpretation across dashboard and planning flows.
+- Ensure nested assessment structures are handled consistently in backend logic and frontend display.
+- Strengthen correctness of hierarchical analytics introduced in earlier iterations.
 
 #### Out of Scope (Future Iterations)
-* Advanced nested structures beyond supported parent-child relationships.
-* Complex rule combinations involving multiple hierarchy layers not required for demo.
-* UI enhancements unrelated to correctness of hierarchical analytics.
+
+- Advanced nested structures beyond supported parent-child relationships.
+- Complex rule combinations involving multiple hierarchy layers not required for demo.
+- UI enhancements unrelated to correctness of hierarchical analytics.
 
 #### Development Subtasks & Assignments
+
 1. Backend: Hierarchical minimum required and what-if logic
-   * Assignee: Shivam (SCRUM-147) — DONE
+   - Assignee: Shivam (SCRUM-147) — DONE
 2. DB: Verify hierarchical assessment data support
-   * Assignee: Shivam (SCRUM-148) — DONE
+   - Assignee: Shivam (SCRUM-148) — DONE
 3. Frontend: Parent-child assessment display and analytics flow
-   * Assignee: Shadi (SCRUM-146) — DONE
+   - Assignee: Shadi (SCRUM-146) — DONE
 4. Testing: Hierarchical analytics integration and system tests
-   * Assignee: Bardiya (SCRUM-149) — DONE
+   - Assignee: Bardiya (SCRUM-149) — DONE
 5. Docs: Update log/demo notes for hierarchical analytics support
-   * Assignee: Himanshi Verma  (SCRUM-150) — DONE
+   - Assignee: Himanshi Verma (SCRUM-150) — DONE
 
 #### Acceptance Criteria
-* Minimum required score analysis works correctly for supported parent-child structures.
-* What-if analysis works correctly for supported parent-child structures.
-* Parent is not marked complete when required child grades are missing.
-* Dashboard and planning views show correct completion and grade behavior for nested assessments.
-* Backend and frontend calculations remain consistent for hierarchical structures.
-* No incorrect parent completion or misleading nested status remains in supported flows.
-* At least one integration test covers hierarchical minimum required behavior.
-* At least one integration test covers hierarchical what-if behavior.
-* At least one system/customer test verifies parent completion correctness in UI flow.
+
+- Minimum required score analysis works correctly for supported parent-child structures.
+- What-if analysis works correctly for supported parent-child structures.
+- Parent is not marked complete when required child grades are missing.
+- Dashboard and planning views show correct completion and grade behavior for nested assessments.
+- Backend and frontend calculations remain consistent for hierarchical structures.
+- No incorrect parent completion or misleading nested status remains in supported flows.
+- At least one integration test covers hierarchical minimum required behavior.
+- At least one integration test covers hierarchical what-if behavior.
+- At least one system/customer test verifies parent completion correctness in UI flow.
 
 #### Notes / Reflection
-* Backend logic was refactored to remove top-level-only assumptions and support hierarchical calculations.
-* Parent completion logic was corrected to depend on child assessment completion state.
-* Frontend was aligned with backend to ensure consistent display of nested assessment status.
-* Integration tests were added to validate hierarchical behavior end-to-end.
-* Story is complete and ready for demo with correct nested assessment support.
+
+- Backend logic was refactored to remove top-level-only assumptions and support hierarchical calculations.
+- Parent completion logic was corrected to depend on child assessment completion state.
+- Frontend was aligned with backend to ensure consistent display of nested assessment status.
+- Integration tests were added to validate hierarchical behavior end-to-end.
+- Story is complete and ready for demo with correct nested assessment support.
 
 ### ITR3-3 — Advanced Grading Rules (Mandatory Pass + Controlled Bonus)
 
 Story Owner: Bardiya Ameri  
 Planned Effort: 4–5 days  
-Actual Effort: 4 days  
+Actual Effort: 4 days
 
 #### Story Description
+
 As a student, I want Evalio to support advanced grading rules such as mandatory pass conditions and controlled bonus-mark behavior, so that my course model matches real institutional grading policies more accurately.
 
 #### Supported Advanced Rules (What is actually supported)
 
-1) Mandatory Pass (supported)
+1. Mandatory Pass (supported)
+
 - An assessment can be marked with rule_type: "mandatory_pass" and rule_config.pass_threshold (0–100).
 - The system evaluates mandatory pass requirements and returns:
   - per-assessment status (passed / pending / failed)
@@ -1393,7 +1451,8 @@ As a student, I want Evalio to support advanced grading rules such as mandatory 
   - planning/evaluation should clearly indicate the rule failure
   - target feasibility should not claim the target is achievable while mandatory pass is failed
 
-2) Controlled Bonus (supported at model + calculation level)
+2. Controlled Bonus (supported at model + calculation level)
+
 - An assessment can be marked as bonus via is_bonus: true.
 - Bonus is tracked separately from the core grade:
   - bonus_total is computed independently from core_total
@@ -1406,12 +1465,14 @@ As a student, I want Evalio to support advanced grading rules such as mandatory 
 #### Supported vs Unsupported Rule Semantics (Important for truthful claims)
 
 Supported rule types in the course model
+
 - mandatory_pass
 - best_of
 - drop_lowest
 - pure_multiplicative (structural support for deterministic roll-ups)
 
 Not supported / explicitly out of scope
+
 - Full support for every institutional grading policy
 - Arbitrary custom rule scripting
 - Institution-specific rule libraries
@@ -1421,28 +1482,32 @@ Not supported / explicitly out of scope
 If a rule type outside the supported set is provided, model validation rejects it to prevent silent incorrect behavior.
 
 #### Visible UI Behavior (What we can safely demo)
+
 - Mandatory pass rules are visible in the course structure and the system provides rule-aware status during evaluation/planning.
 - Bonus assessments can be represented and bonus contribution is computed under the configured bonus_policy.
 - Demo and documentation avoid claiming support for unsupported advanced rules.
 
 #### Testing Notes (Demo-safety expectations)
+
 - At least one integration test covers mandatory pass behavior.
 - At least one integration test covers supported bonus-mark behavior.
 - At least one customer/system flow demonstrates a visible advanced-rule course and verifies rule-aware behavior end-to-end.
 - Tests and demo notes avoid overstating unsupported rule interactions.
 
 #### Demo Notes (Short)
+
 Recommended supported demo path:
-1) Create a course with a Mandatory Pass final exam (e.g., threshold = 50%).
-2) Enter grades where the student fails the mandatory pass threshold.
-3) Show the system flags mandatory pass failure and avoids misleading feasibility outputs.
-4) (Optional) Show a bonus assessment course where bonus_policy is additive or capped to demonstrate controlled bonus impact.
+
+1. Create a course with a Mandatory Pass final exam (e.g., threshold = 50%).
+2. Enter grades where the student fails the mandatory pass threshold.
+3. Show the system flags mandatory pass failure and avoids misleading feasibility outputs.
+4. (Optional) Show a bonus assessment course where bonus_policy is additive or capped to demonstrate controlled bonus impact.
 
 ### ITR3-4 — Risk and Alert Center for Cross-Course Planning
 
 **Story Owner:** Shadi Karimpour  
 **Planned Effort:** 4–5 days  
-**Actual Effort:** 4 days  
+**Actual Effort:** 4 days
 
 #### Story Description
 
@@ -1450,63 +1515,67 @@ As a student, I want a ranked risk and alert center across all my courses, so th
 
 #### Scope (ITR3)
 
-* Create a central risk and alert view across all saved courses.
-* Rank or group academic risks by urgency/severity.
-* Include overdue work alerts.
-* Include deadlines within a near-term window (e.g., 72 hours).
-* Include impossible target alerts where a target is no longer realistically achievable.
-* Include high-weight ungraded assessment alerts.
-* Ensure alerts are understandable and useful for planning action.
-* Ensure risk calculations use current course, target, and deadline data consistently.
+- Create a central risk and alert view across all saved courses.
+- Rank or group academic risks by urgency/severity.
+- Include overdue work alerts.
+- Include deadlines within a near-term window (e.g., 72 hours).
+- Include impossible target alerts where a target is no longer realistically achievable.
+- Include high-weight ungraded assessment alerts.
+- Ensure alerts are understandable and useful for planning action.
+- Ensure risk calculations use current course, target, and deadline data consistently.
 
 #### Out of Scope (Future Iterations)
 
-* Advanced predictive analytics or AI-based risk forecasting.
-* Cross-device synchronization beyond the current persistence mode.
-* Personalized alert customization or filtering preferences.
-* Non-essential UI enhancements unrelated to core alert clarity.
+- Advanced predictive analytics or AI-based risk forecasting.
+- Cross-device synchronization beyond the current persistence mode.
+- Personalized alert customization or filtering preferences.
+- Non-essential UI enhancements unrelated to core alert clarity.
 
 #### Development Subtasks & Assignments
 
-1. Frontend: Risk and alert center UI  
-   * Assignee: Shadi Karimpour
+1. Frontend: Risk and alert center UI
 
-2. Backend: Cross-course risk and alert logic  
-   * Assignee: Kartik Sharma
+   - Assignee: Shadi Karimpour
 
-3. DB: Verify support for cross-course risk data inputs  
-   * Assignee: Himanshi Verma
+2. Backend: Cross-course risk and alert logic
 
-4. Testing: Risk and alert integration and system tests  
-   * Assignee: Bardiya Ameri
+   - Assignee: Kartik Sharma
 
-5. Docs: Update log/demo notes for risk center behaviour  
-   * Assignee: Shadi Karimpour
+3. DB: Verify support for cross-course risk data inputs
+
+   - Assignee: Himanshi Verma
+
+4. Testing: Risk and alert integration and system tests
+
+   - Assignee: Bardiya Ameri
+
+5. Docs: Update log/demo notes for risk center behaviour
+   - Assignee: Shadi Karimpour
 
 #### Acceptance Criteria
 
-* Evalio shows a central risk and alert view across multiple courses.
-* Overdue work is surfaced clearly.
-* Near-term deadlines are surfaced clearly using the defined time window.
-* Impossible or highly unrealistic target situations are surfaced clearly.
-* High-weight ungraded items are surfaced clearly.
-* Alerts are ranked, grouped, or labelled to communicate urgency.
-* Users can identify the course and item for each alert.
-* Risk center uses consistent underlying target, deadline, and course data.
-* At least one integration test covers risk generation logic.
-* At least one customer/system test covers viewing meaningful cross-course alerts.
+- Evalio shows a central risk and alert view across multiple courses.
+- Overdue work is surfaced clearly.
+- Near-term deadlines are surfaced clearly using the defined time window.
+- Impossible or highly unrealistic target situations are surfaced clearly.
+- High-weight ungraded items are surfaced clearly.
+- Alerts are ranked, grouped, or labelled to communicate urgency.
+- Users can identify the course and item for each alert.
+- Risk center uses consistent underlying target, deadline, and course data.
+- At least one integration test covers risk generation logic.
+- At least one customer/system test covers viewing meaningful cross-course alerts.
 
 #### Notes / Reflection
 
-* This story builds on reliable persistence and target-state consistency established in earlier ITR stories.
-* Emphasis is placed on making Evalio feel like a unified academic control panel rather than separate tools.
-* Cross-course aggregation required careful alignment of backend logic and frontend presentation.
+- This story builds on reliable persistence and target-state consistency established in earlier ITR stories.
+- Emphasis is placed on making Evalio feel like a unified academic control panel rather than separate tools.
+- Cross-course aggregation required careful alignment of backend logic and frontend presentation.
 
 ### ITR3-5 — Weekly Workload and Conflict Planner
 
 **Story Owner:** Kartik Sharma  
 **Planned Effort:** 4–5 days  
-**Actual Effort:** 4 days  
+**Actual Effort:** 4 days
 
 #### Story Description
 
@@ -1516,55 +1585,110 @@ and avoid deadline pileups.
 
 #### Scope (ITR3)
 
-* Create a weekly overview of academic workload across all saved courses.
-* Show upcoming assessments/deadlines inside the supported weekly window.
-* Identify when multiple deadlines are clustered too closely together.
-* Surface deadline conflict situations clearly in the supported planner flow.
-* Help users understand which course and item contributes to weekly workload.
-* Ensure weekly planner data stays aligned with saved deadline/course state.
-* Keep workload/conflict logic simple, clear, and deterministic.
+- Create a weekly overview of academic workload across all saved courses.
+- Show upcoming assessments/deadlines inside the supported weekly window.
+- Identify when multiple deadlines are clustered too closely together.
+- Surface deadline conflict situations clearly in the supported planner flow.
+- Help users understand which course and item contributes to weekly workload.
+- Ensure weekly planner data stays aligned with saved deadline/course state.
+- Keep workload/conflict logic simple, clear, and deterministic.
 
 #### Out of Scope (Future Iterations)
 
-* Automatic study scheduling.
-* Full calendar-platform behaviour beyond the supported weekly overview.
-* AI workload forecasting or time-estimation.
-* Personalized workload customization rules.
-* Cross-device synchronization beyond the current persistence mode.
+- Automatic study scheduling.
+- Full calendar-platform behaviour beyond the supported weekly overview.
+- AI workload forecasting or time-estimation.
+- Personalized workload customization rules.
+- Cross-device synchronization beyond the current persistence mode.
 
 #### Development Subtasks & Assignments
 
-1. Backend: Weekly workload aggregation and conflict detection logic  
-   * Assignee: Kartik Sharma
+1. Backend: Weekly workload aggregation and conflict detection logic
 
-2. DB: Verify support for weekly planner data inputs  
-   * Assignee: Himanshi Verma
+   - Assignee: Kartik Sharma
 
-3. Frontend: Weekly workload and conflict planner UI  
-   * Assignee: Rima Ramchandani
+2. DB: Verify support for weekly planner data inputs
 
-4. Testing: Weekly planner and conflict detection tests  
-   * Assignee: Bardiya Ameri
+   - Assignee: Himanshi Verma
 
-5. Docs: Update log/demo notes for weekly planner behaviour  
-   * Assignee: Kartik Sharma
+3. Frontend: Weekly workload and conflict planner UI
+
+   - Assignee: Rima Ramchandani
+
+4. Testing: Weekly planner and conflict detection tests
+
+   - Assignee: Bardiya Ameri
+
+5. Docs: Update log/demo notes for weekly planner behaviour
+   - Assignee: Kartik Sharma
 
 #### Acceptance Criteria
 
-* Evalio shows a weekly overview of upcoming academic items across courses.
-* Users can clearly see what items belong to the current weekly planning view.
-* The weekly view identifies when multiple deadlines occur close together.
-* Deadline conflicts are surfaced clearly and understandably.
-* Each weekly item/conflict is associated with the correct course and deadline/assessment.
-* The weekly overview uses consistent deadline/course data from the system.
-* Workload/conflict behavior is deterministic and not misleading.
-* At least one integration test covers weekly aggregation logic.
-* At least one integration test covers deadline conflict detection.
-* At least one customer/system test covers a multi-course weekly overview flow.
+- Evalio shows a weekly overview of upcoming academic items across courses.
+- Users can clearly see what items belong to the current weekly planning view.
+- The weekly view identifies when multiple deadlines occur close together.
+- Deadline conflicts are surfaced clearly and understandably.
+- Each weekly item/conflict is associated with the correct course and deadline/assessment.
+- The weekly overview uses consistent deadline/course data from the system.
+- Workload/conflict behavior is deterministic and not misleading.
+- At least one integration test covers weekly aggregation logic.
+- At least one integration test covers deadline conflict detection.
+- At least one customer/system test covers a multi-course weekly overview flow.
 
 #### Notes / Reflection
 
-* The weekly planner was implemented as a simple and deterministic summary layer over saved deadlines across multiple courses.
-* Conflict detection was kept intentionally clear by using clustered deadlines inside the supported weekly window.
-* The planner surfaces course and item mapping so users can understand what makes a given week heavy.
-* The implementation avoids overstating unsupported calendar or scheduling behaviour and stays aligned with the deadline/course state already supported in the system.
+- The weekly planner was implemented as a simple and deterministic summary layer over saved deadlines across multiple courses.
+- Conflict detection was kept intentionally clear by using clustered deadlines inside the supported weekly window.
+- The planner surfaces course and item mapping so users can understand what makes a given week heavy.
+- The implementation avoids overstating unsupported calendar or scheduling behaviour and stays aligned with the deadline/course state already supported in the system.
+
+### ITR3-6 — Safe Scenario Workspace and Reliable Deadline Assistant
+
+**Story Owner:** Rima Ramcharan  
+**Planned Effort:** 4–5 days  
+**Actual Effort:** 4 days
+
+#### Story Description
+
+As a student, I want scenario planning and deadline assistance to behave safely and reliably, so that I can explore academic "what-if" options without accidentally messing up my real grade data or dealing with unreliable calendar exports.
+
+#### Scope (ITR3)
+
+- **Safe Exploration:** Clearly separate the "what-if" workspace from the actual gradebook to prevent unintended overwriting of real grades.
+- **Pencil-Draft Safety:** Ensure only explicit user-approved changes affect actual grades; simulations stay as simulations.
+- **Mutation Protection:** Protect real grade data from accidental scenario injection or mutation.
+- **Deadline Hardening:** Improve the reliability and consistency of the deadline assistant flows and extraction logic.
+- **Trustworthy Exports:** Ensure deadline export/review behavior is clear and behaves predictably for the user.
+- **Consistency:** Align supported deadline actions across the entire UI.
+
+#### Out of Scope (Future Iterations)
+
+- Advanced predictive analytics or AI forecasting for scenarios.
+- Automatic two-way calendar synchronization.
+- Complex undo/redo history for simulation states.
+
+#### Development Subtasks & Assignments
+
+1. Frontend: Safe scenario workspace UI and safety-guard implementation
+   - Assignee: Rima Ramcharan
+2. Backend: Logic for safe scenario application and supported export behavior
+   - Assignee: Kartik Sharma
+3. Testing: Integration and system tests for scenario safety and deadline reliability
+   - Assignee: Bardiya Ameri
+4. Docs: Update log/demo notes for scenario and deadline assistant behavior
+   - Assignee: Rima Ramcharan
+
+#### Acceptance Criteria
+
+- Scenario exploration is clearly separated from actual grades by default.
+- Real grade data is protected from accidental scenario mutation.
+- Deadline assistant flows are consistent and understandable in the UI.
+- Deadline export/review behavior is reliable for the supported flow.
+- At least one integration test covers safe scenario behavior.
+- At least one customer/system test verifies that real grades remain protected during what-if analysis.
+
+#### Notes / Reflection
+
+- **Design Decision:** We treated the simulation area like a "drafting table." Just as you wouldn't tear down a real wall every time you sketch a new line on a blueprint, the system now keeps hypothetical changes completely separate from the "built" gradebook.
+- **Hardening:** Refactoring the deadline assistant was about building trust; we made sure that what the user sees in the app is exactly what ends up in their calendar.
+- By removing misleading or fragile behavior, we ensured the final demo paths are stable and truthful.
