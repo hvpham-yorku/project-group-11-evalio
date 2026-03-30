@@ -56,6 +56,25 @@ def _get_course(service: CourseService, user_id, course_id):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+def _load_optional_deadlines(current_user: AuthenticatedUser, course_id: UUID) -> list[dict[str, Any]] | None:
+    try:
+        from app.dependencies import get_deadline_service
+
+        deadline_service = get_deadline_service()
+        return [
+            deadline.model_dump()
+            for deadline in deadline_service.list_deadlines(current_user.user_id, course_id)
+        ]
+    except Exception:
+        return None
+
+
+def _resolve_dashboard_current_grade(boundaries: dict[str, Any]) -> float:
+    if boundaries.get("normalisation_applied"):
+        return boundaries["current_normalised"]
+    return boundaries["current_grade"]
+
+
 # ─── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("")
@@ -113,26 +132,11 @@ def get_strategies(
     without them).
     """
     stored = _get_course(service, current_user.user_id, course_id)
-
-    # Optionally pull deadlines from the deadline service (if wired).
-    # This avoids requiring the caller to supply them in the request.
-    try:
-        from app.dependencies import get_deadline_service
-
-        dl_service = get_deadline_service()
-        raw_deadlines = [
-            d.model_dump() for d in dl_service.list_deadlines(current_user.user_id, course_id)
-        ]
-    except Exception:
-        raw_deadlines = None
+    raw_deadlines = _load_optional_deadlines(current_user, course_id)
 
     target_record = grade_target_repo.get_target(current_user.user_id, course_id)
     boundaries = compute_grade_boundaries(stored.course)
-    current_grade = (
-        boundaries["current_normalised"]
-        if boundaries.get("normalisation_applied")
-        else boundaries["current_grade"]
-    )
+    current_grade = _resolve_dashboard_current_grade(boundaries)
 
     return {
         "course_name": stored.course.name,
